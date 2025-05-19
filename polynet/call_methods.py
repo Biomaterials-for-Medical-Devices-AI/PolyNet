@@ -1,21 +1,42 @@
 import torch.nn as nn
 from torch.optim import SGD, Adam, RMSprop
-from torch.optim.lr_scheduler import (ExponentialLR, MultiStepLR,
-                                      ReduceLROnPlateau, StepLR)
+from torch.optim.lr_scheduler import (
+    ExponentialLR,
+    MultiStepLR,
+    ReduceLROnPlateau,
+    StepLR,
+)
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
-from polynet.models.GCN import GCN
+from polynet.models.GCN import GCNClassifier, GCNRegressor
 from polynet.models.graphsage import GraphSAGE
-from polynet.options.enums import Networks, Optimizers, Schedulers, Split_types
+from polynet.models.TransfomerGNN import (
+    TransformerGNNClassifier,
+    TransformerGNNRegressor,
+)
+from polynet.options.enums import (
+    Networks,
+    Optimizers,
+    ProblemTypes,
+    Schedulers,
+    Split_types,
+)
 
 
-def create_network(network: str, **kwargs):
+def create_network(network: str, problem_type: ProblemTypes, **kwargs):
     # Create a network
     if network == Networks.GCN:
-        network = GCN(**kwargs)
-    elif network == Networks.GAT:
-        raise NotImplementedError("GAT not implemented")
+        if problem_type == ProblemTypes.Classification:
+            network = GCNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = GCNRegressor(**kwargs)
+    elif network == Networks.TransformerGNN:
+        if problem_type == ProblemTypes.Classification:
+            network = TransformerGNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = TransformerGNNRegressor(**kwargs)
+
     elif network == Networks.GraphSAGE:
         network = GraphSAGE(**kwargs)
 
