@@ -8,6 +8,11 @@ class ProblemTypes(StrEnum):
 
 class Networks(StrEnum):
     GCN = "gcn"
+    GCNClassifier = "gcn_classifier"
+    GCNRegressor = "gcn_regressor"
+    TransformerGNN = "transformer_gnn"
+    TransformerGNNClassifier = "transformer_gnn_classifier"
+    TransformerGNNRegressor = "transformer_gnn_regressor"
     GAT = "gat"
     GraphSAGE = "graphsage"
 
