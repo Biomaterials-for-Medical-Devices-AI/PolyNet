@@ -6,14 +6,7 @@ from torch_geometric.data import Dataset
 
 
 class PolymerGraphDataset(Dataset):
-    def __init__(
-        self,
-        root=None,
-        filename=None,
-        smiles_col=None,
-        target_col=None,
-        id_col=None,
-    ):
+    def __init__(self, root=None, filename=None, smiles_col=None, target_col=None, id_col=None):
         # self.name = "PolymerGraphDataset"
         self.filename = filename
         self.root = root
@@ -29,9 +22,7 @@ class PolymerGraphDataset(Dataset):
     @property
     def processed_file_names(self):
         self.data = pd.read_csv(self.raw_paths[0]).reset_index()
-        molecules = [
-            f"{self.name}_{i}_{self.target_col}.pt" for i in list(self.data.index)
-        ]
+        molecules = [f"{self.name}_{i}_{self.target_col}.pt" for i in list(self.data.index)]
         return molecules
 
     @property

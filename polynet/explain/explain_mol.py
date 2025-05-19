@@ -1,9 +1,9 @@
-import math
 from io import BytesIO
+import math
 
+from PIL import Image
 import matplotlib.pyplot as plt
 import numpy as np
-from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps
@@ -47,10 +47,7 @@ def plot_mols_with_weights(
         rows, cols = grid_size
 
     fig, axes = plt.subplots(
-        rows,
-        cols,
-        figsize=(cols * 3, rows * 3),
-        gridspec_kw={"right": 0.9 if cbar else 1.0},
+        rows, cols, figsize=(cols * 3, rows * 3), gridspec_kw={"right": 0.9 if cbar else 1.0}
     )
     axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
 
@@ -103,9 +100,7 @@ def plot_mols_with_weights(
         axes[j].axis("off")
 
     if cbar:
-        cbar_ax = fig.add_axes(
-            [0.91, 0.3, 0.015, 0.4]
-        )  # Adjusted for better proportion
+        cbar_ax = fig.add_axes([0.91, 0.3, 0.015, 0.4])  # Adjusted for better proportion
         sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
         sm.set_array([])
         cbar = fig.colorbar(sm, cax=cbar_ax, label="Weight Scale")

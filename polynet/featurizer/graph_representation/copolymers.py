@@ -3,9 +3,9 @@ import sys
 
 import numpy as np
 import pandas as pd
-import torch
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
+import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
 
@@ -33,9 +33,7 @@ class CoPolyGraph(PolymerGraphDataset):
             id_col=id_col,
         )
 
-    def process(
-        self,
-    ):
+    def process(self):
         smiles_col = self.smiles_col
         target_col = self.target_col
         id_col = self.id_col
@@ -47,9 +45,7 @@ class CoPolyGraph(PolymerGraphDataset):
             node_feats_polymer = None
 
             for monomer in smiles_col:
-                smiles = Chem.MolToSmiles(
-                    Chem.MolFromSmiles(mols[monomer]), canonical=True
-                )
+                smiles = Chem.MolToSmiles(Chem.MolFromSmiles(mols[monomer]), canonical=True)
 
                 monomers.append(smiles)
 
@@ -71,19 +67,13 @@ class CoPolyGraph(PolymerGraphDataset):
                     )
 
                 else:
-                    node_feats_polymer = torch.cat(
-                        (node_feats_polymer, node_feats), axis=0
-                    )
+                    node_feats_polymer = torch.cat((node_feats_polymer, node_feats), axis=0)
                     edge_index += max(edge_index_polymer[0]) + 1
-                    edge_index_polymer = torch.cat(
-                        (edge_index_polymer, edge_index), axis=1
-                    )
+                    edge_index_polymer = torch.cat((edge_index_polymer, edge_index), axis=1)
                     weight_monomer = torch.cat(
                         (
                             weight_monomer,
-                            torch.full(
-                                (node_feats.shape[0], 1), 1 - mols[self.ratio_col] / 100
-                            ),
+                            torch.full((node_feats.shape[0], 1), 1 - mols[self.ratio_col] / 100),
                         )
                     )
 
@@ -105,10 +95,7 @@ class CoPolyGraph(PolymerGraphDataset):
             )
 
             torch.save(
-                data,
-                os.path.join(
-                    self.processed_dir, f"{self.name}_{index}_{self.target_col}.pt"
-                ),
+                data, os.path.join(self.processed_dir, f"{self.name}_{index}_{self.target_col}.pt")
             )
 
     def _atom_features(self, mol):
@@ -125,9 +112,7 @@ class CoPolyGraph(PolymerGraphDataset):
             # Degree
             node_feats += self._one_h_e(a.GetTotalDegree(), sets["degree"])
             # implicit valence
-            node_feats += self._one_h_e(
-                a.GetImplicitValence(), sets["implicit_valence"]
-            )
+            node_feats += self._one_h_e(a.GetImplicitValence(), sets["implicit_valence"])
             # aromaticity
             node_feats += [a.GetIsAromatic()]
 

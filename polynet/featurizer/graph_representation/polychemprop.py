@@ -3,9 +3,9 @@ import sys
 
 import numpy as np
 import pandas as pd
-import torch
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
+import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
 
@@ -34,9 +34,7 @@ class CoPolyGraph(PolymerGraphDataset):
             id_col=id_col,
         )
 
-    def process(
-        self,
-    ):
+    def process(self):
         smiles_col = self.smiles_col
         target_col = self.target_col
         id_col = self.id_col
@@ -48,9 +46,7 @@ class CoPolyGraph(PolymerGraphDataset):
             node_feats_polymer = None
 
             for monomer in smiles_col:
-                smiles = Chem.MolToSmiles(
-                    Chem.MolFromSmiles(mols[monomer]), canonical=True
-                )
+                smiles = Chem.MolToSmiles(Chem.MolFromSmiles(mols[monomer]), canonical=True)
 
                 monomers.append(smiles)
 
@@ -73,22 +69,14 @@ class CoPolyGraph(PolymerGraphDataset):
                     )
 
                 else:
-                    node_feats_polymer = torch.cat(
-                        (node_feats_polymer, node_feats), axis=0
-                    )
+                    node_feats_polymer = torch.cat((node_feats_polymer, node_feats), axis=0)
                     edge_index += max(edge_index_polymer[0]) + 1
-                    edge_index_polymer = torch.cat(
-                        (edge_index_polymer, edge_index), axis=1
-                    )
-                    edge_feats_polymer = torch.cat(
-                        (edge_feats_polymer, edge_feats), axis=0
-                    )
+                    edge_index_polymer = torch.cat((edge_index_polymer, edge_index), axis=1)
+                    edge_feats_polymer = torch.cat((edge_feats_polymer, edge_feats), axis=0)
                     weight_monomer = torch.cat(
                         (
                             weight_monomer,
-                            torch.full(
-                                (node_feats.shape[0], 1), 1 - mols[self.ratio_col] / 100
-                            ),
+                            torch.full((node_feats.shape[0], 1), 1 - mols[self.ratio_col] / 100),
                         )
                     )
 
@@ -110,10 +98,7 @@ class CoPolyGraph(PolymerGraphDataset):
             )
 
             torch.save(
-                data,
-                os.path.join(
-                    self.processed_dir, f"{self.name}_{index}_{self.target_col}.pt"
-                ),
+                data, os.path.join(self.processed_dir, f"{self.name}_{index}_{self.target_col}.pt")
             )
 
     def _atom_features(self, mol):
@@ -133,9 +118,7 @@ class CoPolyGraph(PolymerGraphDataset):
             # Num hydrogens
             node_feats += self._one_h_e(int(a.GetTotalNumHs()), self.sets["num_Hs"])
             # Hybridization
-            node_feats += self._one_h_e(
-                a.GetHybridization(), self.sets["hybridization"]
-            )
+            node_feats += self._one_h_e(a.GetHybridization(), self.sets["hybridization"])
 
             # aromaticity
             node_feats += [a.GetIsAromatic()]
@@ -160,9 +143,7 @@ class CoPolyGraph(PolymerGraphDataset):
             # Feature 1: Bond type (as double)
             bond_edge_feats += self._one_h_e(bond.GetBondType(), self.sets["bond_type"])
             # Feature 2: Bond stereo
-            bond_edge_feats += self._one_h_e(
-                bond.GetBondTypeAsDouble(), self.sets["bond_stereo"]
-            )
+            bond_edge_feats += self._one_h_e(bond.GetBondTypeAsDouble(), self.sets["bond_stereo"])
             # Feature 3: Is in ring
             bond_edge_feats += [bond.IsInRing()]
             # Feature 4: Is conjugated
@@ -203,10 +184,7 @@ class CoPolyGraph(PolymerGraphDataset):
                 Chem.rdchem.BondType.AROMATIC,
                 Chem.rdchem.BondType.DATIVE,
             ],
-            "bond_stereo": [
-                Chem.rdchem.BondStereo.STEREOZ,
-                Chem.rdchem.BondStereo.STEREOE,
-            ],
+            "bond_stereo": [Chem.rdchem.BondStereo.STEREOZ, Chem.rdchem.BondStereo.STEREOE],
             "bond_in_ring": [int],
             "bond_conjugated": [int],
         }

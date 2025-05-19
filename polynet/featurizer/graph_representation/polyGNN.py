@@ -2,9 +2,9 @@ import os
 
 import numpy as np
 import pandas as pd
-import torch
 from rdkit import Chem
 from rdkit.Chem.rdchem import HybridizationType
+import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
 
@@ -12,9 +12,7 @@ from polynet.featurizer.graph_representation.polymer_graph import PolymerGraphDa
 
 
 class PolyGNN(PolymerGraphDataset):
-    def __init__(
-        self, root=None, filename=None, smiles_col=None, target_col=None, id_col=None
-    ):
+    def __init__(self, root=None, filename=None, smiles_col=None, target_col=None, id_col=None):
         self.name = "PolyGNN"
 
         super().__init__(
@@ -25,9 +23,7 @@ class PolyGNN(PolymerGraphDataset):
             id_col=id_col,
         )
 
-    def process(
-        self,
-    ):
+    def process(self):
         smiles_col = self.smiles_col
         target_col = self.target_col
         id_col = self.id_col
@@ -35,9 +31,7 @@ class PolyGNN(PolymerGraphDataset):
         data = pd.read_csv(self.raw_paths[0])
 
         for index, mols in tqdm(data.iterrows(), total=data.shape[0]):
-            smiles = Chem.MolToSmiles(
-                Chem.MolFromSmiles(mols[smiles_col]), canonical=True
-            )
+            smiles = Chem.MolToSmiles(Chem.MolFromSmiles(mols[smiles_col]), canonical=True)
 
             mol = Chem.MolFromSmiles(smiles)
 
@@ -57,17 +51,10 @@ class PolyGNN(PolymerGraphDataset):
                 id = index
 
             data = Data(
-                x=node_feats,
-                edge_attr=None,
-                edge_index=edge_index,
-                y=y,
-                smiles=smiles,
-                idx=id,
+                x=node_feats, edge_attr=None, edge_index=edge_index, y=y, smiles=smiles, idx=id
             )
 
-            torch.save(
-                data, os.path.join(self.processed_dir, f"{self.name}_{index}.pt")
-            )
+            torch.save(data, os.path.join(self.processed_dir, f"{self.name}_{index}.pt"))
 
     def _atom_features(self, mol):
         sets = self.allowed_sets()
@@ -83,9 +70,7 @@ class PolyGNN(PolymerGraphDataset):
             # Degree
             node_feats += self._one_h_e(a.GetTotalDegree(), sets["degree"])
             # implicit valence
-            node_feats += self._one_h_e(
-                a.GetImplicitValence(), sets["implicit_valence"]
-            )
+            node_feats += self._one_h_e(a.GetImplicitValence(), sets["implicit_valence"])
             # aromaticity
             node_feats += [a.GetIsAromatic()]
 

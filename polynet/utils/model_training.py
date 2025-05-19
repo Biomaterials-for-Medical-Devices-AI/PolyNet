@@ -110,11 +110,7 @@ def predict_network(model, loader):
         else:
             y_score = None
 
-    results = {
-        "Predicted": y_pred,
-        "True": y_true,
-        "Index": idx,
-    }
+    results = {"Predicted": y_pred, "True": y_true, "Index": idx}
 
     results = pd.DataFrame(results)
 
@@ -141,15 +137,7 @@ def plot_parity_plot(df):
 
 
 def train_model(
-    model,
-    train_loader,
-    val_loader,
-    test_loader,
-    loss,
-    optimizer,
-    scheduler,
-    device,
-    epochs=250,
+    model, train_loader, val_loader, test_loader, loss, optimizer, scheduler, device, epochs=250
 ):
     best_val_loss = float("inf")
 

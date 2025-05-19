@@ -59,10 +59,7 @@ class TransformerGNN(BaseNetwork):
 
         # Batch normalization layers
         self.norm_layers = nn.ModuleList(
-            [
-                nn.BatchNorm1d(num_features=self.embedding_dim)
-                for _ in range(self.n_convolutions)
-            ]
+            [nn.BatchNorm1d(num_features=self.embedding_dim) for _ in range(self.n_convolutions)]
         )
 
         if self.cross_att:
@@ -76,10 +73,7 @@ class TransformerGNN(BaseNetwork):
         for _ in range(self.readout_layers - 1):
             reduced_dim = int(graph_embedding / 2)
             self.readout.append(
-                nn.Sequential(
-                    nn.Linear(graph_embedding, reduced_dim),
-                    nn.BatchNorm1d(reduced_dim),
-                )
+                nn.Sequential(nn.Linear(graph_embedding, reduced_dim), nn.BatchNorm1d(reduced_dim))
             )
             graph_embedding = reduced_dim
 
@@ -87,27 +81,13 @@ class TransformerGNN(BaseNetwork):
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
     def forward(
-        self,
-        x,
-        edge_index,
-        batch_index=None,
-        edge_attr=None,
-        edge_weight=None,
-        monomer_weight=None,
+        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
     ):
         # x = F.leaky_relu(self.batch_norm(self.linear(x)))
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
-                F.leaky_relu(
-                    bn(
-                        conv_layer(
-                            x=x,
-                            edge_index=edge_index,
-                            edge_attr=edge_attr,
-                        )
-                    )
-                ),
+                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
                 p=self.dropout,
                 training=self.training,
             )
@@ -123,9 +103,7 @@ class TransformerGNN(BaseNetwork):
         # x = self.dropout_layer(x)
 
         for layer in self.readout:
-            x = F.dropout(
-                F.leaky_relu(layer(x)), p=self.dropout, training=self.training
-            )
+            x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
 
         x = self.output_layer(x)
 
@@ -135,13 +113,7 @@ class TransformerGNN(BaseNetwork):
         return x
 
     def return_graph_embedding(
-        self,
-        x,
-        edge_index,
-        batch_index=None,
-        edge_attr=None,
-        edge_weight=None,
-        monomer_weight=None,
+        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
     ):
 
         x = F.leaky_relu(self.batch_norm(self.linear(x)))

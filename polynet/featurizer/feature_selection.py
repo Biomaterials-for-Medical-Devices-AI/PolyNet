@@ -32,9 +32,7 @@ def uncorrelated_features(df: pd.DataFrame, threshold: float = 0.9) -> pd.DataFr
     return df[keep]
 
 
-def diversity_filter(
-    df: pd.DataFrame, diversity_threshold: float = 0.9
-) -> pd.DataFrame:
+def diversity_filter(df: pd.DataFrame, diversity_threshold: float = 0.9) -> pd.DataFrame:
     """
     Returns a subset of df columns with diversity below the threshold.
 
@@ -131,11 +129,7 @@ def SFS(
             (test_set_acceptor, test_set_donor[features]), axis=1
         )  # growing test set receiving the new feature
 
-        for (
-            col
-        ) in (
-            list_columns_shrink
-        ):  # for each new column, assess its potential inclusion:
+        for col in list_columns_shrink:  # for each new column, assess its potential inclusion:
 
             training_set_acceptor_temp = pd.concat(
                 (training_set_acceptor_copy, training_set_donor[col]), axis=1
@@ -172,9 +166,7 @@ def SFS(
         test_scores.append(
             crossval_mcc(estimator, X, y, size, cv_iter)
         )  # store cv results for each feature subset
-        estimator.fit(
-            X, y
-        )  # re-fit estimator otherwise it will be fitted on the last cv iteration
+        estimator.fit(X, y)  # re-fit estimator otherwise it will be fitted on the last cv iteration
 
         confmat = confusion_matrix(
             y_true=unseen_y, y_pred=estimator.predict(unseen_X)
@@ -184,9 +176,7 @@ def SFS(
         fn = confmat[1][0]  # false negatives
         fp = confmat[0][1]  # false positives
 
-        test_unseen_scores.append(
-            mcc(unseen_y, estimator.predict(unseen_X))
-        )  # store test score
+        test_unseen_scores.append(mcc(unseen_y, estimator.predict(unseen_X)))  # store test score
         test_unseen_sens.append(tp / (tp + fn))  # compute and store sensitivity
         test_unseen_spec.append(tn / (tn + fp))  # compute and store specificity
 
@@ -212,9 +202,7 @@ def crossval_mcc(estimator, X, y, size, n_iter):
     n_iter: the number of iterations for cross-validation (int)"""
 
     scores = []
-    cv_iter = StratifiedKFold(
-        n_splits=n_iter, shuffle=True
-    )  # define the cross-validation object
+    cv_iter = StratifiedKFold(n_splits=n_iter, shuffle=True)  # define the cross-validation object
 
     cv_iter.split(X, y)  # split
 

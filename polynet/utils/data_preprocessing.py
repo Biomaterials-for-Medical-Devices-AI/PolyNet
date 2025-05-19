@@ -1,5 +1,5 @@
-import random
 from collections import Counter
+import random
 
 import pandas as pd
 
@@ -56,9 +56,7 @@ def class_balancer(desired_class_proportion: float, data: pd.DataFrame, target: 
     class_counts = Counter(data[target])
 
     if len(class_counts) != 2:
-        raise ValueError(
-            "The target variable must be binary (contain only two unique values)."
-        )
+        raise ValueError("The target variable must be binary (contain only two unique values).")
 
     # Identify minority and majority class
     minority_class, majority_class = sorted(class_counts, key=lambda x: class_counts[x])
@@ -81,9 +79,7 @@ def class_balancer(desired_class_proportion: float, data: pd.DataFrame, target: 
 
     # Randomly select rows to drop
     drop_indices = (
-        data[data[target] == majority_class]
-        .sample(n=samples_to_remove, random_state=1)
-        .index
+        data[data[target] == majority_class].sample(n=samples_to_remove, random_state=1).index
     )
     data_balanced = data.drop(index=drop_indices)
 

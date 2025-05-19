@@ -46,10 +46,7 @@ class GraphSAGE(BaseNetwork):
         # Set network architecture
 
         # First convolution and activation function
-        self.linear = nn.Linear(
-            self.n_node_features,
-            self.embedding_dim,
-        )
+        self.linear = nn.Linear(self.n_node_features, self.embedding_dim)
         self.batch_norm = nn.BatchNorm1d(self.embedding_dim)
 
         # Convolutions
@@ -73,10 +70,7 @@ class GraphSAGE(BaseNetwork):
         for _ in range(self.readout_layers - 1):
             reduced_dim = int(graph_embedding / 2)
             self.readout.append(
-                nn.Sequential(
-                    nn.Linear(graph_embedding, reduced_dim),
-                    nn.BatchNorm1d(reduced_dim),
-                )
+                nn.Sequential(nn.Linear(graph_embedding, reduced_dim), nn.BatchNorm1d(reduced_dim))
             )
             graph_embedding = reduced_dim
 
@@ -84,13 +78,7 @@ class GraphSAGE(BaseNetwork):
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
     def forward(
-        self,
-        x,
-        edge_index,
-        batch_index=None,
-        edge_attr=None,
-        edge_weight=None,
-        monomer_weight=None,
+        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
     ):
         x = F.leaky_relu(self.batch_norm(self.linear(x)))
 

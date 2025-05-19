@@ -1,27 +1,13 @@
 import torch.nn as nn
 from torch.optim import SGD, Adam, RMSprop
-from torch.optim.lr_scheduler import (
-    ExponentialLR,
-    MultiStepLR,
-    ReduceLROnPlateau,
-    StepLR,
-)
+from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlateau, StepLR
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
 from polynet.models.GCN import GCNClassifier, GCNRegressor
+from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
 from polynet.models.graphsage import GraphSAGE
-from polynet.models.TransfomerGNN import (
-    TransformerGNNClassifier,
-    TransformerGNNRegressor,
-)
-from polynet.options.enums import (
-    Networks,
-    Optimizers,
-    ProblemTypes,
-    Schedulers,
-    Split_types,
-)
+from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, Split_types
 
 
 def create_network(network: str, problem_type: ProblemTypes, **kwargs):
@@ -84,9 +70,7 @@ def make_loss(problem_type, mae=None):
 
 
 class Split_Generator:
-    def __init__(
-        self, split_type, batch_size, train_size=None, val_size=None, test_size=None
-    ):
+    def __init__(self, split_type, batch_size, train_size=None, val_size=None, test_size=None):
         self.split_type = split_type
         self.batch_size = batch_size
         self.train_size = train_size
@@ -94,11 +78,7 @@ class Split_Generator:
         self.test_size = test_size
 
     def split_data(
-        self,
-        dataset,
-        train_split_indices=None,
-        test_split_indices=None,
-        val_split_indices=None,
+        self, dataset, train_split_indices=None, test_split_indices=None, val_split_indices=None
     ):
         length = len(dataset)
         if self.split_type in [
@@ -107,9 +87,7 @@ class Split_Generator:
             Split_types.CrossValidation,
             Split_types.NestedCrossValidation,
         ]:
-            raise NotImplementedError(
-                f"Split type {self.split_type} is not yet implemented!"
-            )
+            raise NotImplementedError(f"Split type {self.split_type} is not yet implemented!")
 
         elif self.split_type == Split_types.LeaveOneOut:
             # Deduce the indices for the train set based on test and validation indices
@@ -119,9 +97,7 @@ class Split_Generator:
                     test_idx = test_split_indices[i]
                     if val_split_indices is not None:
                         val_idx = val_split_indices[i]
-                        train_idxs = [
-                            x for x in range(length) if x not in [test_idx, val_idx]
-                        ]
+                        train_idxs = [x for x in range(length) if x not in [test_idx, val_idx]]
                     else:
                         train_idxs = [x for x in range(length) if x != test_idx]
                     train_split_indices.append(train_idxs)
@@ -132,9 +108,7 @@ class Split_Generator:
                 test_idx = test_split_indices[i]
                 test_subset = Subset(dataset, [test_idx])
 
-                train_loader = DataLoader(
-                    train_subset, batch_size=self.batch_size, shuffle=True
-                )
+                train_loader = DataLoader(train_subset, batch_size=self.batch_size, shuffle=True)
                 test_loader = DataLoader(test_subset)
                 if val_split_indices is not None:
                     val_idx = val_split_indices[i]

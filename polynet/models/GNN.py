@@ -91,9 +91,7 @@ class BaseNetwork(nn.Module):
         Returns:
             list: List of atom features
         """
-        return [
-            node_feats[batch_index == i] for i in range(batch_index.max().item() + 1)
-        ]
+        return [node_feats[batch_index == i] for i in range(batch_index.max().item() + 1)]
 
     def _split_monomer_feats(self, node_feats, weight_monomer):
         """
@@ -126,17 +124,13 @@ class BaseNetwork(nn.Module):
                 torch.matmul(monomer1_pairwise_feats, monomer2_pairwise_feats.t())
             )
 
-            new_monomer2_feats = torch.matmul(
-                pairwise_pred.t(), monomer1_pairwise_feats
-            )
+            new_monomer2_feats = torch.matmul(pairwise_pred.t(), monomer1_pairwise_feats)
             new_monomer1_feats = torch.matmul(pairwise_pred, monomer2_pairwise_feats)
 
             new_monomer1_feats += monomer_feats[0]
             new_monomer2_feats += monomer_feats[1]
 
-            new_polymer_feats = torch.cat(
-                [new_monomer1_feats, new_monomer2_feats], dim=0
-            )
+            new_polymer_feats = torch.cat([new_monomer1_feats, new_monomer2_feats], dim=0)
 
             updated_polymer_feats.append(new_polymer_feats)
 
