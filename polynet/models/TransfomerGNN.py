@@ -1,15 +1,14 @@
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import TransformerConv
 
 from polynet.models.GNN import BaseNetwork
 from polynet.options.enums import Networks, Pooling, ProblemTypes
 
 
-class GCNBase(BaseNetwork):
+class TransformerGNN(BaseNetwork):
     def __init__(
         self,
-        improved,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -38,17 +37,24 @@ class GCNBase(BaseNetwork):
         )
 
         # Set class variables
-        self._name = Networks.GCN
-        self.improved = improved
+        self._name = Networks.TransformerGNN
 
         # Convolutions
         self.conv_layers = nn.ModuleList([])
         self.conv_layers.append(
-            GCNConv(self.n_node_features, self.embedding_dim, improved=self.improved)
+            TransformerConv(
+                in_channels=self.n_node_features,
+                out_channels=self.embedding_dim,
+                edge_dim=self.n_edge_features,
+            )
         )
         for _ in range(self.n_convolutions - 1):
             self.conv_layers.append(
-                GCNConv(self.embedding_dim, self.embedding_dim, improved=self.improved)
+                TransformerConv(
+                    in_channels=self.embedding_dim,
+                    out_channels=self.embedding_dim,
+                    edge_dim=self.n_edge_features,
+                )
             )
 
         # Batch normalization layers
@@ -93,7 +99,15 @@ class GCNBase(BaseNetwork):
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
-                F.leaky_relu(bn(conv_layer(x, edge_index))),
+                F.leaky_relu(
+                    bn(
+                        conv_layer(
+                            x=x,
+                            edge_index=edge_index,
+                            edge_attr=edge_attr,
+                        )
+                    )
+                ),
                 p=self.dropout,
                 training=self.training,
             )
@@ -144,10 +158,9 @@ class GCNBase(BaseNetwork):
         return x
 
 
-class GCNClassifier(GCNBase):
+class TransformerGNNClassifier(TransformerGNN):
     def __init__(
         self,
-        improved,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -161,7 +174,6 @@ class GCNClassifier(GCNBase):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            improved=improved,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -175,13 +187,12 @@ class GCNClassifier(GCNBase):
             seed=seed,
         )
 
-        self._name = Networks.GCNClassifier
+        self._name = Networks.TransformerGNNClassifier
 
 
-class GCNRegressor(GCNBase):
+class TransformerGNNRegressor(TransformerGNN):
     def __init__(
         self,
-        improved,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -194,7 +205,6 @@ class GCNRegressor(GCNBase):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            improved=improved,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -208,4 +218,4 @@ class GCNRegressor(GCNBase):
             seed=seed,
         )
 
-        self._name = Networks.GCNRegressor
+        self._name = Networks.TransformerGNNRegressor
