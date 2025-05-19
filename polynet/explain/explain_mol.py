@@ -16,6 +16,8 @@ def plot_mols_with_weights(
     grid_size=None,
     cbar=False,
     legend=None,
+    min_weight=None,
+    max_weight=None,
     colormap="coolwarm",
 ):
     """
@@ -35,7 +37,7 @@ def plot_mols_with_weights(
         assert mol is not None, "Invalid SMILES string in input"
         assert (
             len(weights) == mol.GetNumAtoms()
-        ), "Number of weights must match number of atoms in molecule"
+        ), f"Number of weights must match number of atoms in molecule. Length of weights: {len(weights)}, Number of atoms: {mol.GetNumAtoms()}"
 
     num_mols = len(mols)
     if grid_size is None:
@@ -52,9 +54,18 @@ def plot_mols_with_weights(
     )
     axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
 
-    vmin = min(min(weights) for weights in weights_list)
-    vmax = max(max(weights) for weights in weights_list)
-    max_val = max(abs(vmin), abs(vmax))
+    if min_weight is None or max_weight is None:
+        vmin = min(min(weights) for weights in weights_list)
+        print("vmin", vmin)
+        vmax = max(max(weights) for weights in weights_list)
+        print("vmax", vmax)
+        max_val = max(abs(vmin), abs(vmax))
+
+    elif min_weight is not None and max_weight is not None:
+        vmin = min_weight
+        vmax = max_weight
+        max_val = max(abs(vmin), abs(vmax))
+
     cmap = plt.get_cmap(colormap)
     norm = plt.Normalize(vmin=-max_val, vmax=max_val)
 
