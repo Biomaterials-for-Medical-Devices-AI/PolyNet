@@ -14,7 +14,7 @@ class PolymerGraphDataset(Dataset):
         target_col=None,
         id_col=None,
     ):
-        self.name = "PolymerGraphDataset"
+        # self.name = "PolymerGraphDataset"
         self.filename = filename
         self.root = root
         self.smiles_col = smiles_col

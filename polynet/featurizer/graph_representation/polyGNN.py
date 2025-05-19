@@ -8,8 +8,7 @@ from rdkit.Chem.rdchem import HybridizationType
 from torch_geometric.data import Data
 from tqdm import tqdm
 
-from polynet.featurizer.graph_representation.polymer_graph import \
-    PolymerGraphDataset
+from polynet.featurizer.graph_representation.polymer_graph import PolymerGraphDataset
 
 
 class PolyGNN(PolymerGraphDataset):

@@ -22,8 +22,9 @@ class CoPolyGraph(PolymerGraphDataset):
         id_col=None,
         ratio_col=None,
     ):
-        self.name = "HomoPolyGNN"
+        self.name = "PolyChemProp"
         self.ratio_col = ratio_col
+        self.sets = self.allowed_sets()
 
         super().__init__(
             filename=filename,
@@ -61,11 +62,12 @@ class CoPolyGraph(PolymerGraphDataset):
 
                 # Add node features
                 node_feats = self._atom_features(mol)
-                edge_index = self._get_edge_idx(mol)
+                edge_index, edge_feats = self.get_edge_features(mol)
 
                 if node_feats_polymer is None:
                     node_feats_polymer = node_feats
                     edge_index_polymer = edge_index
+                    edge_feats_polymer = edge_feats
                     weight_monomer = torch.full(
                         (node_feats.shape[0], 1), mols[self.ratio_col] / 100
                     )
@@ -77,6 +79,9 @@ class CoPolyGraph(PolymerGraphDataset):
                     edge_index += max(edge_index_polymer[0]) + 1
                     edge_index_polymer = torch.cat(
                         (edge_index_polymer, edge_index), axis=1
+                    )
+                    edge_feats_polymer = torch.cat(
+                        (edge_feats_polymer, edge_feats), axis=0
                     )
                     weight_monomer = torch.cat(
                         (
@@ -96,7 +101,7 @@ class CoPolyGraph(PolymerGraphDataset):
 
             data = Data(
                 x=node_feats_polymer,
-                edge_attr=None,
+                edge_attr=edge_feats_polymer,
                 edge_index=edge_index_polymer,
                 y=y,
                 weight_monomer=weight_monomer,
@@ -112,50 +117,67 @@ class CoPolyGraph(PolymerGraphDataset):
             )
 
     def _atom_features(self, mol):
-        sets = self.allowed_sets()
         mol_feats = []
         for a in mol.GetAtoms():
             node_feats = []
             # atomic number
             node_feats += self._one_h_e(
-                a.GetAtomicNum(), sets["atomic_nums"], allow_low_frequency=True
+                a.GetAtomicNum(), self.sets["atomic_nums"], allow_low_frequency=True
             )
-            # Num hydrogens
-            node_feats += self._one_h_e(int(a.GetTotalNumHs()), sets["num_Hs"])
             # Degree
-            node_feats += self._one_h_e(a.GetTotalDegree(), sets["degree"])
-            # implicit valence
+            node_feats += self._one_h_e(a.GetTotalDegree(), self.sets["degree"])
+            # Formal charge
+            node_feats += self._one_h_e(a.GetFormalCharge(), self.sets["formal_charge"])
+            # chirality
+            node_feats += self._one_h_e(int(a.GetChiralTag()), self.sets["chirality"])
+            # Num hydrogens
+            node_feats += self._one_h_e(int(a.GetTotalNumHs()), self.sets["num_Hs"])
+            # Hybridization
             node_feats += self._one_h_e(
-                a.GetImplicitValence(), sets["implicit_valence"]
+                a.GetHybridization(), self.sets["hybridization"]
             )
+
             # aromaticity
             node_feats += [a.GetIsAromatic()]
 
-            # node_feats += self._one_h_e(a.GetFormalCharge(), sets["formal_charge"])
-            # node_feats += self._one_h_e(int(a.GetChiralTag()), sets["chirality"])
-            # node_feats += self._one_h_e(int(a.GetTotalNumHs()), sets["num_Hs"])
-            # node_feats += self._one_h_e(a.GetHybridization(), sets["hybridization"])
-            # node_feats += [a.GetIsAromatic()]
-            # node_feats += [a.GetMass() / 100]
+            # Atomic mass
+            node_feats += [a.GetMass() / 100]
+
             mol_feats.append(node_feats)
 
         mol_feats = np.asarray(mol_feats, dtype=np.float32)
         return torch.tensor(mol_feats, dtype=torch.float)
 
-    def _get_edge_idx(self, mol):
-        edge_indices = []
+    def get_edge_features(self, mol):
+
+        mol_edge_feats = []
+        edges_indices = []
 
         for bond in mol.GetBonds():
-            # Append edge indices to list (twice, per direction)
+
+            bond_edge_feats = []
+
+            # Feature 1: Bond type (as double)
+            bond_edge_feats += self._one_h_e(bond.GetBondType(), self.sets["bond_type"])
+            # Feature 2: Bond stereo
+            bond_edge_feats += self._one_h_e(
+                bond.GetBondTypeAsDouble(), self.sets["bond_stereo"]
+            )
+            # Feature 3: Is in ring
+            bond_edge_feats += [bond.IsInRing()]
+            # Feature 4: Is conjugated
+            bond_edge_feats += [bond.GetIsConjugated()]
+
+            mol_edge_feats += [bond_edge_feats, bond_edge_feats]
+
             i = bond.GetBeginAtomIdx()
             j = bond.GetEndAtomIdx()
-            # create adjacency list
-            edge_indices += [[i, j], [j, i]]
 
-        edge_indices = torch.tensor(edge_indices)
-        edge_indices = edge_indices.t().to(torch.long).view(2, -1)
+            edges_indices += [[i, j], [j, i]]
 
-        return edge_indices
+        mol_edge_feats = torch.tensor(mol_edge_feats, dtype=torch.float)
+        edges_indices = torch.tensor(edges_indices).t().to(torch.long).view(2, -1)
+        return edges_indices, mol_edge_feats
 
     def allowed_sets(self):
         sets = {
@@ -174,5 +196,18 @@ class CoPolyGraph(PolymerGraphDataset):
                 HybridizationType.SP3D,
                 HybridizationType.SP3D2,
             ],
+            "bond_type": [
+                Chem.rdchem.BondType.SINGLE,
+                Chem.rdchem.BondType.DOUBLE,
+                Chem.rdchem.BondType.TRIPLE,
+                Chem.rdchem.BondType.AROMATIC,
+                Chem.rdchem.BondType.DATIVE,
+            ],
+            "bond_stereo": [
+                Chem.rdchem.BondStereo.STEREOZ,
+                Chem.rdchem.BondStereo.STEREOE,
+            ],
+            "bond_in_ring": [int],
+            "bond_conjugated": [int],
         }
         return sets
