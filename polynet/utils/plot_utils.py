@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+import seaborn as sns
 
 
 def plot_confusion_matrix(
@@ -27,6 +28,37 @@ def plot_confusion_matrix(
 
     if title:
         plt.title(title, fontsize=16, fontweight="bold")
+
+    if show:
+        plt.show()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    plt.close()
+    plt.clf()
+
+
+def show_label_distribution(data, target_variable, title=None, show=False, save_path=None):
+    plt.figure(figsize=(8, 6), dpi=300)
+    ax = sns.countplot(
+        data=data, x=target_variable, hue=target_variable, legend=False, palette="Blues"
+    )
+    plt.title(title if title else "Label Distribution", fontsize=16)
+    plt.xlabel("Labels", fontsize=14)
+    plt.ylabel("Frequency", fontsize=14)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    for p in ax.patches:
+        ax.annotate(
+            f"{p.get_height():.0f}",
+            (p.get_x() + p.get_width() / 2.0, p.get_height() * 0.9),
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="black",
+            xytext=(0, 5),
+            textcoords="offset points",
+        )
 
     if show:
         plt.show()
