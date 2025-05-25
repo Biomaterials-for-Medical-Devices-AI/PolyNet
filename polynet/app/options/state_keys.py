@@ -28,8 +28,16 @@ class DescriptorCalculationStateKeys(StrEnum):
     Enum for the keys used in the state of the DescriptorCalculation component.
     """
 
+    MergeDescriptorsApproach = "MergeDescriptorsApproach"
+    WeightingFactor = "WeightingFactor"
     DescriptorsDF = "DescriptorsDF"
+    MergeDescriptors = "MergeDescriptors"
+    GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
+    SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
+    UseDFDescriptors = "UseDFDescriptors"
+    IndependentDFDescriptors = "IndependentDFDescriptors"
+    IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
     AtomProperties = "AtomProperties"
     BondProperties = "BondProperties"
 
