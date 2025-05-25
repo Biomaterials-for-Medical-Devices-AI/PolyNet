@@ -1,7 +1,7 @@
 import streamlit as st
 
 # Set page title and layout
-st.set_page_config(page_title="PolyNet", page_icon="🧪", layout="wide")
+st.set_page_config(page_title="PolyNet", page_icon="🧪")
 
 
 # Main title
