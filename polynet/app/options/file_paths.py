@@ -1,0 +1,47 @@
+from pathlib import Path
+
+
+def polynet_experiments_base_dir() -> Path:
+    """
+    Return the path the base directory of all PolyNet experiments.
+
+    This will be `/Users/<username>/HelixExperiments` on MacOS,
+    `/home/<username>/PolyNetExperiments` on Linux, and
+    `C:\\Users\\<username>\\PolyNetExperiments` on Windows.
+
+    Returns:
+        Path: The path to the PolyNet experiments base directory.
+    """
+    return Path.home() / "PolyNetExperiments"
+
+
+def data_file_path(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the data file in the experiment directory.
+    Args:
+        file_name (str): The name of the data file.
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+        Path: The path to the data file.
+    """
+    return experiment_path / file_name
+
+
+def data_options_path(experiment_path: Path) -> Path:
+    """Return the path to an experiment's data options.
+    The path will be to a `json` file called `data_options.json`
+
+    Args:
+        experiment_path (str): The path of the experiment.
+
+    Returns:
+        Path: The path to the experiment's data options.
+
+    Examples:
+    ```python
+    experiment_name = "test"
+    experiment_path = helix_experiments_base_dir() / experiment_name
+    data_options_file = data_options_path(experiment_path)
+    ```
+    """
+    return experiment_path / "data_options.json"
