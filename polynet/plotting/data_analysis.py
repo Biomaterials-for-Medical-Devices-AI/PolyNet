@@ -1,0 +1,77 @@
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+
+def show_label_distribution(
+    data, target_variable, title=None, show=False, save_path=None, return_fig=False
+):
+    fig = plt.figure(figsize=(4, 3), dpi=300)
+    ax = sns.countplot(
+        data=data, x=target_variable, hue=target_variable, legend=False, palette="Blues"
+    )
+    plt.title(title if title else "Label Distribution", fontsize=16)
+    plt.xlabel("Labels", fontsize=14)
+    plt.ylabel("Frequency", fontsize=14)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    for p in ax.patches:
+        ax.annotate(
+            f"{p.get_height():.0f}",
+            (p.get_x() + p.get_width() / 2.0, p.get_height() * 0.9),
+            ha="center",
+            va="center",
+            fontsize=12,
+            color="black",
+            xytext=(0, 5),
+            textcoords="offset points",
+        )
+
+    if show:
+        plt.show()
+    if save_path:
+        plt.savefig(save_path, dpi=300, bbox_inches="tight")
+
+    if return_fig:
+        return fig
+
+    plt.close()
+    plt.clf()
+
+
+def show_continuous_distribution(data, target_variable, bins=30, title=None, plot_opts=None):
+    """
+    Plot the distribution of a continuous target variable.
+
+    Args:
+        data (pd.DataFrame): The dataset containing the target variable.
+        target_variable (str): Column name of the continuous variable.
+        bins (int): Number of bins in the histogram.
+        title (str, optional): Plot title.
+        show (bool): Whether to display the plot.
+        save_path (str, optional): Path to save the plot as an image.
+    """
+    plt.style.use(plot_opts.plot_colour_scheme)
+
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=plot_opts.dpi)
+    ax = sns.histplot(
+        data=data, x=target_variable, bins=bins, kde=True, color="skyblue", edgecolor="black"
+    )
+    plt.title(title if title else "Value Distribution", fontsize=plot_opts.plot_title_font_size)
+    plt.xlabel("Values", fontsize=14)
+    plt.ylabel("Frequency", fontsize=14)
+    plt.grid(axis="y", linestyle="--", alpha=0.7)
+
+    # Annotate bin heights
+    for patch in ax.patches:
+        height = patch.get_height()
+        if height > 0:
+            ax.annotate(
+                f"{int(height)}",
+                (patch.get_x() + patch.get_width() / 2.0, height),
+                ha="center",
+                va="bottom",
+                fontsize=10,
+                color="black",
+            )
+
+    return fig
