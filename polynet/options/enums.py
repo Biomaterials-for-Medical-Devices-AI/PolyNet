@@ -74,3 +74,9 @@ class BondFeatures(StrEnum):
     GetIsConjugated = "GetIsConjugated"
     GetStereo = "GetStereo"
     IsInRing = "IsInRing"
+
+
+class DescriptorMergingMethods(StrEnum):
+    Average = "Average"
+    WeightedAverage = "Weighted Average"
+    Concatenate = "Concatenate"
