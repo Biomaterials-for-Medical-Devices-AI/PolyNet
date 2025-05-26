@@ -5,7 +5,8 @@ from polynet.app.options.file_paths import (
     polynet_experiments_base_dir,
     data_options_path,
     representation_options_path,
-    data_file_path,
+    representation_file,
+    representation_file_path,
     gnn_raw_data_path,
     gnn_raw_data_file,
 )
@@ -23,6 +24,7 @@ from polynet.app.utils import create_directory
 from polynet.app.services.configurations import save_options
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.descriptors import build_vector_representation
+from polynet.app.services.plot import plot_molecule_3d
 
 
 def parse_representation_options(
@@ -66,7 +68,21 @@ def parse_representation_options(
         path=representation_options_path(experiment_path=experiment_path),
         options=representation_options,
     )
-    st.write(representation_options)
+
+    if rdkit_descriptors or df_descriptors:
+
+        descriptor_dfs = build_vector_representation(
+            representation_opts=representation_options, data_options=data_options, data=data
+        )
+
+        create_directory(representation_file_path(experiment_path=experiment_path))
+
+        for key, df in descriptor_dfs.items():
+            if df is not None:
+                df.to_csv(
+                    representation_file(file_name=f"{key}.csv", experiment_path=experiment_path),
+                    index=False,
+                )
 
     if node_feats:
 
@@ -97,11 +113,22 @@ def parse_representation_options(
             edge_feats=edge_feats,
         )
 
-    if rdkit_descriptors or df_descriptors:
-
-        build_vector_representation(
-            representation_opts=representation_options, data_options=data_options, data=data
-        )
+        if st.selectbox(
+            "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
+        ):
+            if len(data_options.smiles_cols) > 1:
+                mol = st.selectbox(
+                    "Select which molecule to display",
+                    options=data_options.smiles_cols,
+                    key="smiles_selection",
+                )
+            else:
+                mol = data_options.smiles_cols[0]
+            smiles = data.loc[
+                data[data_options.id_col] == st.session_state["mol_selection"], mol
+            ].values[0]
+            st.write(f"Displaying molecule: {smiles}")
+            plot_molecule_3d(smiles=smiles)
 
 
 st.header("Representation of Polymers")
