@@ -20,12 +20,12 @@ class CustomPolymerGraph(PolymerGraphDataset):
         smiles_cols: list = None,
         target_col: str = None,
         id_col: str = None,
-        ratio_col: str = None,
+        weights_col: dict = None,
         node_feats: dict = None,
         edge_feats: dict = None,
     ):
         self.name = "CustomPolymerGraph"
-        self.ratio_col = ratio_col
+        self.weights_col = weights_col
         self.node_feats = node_feats
         self.edge_feats = edge_feats
 
@@ -49,7 +49,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
             node_feats_polymer = None
 
             for monomer in smiles_col:
-                smiles = Chem.MolToSmiles(Chem.MolFromSmiles(mols[monomer]), canonical=True)
+                smiles = mols[monomer]
 
                 monomers.append(smiles)
 
@@ -66,20 +66,28 @@ class CustomPolymerGraph(PolymerGraphDataset):
                 if node_feats_polymer is None:
                     node_feats_polymer = node_feats
                     edge_index_polymer = edge_index
-                    weight_monomer = torch.full(
-                        (node_feats.shape[0], 1), mols[self.ratio_col] / 100
-                    )
+
+                    # Check if weights_col is provided and set the weight_monomer
+                    if self.weights_col:
+                        print(self.weights_col)
+                        weight_monomer = torch.full(
+                            (node_feats.shape[0], 1), mols[self.weights_col[monomer]] / 100
+                        )
 
                 else:
                     node_feats_polymer = torch.cat((node_feats_polymer, node_feats), axis=0)
                     edge_index += max(edge_index_polymer[0]) + 1
                     edge_index_polymer = torch.cat((edge_index_polymer, edge_index), axis=1)
-                    weight_monomer = torch.cat(
-                        (
-                            weight_monomer,
-                            torch.full((node_feats.shape[0], 1), 1 - mols[self.ratio_col] / 100),
+
+                    if self.weights_col:
+                        weight_monomer = torch.cat(
+                            (
+                                weight_monomer,
+                                torch.full(
+                                    (node_feats.shape[0], 1), mols[self.weights_col[monomer]] / 100
+                                ),
+                            )
                         )
-                    )
 
             y = torch.tensor(mols[target_col], dtype=torch.float32)
 
@@ -87,6 +95,9 @@ class CustomPolymerGraph(PolymerGraphDataset):
                 id = mols[id_col]
             else:
                 id = index
+
+            if not self.weights_col:
+                weight_monomer = None
 
             data = Data(
                 x=node_feats_polymer,
