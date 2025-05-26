@@ -45,3 +45,50 @@ def data_options_path(experiment_path: Path) -> Path:
     ```
     """
     return experiment_path / "data_options.json"
+
+
+def representation_options_path(experiment_path: Path) -> Path:
+    """Return the path to an experiment's data options.
+    The path will be to a `json` file called `data_options.json`
+
+    Args:
+        experiment_path (str): The path of the experiment.
+
+    Returns:
+        Path: The path to the experiment's data options.
+
+    Examples:
+    ```python
+    experiment_name = "test"
+    experiment_path = helix_experiments_base_dir() / experiment_name
+    data_options_file = data_options_path(experiment_path)
+    ```
+    """
+    return experiment_path / "representation_options.json"
+
+
+def gnn_raw_data_path(experiment_path: Path) -> Path:
+    """Return the path to the raw data for a GNN experiment.
+    The path will be to a `csv` file called `raw_data.csv`
+
+    Args:
+        experiment_path (Path): The path of the experiment.
+
+    Returns:
+        Path: The path to the raw data directory.
+    """
+    return experiment_path / "representation" / "GNN" / "raw"
+
+
+def gnn_raw_data_file(file_name: str, experiment_path: Path):
+    """Return the path to the raw data file for a GNN experiment.
+    The path will be to a `csv` file called `raw_data.csv`
+
+    Args:
+        file_name (str): The name of the raw data file.
+        experiment_path (Path): The path of the experiment.
+
+    Returns:
+        Path: The path to the raw data file.
+    """
+    return experiment_path / "representation" / "GNN" / "raw" / file_name
