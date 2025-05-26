@@ -92,3 +92,28 @@ def gnn_raw_data_file(file_name: str, experiment_path: Path):
         Path: The path to the raw data file.
     """
     return experiment_path / "representation" / "GNN" / "raw" / file_name
+
+
+def representation_file_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the representation file in the experiment directory.
+    Args:
+        file_name (str): The name of the representation file.
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+
+
+    """
+    return experiment_path / "representation" / "Descriptors"
+
+
+def representation_file(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the data file in the experiment directory.
+    Args:
+        file_name (str): The name of the data file.
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+        Path: The path to the data file.
+    """
+    return experiment_path / "representation" / "Descriptors" / file_name
