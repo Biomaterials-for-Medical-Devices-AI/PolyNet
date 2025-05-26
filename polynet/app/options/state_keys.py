@@ -35,7 +35,6 @@ class DescriptorCalculationStateKeys(StrEnum):
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
-    UseDFDescriptors = "UseDFDescriptors"
     IndependentDFDescriptors = "IndependentDFDescriptors"
     IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
     AtomProperties = "AtomProperties"
