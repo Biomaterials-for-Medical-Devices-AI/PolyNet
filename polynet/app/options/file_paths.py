@@ -117,3 +117,46 @@ def representation_file(file_name: str, experiment_path: Path) -> Path:
         Path: The path to the data file.
     """
     return experiment_path / "representation" / "Descriptors" / file_name
+
+
+def train_gnn_model_options_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN model options file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return experiment_path / "train_gnn_options.json"
+
+
+def general_options_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN model options file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return experiment_path / "general_options.json"
+
+
+def predictions_file_path(experiment_path: Path, file_name: str) -> Path:
+    """
+    Return the path to the predictions file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+        file_name (str): The name of the predictions file.
+    Returns:
+
+    """
+
+    return experiment_path / "ml_model" / "predictions" / file_name
+
+
+def results_plots_path(experiment_path: Path, file_name: str) -> Path:
+    """
+    Return the path to the results plots directory in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return experiment_path / "ml_model" / "plots" / file_name
