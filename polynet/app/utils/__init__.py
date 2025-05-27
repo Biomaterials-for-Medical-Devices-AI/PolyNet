@@ -49,3 +49,28 @@ def check_column_is_numeric(df, column_name: str) -> bool:
         bool: True if the column is numeric, False otherwise.
     """
     return pd.api.types.is_numeric_dtype(df[column_name]) if column_name in df.columns else False
+
+
+def save_data(data_path: Path, data: pd.DataFrame):
+    """Save data to either a '.csv' or '.xlsx' file.
+
+    Args:
+        data_path (Path): The path to save the data to.
+        data (pd.DataFrame): The data to save.
+        logger (Logger): The logger.
+
+    Raises:
+        ValueError: The data file wasn't a '.csv' or '.xlsx' file.
+    """
+    if data_path.suffix == ".csv":
+        try:
+            data.to_csv(data_path, index=False)
+        except Exception as e:
+            raise
+    elif data_path.suffix == ".xlsx":
+        try:
+            data.to_excel(data_path, index=False)
+        except Exception as e:
+            raise
+    else:
+        raise ValueError("data_path must be to a '.csv' or '.xlsx' file")
