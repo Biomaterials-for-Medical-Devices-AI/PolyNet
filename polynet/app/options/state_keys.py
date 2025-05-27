@@ -57,3 +57,44 @@ class PlotOptionsStateKeys(StrEnum):
     PlotFontFamily = "PlotFontFamily"
     Height = "Height"
     Width = "Width"
+
+
+class TrainTMLStateKeys(StrEnum):
+    TrainTML = "TrainTML"
+
+
+class TrainGNNStateKeys(StrEnum):
+    """
+    Enum for the keys used in the state of the TrainGNN component.
+    """
+
+    TrainGNN = "TrainGNN"
+    GNNConvolutionalLayers = "GNNConvolutionalLayers"
+    GNNNumberOfLayers = "GNNNumberOfLayers"
+    GNNEmbeddingDimension = "GNNEmbeddingDimension"
+    GNNPoolingMethod = "GNNPoolingMethod"
+    GNNReadoutLayers = "GNNReadoutLayers"
+    GNNDropoutRate = "GNNDropoutRate"
+    GNNLearningRate = "GNNLearningRate"
+    GNNBatchSize = "GNNBatchSize"
+
+    # Specific GNN Hyperparameters
+
+    # GCN
+    Improved = "Improved"
+
+
+class GeneralConfigStateKeys(StrEnum):
+    """
+    Enum for the keys used in the state of the SplitData component.
+    """
+
+    SplitData = "SplitData"
+    SplitMethod = "SplitMethod"
+    TrainSize = "TrainSize"
+    TestSize = "TestSize"
+    ValidationSize = "ValidationSize"
+    RandomSeed = "RandomSeed"
+
+    Stratify = "Stratify"
+    Shuffle = "Shuffle"
