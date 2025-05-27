@@ -6,7 +6,7 @@ import pandas as pd
 import seaborn as sns
 import torch
 
-from polynet.options.enums import ProblemTypes
+from polynet.options.enums import ProblemTypes, Results
 
 
 def train_network(model, train_loader, loss_fn, optimizer, device):
@@ -110,7 +110,7 @@ def predict_network(model, loader):
         else:
             y_score = None
 
-    results = {"Predicted": y_pred, "True": y_true, "Index": idx}
+    results = {Results.Predicted.value: y_pred, Results.Label.value: y_true, "Index": idx}
 
     results = pd.DataFrame(results)
 
@@ -158,13 +158,4 @@ def train_model(
 
     model.load_state_dict(best_model_state)
 
-    predictions_train = predict_network(model, train_loader)
-    predictions_train["Set"] = "Train"
-    predictions_val = predict_network(model, val_loader)
-    predictions_val["Set"] = "Validation"
-    prediction_test = predict_network(model, test_loader)
-    prediction_test["Set"] = "Test"
-
-    predictions = pd.concat([predictions_train, predictions_val, prediction_test])
-
-    return predictions
+    return model
