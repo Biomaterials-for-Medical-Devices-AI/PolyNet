@@ -110,7 +110,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
 
         if descriptors_df:
             st.checkbox(
-                "Use selected descriptors as independent representations",
+                "Use selected DF descriptors as independent representations",
                 value=True,
                 key=DescriptorCalculationStateKeys.IndependentDFDescriptors,
                 help="If checked, the selected descriptors will be used as independent representations of the molecules.",
@@ -148,7 +148,6 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                     DescriptorMergingMethods.WeightedAverage,
                     DescriptorMergingMethods.Concatenate,
                 ],
-                selection_mode="multi",
                 default=DescriptorMergingMethods.WeightedAverage,
                 key=DescriptorCalculationStateKeys.MergeDescriptorsApproach,
                 help="Choose how to merge the SMILES columns for the molecular representation. The selected approach will determine how the numerical representations of the molecules are combined.",
@@ -158,11 +157,11 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 st.error(
                     "Please select at least one merging approach for the SMILES columns to proceed."
                 )
+                st.stop()
 
-            if (
-                DescriptorMergingMethods.WeightedAverage in merging_methods
-                and len(potential_weighting_factors) > 0
-            ):
+            if DescriptorMergingMethods.WeightedAverage == merging_methods and len(
+                potential_weighting_factors
+            ) >= len(smiles_cols):
 
                 for col in smiles_cols:
                     weight_col = st.selectbox(
@@ -181,20 +180,22 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 st.error(
                     "Not enough numerical columns to use as weighting factors for all the SMILES columns. Please ensure that the dataset contains enough numerical columns to use as weighting factors."
                 )
-                merging_methods.remove(DescriptorMergingMethods.WeightedAverage)
+                merging_methods = None
 
-            if not mol_weights_col and DescriptorMergingMethods.WeightedAverage in merging_methods:
+            if not mol_weights_col and DescriptorMergingMethods.WeightedAverage == merging_methods:
                 st.warning(
                     "No weighting factors selected for the SMILES columns. The numerical representations won't undergo weighted average."
                 )
-                merging_methods.remove(DescriptorMergingMethods.WeightedAverage)
+                merging_methods = None
 
-            if DescriptorMergingMethods.Concatenate in merging_methods:
+            if DescriptorMergingMethods.Concatenate == merging_methods:
                 st.warning(
                     "Concatenation should only be used if the role of the molecules is different in the property to model, for example solute and solvent for solubility."
                 )
+        else:
+            mol_weights_col = {}
 
-        return selected_descriptors, descriptors_df, mol_weights_col
+    return selected_descriptors, descriptors_df, mol_weights_col
 
 
 def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict, dict]:
