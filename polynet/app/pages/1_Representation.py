@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import pandas as pd
 import streamlit as st
 
@@ -26,6 +24,7 @@ from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
 from polynet.app.utils import create_directory
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
+from polynet.options.enums import DescriptorMergingMethods
 
 
 def parse_representation_options(
@@ -56,7 +55,8 @@ def parse_representation_options(
             DescriptorCalculationStateKeys.MergeDescriptors, False
         ),
         smiles_merge_approach=st.session_state.get(
-            DescriptorCalculationStateKeys.MergeDescriptorsApproach, []
+            DescriptorCalculationStateKeys.MergeDescriptorsApproach,
+            DescriptorMergingMethods.NoMerging,
         ),
         node_feats=node_feats,
         edge_feats=edge_feats,
@@ -168,11 +168,12 @@ if experiment_name:
         data_opts=data_opts, df=data
     )
 
-    if not descriptor_weights == graph_weights:
+    if (descriptor_weights) and (graph_weights) and (not descriptor_weights == graph_weights):
 
         st.error(
             "The weights from the molecular descriptors and the weights from the graph representation are not equal. Please check your settings."
         )
+        st.stop()
 
     if st.button("Apply Representation Settings"):
         parse_representation_options(
