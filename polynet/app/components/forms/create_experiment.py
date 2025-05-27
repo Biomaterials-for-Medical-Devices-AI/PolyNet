@@ -6,6 +6,7 @@ from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
 
 
 def select_data_form():
@@ -24,7 +25,17 @@ def select_data_form():
         help="Upload a CSV file containing SMILES strings and the target variable.",
     )
 
-    smiles_cols = []
+    exp_path = polynet_experiments_base_dir() / experiment_name
+
+    if exp_path.exists():
+        st.error(
+            f"Experiment with name '{experiment_name}' already exists. Please choose a different name."
+        )
+        return False
+
+    if not csv_file:
+        st.warning("Please upload a CSV file to proceed.")
+        return False
 
     if csv_file and experiment_name:
         st.markdown("**Preview Data**")
@@ -63,38 +74,6 @@ def select_data_form():
             for col in smiles_cols:
                 df[col] = df[col].apply(canonicalise_smiles)
             st.success("SMILES columns canonicalized successfully.")
-
-        # TODO: Add option to include graph-level features
-
-        # graph_feats = {}
-
-        # if st.checkbox("Include Graph-level features"):
-
-        #     graph_level_features = st.multiselect(
-        #         "Select graph-level features", options=df.columns.tolist()
-        #     )
-
-        #     st.write("Select the molecules which have the following features:")
-
-        #     for feature in graph_level_features:
-        #         graph_feats[feature] = st.multiselect(feature, options=smiles_cols)
-
-        #     one_hot_encode_feats = st.multiselect(
-        #         "Select features to one-hot encode", options=graph_level_features
-        #     )
-        #     ohe_pos_vals = {}
-
-        #     for feature in one_hot_encode_feats:
-        #         uni_vals = df[feature].unique().tolist()
-        #         ohe_pos_vals[feature] = uni_vals
-
-        #         st.write(f"Features to one-hot encode: {', '.join(one_hot_encode_feats)}")
-
-        # else:
-        #     st.write("No graph-level features selected")
-        #     graph_level_features = None
-        #     one_hot_encode_feats = None
-        #     ohe_pos_vals = None
 
         st.selectbox(
             "Select column with the ID of each molecule",
@@ -167,24 +146,3 @@ def select_data_form():
             )
 
             return True
-
-            # with st.expander("Plotting Options", expanded=True):
-            #     plot_opts = get_plotting_options()
-
-            # if problem_type == ProblemTypes.Classification:
-            #     st.header(f"Distribution of {target_name}")
-
-            #     fig = show_label_distribution(
-            #         data=df,
-            #         target_variable=target_col,
-            #         title=f"Distribution of {target_name}",
-            #         return_fig=True,
-            #     )
-            #     st.plotly_chart(fig)
-
-            # if problem_type == ProblemTypes.Regression:
-
-            #     fig = show_continuous_distribution(
-            #         data=df, target_variable=target_col, plot_opts=plot_opts
-            #     )
-            #     st.pyplot(fig)
