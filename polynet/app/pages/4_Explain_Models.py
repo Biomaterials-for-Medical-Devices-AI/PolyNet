@@ -1,6 +1,7 @@
 import streamlit as st
-from polynet.app.services.experiments import get_experiments
+
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.services.experiments import get_experiments
 
 st.header("Representation of Polymers")
 

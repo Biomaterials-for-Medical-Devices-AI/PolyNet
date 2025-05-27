@@ -1,9 +1,11 @@
-from polynet.featurizer.descriptor_calculation import calculate_descriptors
-from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.data import DataOptions
-import pandas as pd
-from polynet.options.enums import DescriptorMergingMethods
 from typing import Dict
+
+import pandas as pd
+
+from polynet.app.options.data import DataOptions
+from polynet.app.options.representation import RepresentationOptions
+from polynet.featurizer.descriptor_calculation import calculate_descriptors
+from polynet.options.enums import DescriptorMergingMethods
 
 
 def get_data_index(

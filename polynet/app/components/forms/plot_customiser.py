@@ -1,6 +1,7 @@
 import streamlit as st
-from polynet.app.options.state_keys import PlotOptionsStateKeys
+
 from polynet.app.options.plot import PlottingOptions
+from polynet.app.options.state_keys import PlotOptionsStateKeys
 
 
 def get_plotting_options() -> PlottingOptions:

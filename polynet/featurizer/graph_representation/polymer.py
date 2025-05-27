@@ -1,15 +1,15 @@
 import os
-
 from pathlib import Path
+
 import numpy as np
 import pandas as pd
 from rdkit import Chem
 import torch
 from torch_geometric.data import Data
 from tqdm import tqdm
-from polynet.options.enums import AtomFeatures, BondFeatures, AtomBondDescriptorDictKeys
 
 from polynet.featurizer.graph_representation.polymer_graph import PolymerGraphDataset
+from polynet.options.enums import AtomBondDescriptorDictKeys, AtomFeatures, BondFeatures
 
 
 class CustomPolymerGraph(PolymerGraphDataset):

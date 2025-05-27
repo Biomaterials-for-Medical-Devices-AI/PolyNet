@@ -1,36 +1,36 @@
 import streamlit as st
-from polynet.app.services.experiments import get_experiments
+
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.forms.train_models import (
+    split_data_form,
+    train_GNN_models,
+    train_TML_models,
+)
+from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
-    polynet_experiments_base_dir,
     data_options_path,
-    representation_options_path,
+    general_options_path,
+    gnn_raw_data_file,
+    gnn_raw_data_path,
+    polynet_experiments_base_dir,
     representation_file,
     representation_file_path,
-    gnn_raw_data_path,
-    gnn_raw_data_file,
+    representation_options_path,
     train_gnn_model_options_path,
-    general_options_path,
 )
-from polynet.app.services.configurations import load_options
-from polynet.app.options.data import DataOptions
+from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.components.forms.train_models import (
-    train_TML_models,
-    train_GNN_models,
-    split_data_form,
-)
 from polynet.app.options.state_keys import (
+    GeneralConfigStateKeys,
     TrainGNNStateKeys,
     TrainTMLStateKeys,
-    GeneralConfigStateKeys,
 )
-from polynet.app.services.configurations import save_options
-from polynet.app.services.train_gnn import train_network, predict_gnn_model
-from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.app.options.train_GNN import TrainGNNOptions
+from polynet.app.services.configurations import load_options, save_options
+from polynet.app.services.experiments import get_experiments
+from polynet.app.services.train_gnn import predict_gnn_model, train_network
+from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
-from polynet.options.enums import ProblemTypes, DataSets, Results
 from polynet.utils.plot_utils import plot_confusion_matrix
 
 

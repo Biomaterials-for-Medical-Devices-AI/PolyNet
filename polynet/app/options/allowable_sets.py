@@ -1,6 +1,6 @@
 from rdkit.Chem.rdchem import HybridizationType
-from polynet.options.enums import AtomFeatures, BondFeatures, AtomBondDescriptorDictKeys
 
+from polynet.options.enums import AtomBondDescriptorDictKeys, AtomFeatures, BondFeatures
 
 # atomic_properties = [
 #     "GetAtomicNum",

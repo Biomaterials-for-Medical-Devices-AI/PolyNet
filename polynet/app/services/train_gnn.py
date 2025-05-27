@@ -1,24 +1,24 @@
-from polynet.app.options.train_GNN import TrainGNNOptions
+import pandas as pd
+import torch
+from torch_geometric.loader import DataLoader
+
 from polynet.app.options.data import DataOptions
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.file_paths import (
-    train_gnn_model_options_path,
+    gnn_raw_data_file,
     gnn_raw_data_path,
     polynet_experiments_base_dir,
-    gnn_raw_data_file,
+    train_gnn_model_options_path,
 )
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-import pandas as pd
+from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.app.options.representation import RepresentationOptions
+from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.model_training import split_data
-from polynet.call_methods import create_network, make_optimizer, make_loss, make_scheduler
-import torch
-from polynet.options.enums import Networks, Pooling, Optimizers, Schedulers, SplitMethods, DataSets
-from torch_geometric.loader import DataLoader
-from polynet.utils.model_training import train_model
-from polynet.utils.data_preprocessing import class_balancer, print_class_balance
-from polynet.utils.model_training import predict_network
 from polynet.app.utils import save_data
+from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
+from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
+from polynet.options.enums import DataSets, Networks, Optimizers, Pooling, Schedulers, SplitMethods
+from polynet.utils.data_preprocessing import class_balancer, print_class_balance
+from polynet.utils.model_training import predict_network, train_model
 
 
 def train_network(

@@ -1,16 +1,17 @@
-import streamlit as st
-from rdkit.Chem import Descriptors
-from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 import pandas as pd
-from polynet.app.options.data import DataOptions
+from rdkit.Chem import Descriptors
+import streamlit as st
+
 from polynet.app.options.allowable_sets import atom_properties, bond_features
+from polynet.app.options.data import DataOptions
+from polynet.app.options.state_keys import DescriptorCalculationStateKeys
+from polynet.app.utils import keep_only_numerical_columns
 from polynet.options.enums import (
     AtomBondDescriptorDictKeys,
     AtomFeatures,
     BondFeatures,
     DescriptorMergingMethods,
 )
-from polynet.app.utils import keep_only_numerical_columns
 
 
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):

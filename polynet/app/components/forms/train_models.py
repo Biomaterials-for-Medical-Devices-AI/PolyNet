@@ -1,14 +1,11 @@
 import streamlit as st
 
 from polynet.app.options.state_keys import (
+    GeneralConfigStateKeys,
     TrainGNNStateKeys,
     TrainTMLStateKeys,
-    GeneralConfigStateKeys,
 )
-
-from polynet.options.enums import Networks, Pooling, NetworkParams
-
-from polynet.options.enums import ProblemTypes, SplitMethods
+from polynet.options.enums import NetworkParams, Networks, Pooling, ProblemTypes, SplitMethods
 
 
 def train_TML_models():

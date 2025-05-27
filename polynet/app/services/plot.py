@@ -1,7 +1,7 @@
+import plotly.graph_objects as go
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import streamlit as st
-import plotly.graph_objects as go
 
 # Approximate covalent atomic radii in Ångströms (used for visual scaling)
 atomic_radii = {

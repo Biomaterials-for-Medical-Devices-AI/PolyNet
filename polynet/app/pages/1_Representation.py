@@ -1,30 +1,31 @@
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
-from polynet.app.services.experiments import get_experiments
+
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.forms.representation import (
+    graph_representation,
+    molecular_descriptor_representation,
+)
+from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
-    polynet_experiments_base_dir,
     data_options_path,
-    representation_options_path,
+    gnn_raw_data_file,
+    gnn_raw_data_path,
+    polynet_experiments_base_dir,
     representation_file,
     representation_file_path,
-    gnn_raw_data_path,
-    gnn_raw_data_file,
+    representation_options_path,
 )
-from pathlib import Path
-from polynet.app.services.configurations import load_options
-from polynet.app.options.data import DataOptions
-import pandas as pd
-from polynet.app.components.forms.representation import (
-    molecular_descriptor_representation,
-    graph_representation,
-)
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.utils import create_directory
-from polynet.app.services.configurations import save_options
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
+from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.descriptors import build_vector_representation
+from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
+from polynet.app.utils import create_directory
+from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 
 
 def parse_representation_options(
