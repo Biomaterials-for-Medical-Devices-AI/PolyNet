@@ -1,11 +1,9 @@
 from rdkit import Chem
 from rdkit.Chem import AllChem
-from rdkit.Chem.rdchem import Mol
 import streamlit as st
 import plotly.graph_objects as go
 
 # Approximate covalent atomic radii in Ångströms (used for visual scaling)
-# Source: average covalent radii
 atomic_radii = {
     "H": 0.31,
     "C": 0.76,
@@ -38,12 +36,14 @@ atom_colors = {
 }
 
 
-def plot_molecule_3d(smiles: str):
+def plot_molecule_3d(smiles: str, atom_labels: list[str] = None):
     """
-    Generate a 3D plot of a molecule from SMILES using Plotly and RDKit, with atoms sized by covalent radius.
+    Generate a 3D Plotly visualization of a molecule with optional custom atom labels.
 
     Args:
         smiles (str): SMILES string of the molecule.
+        atom_labels (list[str], optional): Custom labels for atoms, either for all atoms
+                                           or only heavy atoms (non-H).
     """
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
@@ -61,7 +61,25 @@ def plot_molecule_3d(smiles: str):
     atom_coords = [conf.GetAtomPosition(i) for i in range(mol.GetNumAtoms())]
     atom_symbols = [atom.GetSymbol() for atom in mol.GetAtoms()]
 
-    # Base size scale factor for atoms
+    # Determine how to assign labels
+    labels = []
+    if atom_labels is not None:
+        total_atoms = len(atom_symbols)
+        heavy_atoms = [i for i, sym in enumerate(atom_symbols) if sym != "H"]
+
+        if len(atom_labels) == total_atoms:
+            labels = atom_labels
+        elif len(atom_labels) == len(heavy_atoms):
+            labels = ["" for _ in range(total_atoms)]
+            for idx, heavy_idx in enumerate(heavy_atoms):
+                labels[heavy_idx] = atom_labels[idx]
+        else:
+            st.warning("Label list length does not match number of atoms. Ignoring custom labels.")
+            labels = atom_symbols
+    else:
+        labels = atom_symbols
+
+    # Base scale factor for atomic size
     scale = 30
 
     atom_trace = go.Scatter3d(
@@ -70,13 +88,15 @@ def plot_molecule_3d(smiles: str):
         z=[pos.z for pos in atom_coords],
         mode="markers+text",
         marker=dict(
-            size=[scale * atomic_radii.get(symbol, 0.8) for symbol in atom_symbols],
-            color=[atom_colors.get(symbol, "lightgray") for symbol in atom_symbols],
+            size=[scale * atomic_radii.get(sym, 0.8) for sym in atom_symbols],
+            color=[atom_colors.get(sym, "lightgray") for sym in atom_symbols],
             opacity=0.95,
             line=dict(width=0.5, color="black"),
         ),
-        text=atom_symbols,
+        text=labels,
         textposition="top center",
+        hovertext=labels,
+        hoverinfo="text",
     )
 
     bond_traces = []
