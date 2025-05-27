@@ -17,6 +17,13 @@ class Networks(StrEnum):
     GraphSAGE = "graphsage"
 
 
+class NetworkParams(StrEnum):
+    # GCN
+    Improved = "Improved"
+    # TransformerGNN
+    NumHeads = "NumHeads"
+
+
 class Optimizers(StrEnum):
     Adam = "adam"
     SGD = "sgd"
@@ -45,6 +52,22 @@ class Split_types(StrEnum):
     CrossValidation = "cross_validation"
     NestedCrossValidation = "nested_cross_validation"
     LeaveOneOut = "leave_one_out"
+
+
+class SplitMethods(StrEnum):
+    Random = "random"
+    Stratified = "stratified"
+
+
+class DataSets(StrEnum):
+    Training = "Train"
+    Validation = "Validation"
+    Test = "Test"
+
+
+class Results(StrEnum):
+    Label = "True"
+    Predicted = "Predicted"
 
 
 class AtomBondDescriptorDictKeys(StrEnum):
