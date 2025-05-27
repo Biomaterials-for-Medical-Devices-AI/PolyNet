@@ -57,6 +57,11 @@ def merge_concatenate(rdkit_df_dict, data_index):
     return pd.concat([data_index, combined], axis=1)
 
 
+def single_smiles(rdkit_df_dict, data_index):
+    # No merging, just return the data index
+    return pd.concat([data_index] + list(rdkit_df_dict.values()), axis=1)
+
+
 def build_vector_representation(
     representation_opts: RepresentationOptions, data_options: DataOptions, data: pd.DataFrame
 ) -> pd.DataFrame:
@@ -76,26 +81,25 @@ def build_vector_representation(
 
     # RDKit-based representation
     if representation_opts.rdkit_independent or representation_opts.mix_rdkit_df_descriptors:
-        df_rdkit_weighted = df_rdkit_mean = df_rdkit_concat = None
+        # df_rdkit_weighted = df_rdkit_mean = df_rdkit_concat = df_rdkit_no_merge = None
 
         if (
-            DescriptorMergingMethods.WeightedAverage in representation_opts.smiles_merge_approach
-            and weights_col
-        ):
-            df_rdkit_weighted = merge_weighted(rdkit_df_dict, data, weights_col, data_index)
+            DescriptorMergingMethods.WeightedAverage == representation_opts.smiles_merge_approach
+        ) and weights_col:
+            rdkit_descriptors = merge_weighted(rdkit_df_dict, data, weights_col, data_index)
 
-        if DescriptorMergingMethods.Average in representation_opts.smiles_merge_approach:
-            df_rdkit_mean = merge_average(rdkit_df_dict, data_index)
+        elif DescriptorMergingMethods.Average == representation_opts.smiles_merge_approach:
+            rdkit_descriptors = merge_average(rdkit_df_dict, data_index)
 
         # TODO: fix case where only one SMILES column is present
-        if (
-            DescriptorMergingMethods.Concatenate in representation_opts.smiles_merge_approach
-            or not representation_opts.smiles_merge_approach
-        ):
-            df_rdkit_concat = merge_concatenate(rdkit_df_dict, data_index)
+        elif DescriptorMergingMethods.Concatenate == representation_opts.smiles_merge_approach:
+            rdkit_descriptors = merge_concatenate(rdkit_df_dict, data_index)
+
+        elif DescriptorMergingMethods.NoMerging == representation_opts.smiles_merge_approach:
+            rdkit_descriptors = single_smiles(rdkit_df_dict, data_index)
 
     else:
-        df_rdkit_weighted = df_rdkit_mean = df_rdkit_concat = None
+        rdkit_descriptors = None
 
     # Independent user-provided descriptors
     descriptors_df = (
@@ -108,12 +112,9 @@ def build_vector_representation(
     )
 
     if representation_opts.mix_rdkit_df_descriptors:
-        if df_rdkit_weighted is not None:
-            df_rdkit_weighted = pd.concat([df_rdkit_weighted, descriptors_df], axis=1)
-        if df_rdkit_mean is not None:
-            df_rdkit_mean = pd.concat([df_rdkit_mean, descriptors_df], axis=1)
-        if df_rdkit_concat is not None:
-            df_rdkit_concat = pd.concat([df_rdkit_concat, descriptors_df], axis=1)
+        rdkit_df_descriptors = pd.concat([rdkit_descriptors, descriptors_df], axis=1)
+    else:
+        rdkit_df_descriptors = None
 
     df_descriptors_df = (
         pd.concat([data_index, descriptors_df], axis=1)
@@ -121,10 +122,8 @@ def build_vector_representation(
         else None
     )
 
+    if not representation_opts.rdkit_independent:
+        rdkit_descriptors = None
+
     # Return dictionary or selected final df depending on use-case
-    return {
-        "weighted": df_rdkit_weighted,
-        "average": df_rdkit_mean,
-        "concatenated": df_rdkit_concat,
-        "independent_descriptors": df_descriptors_df,
-    }
+    return {"RDKit": rdkit_descriptors, "DF": df_descriptors_df, "RDKit_DF": rdkit_df_descriptors}
