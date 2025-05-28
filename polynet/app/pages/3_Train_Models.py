@@ -3,7 +3,7 @@ import streamlit as st
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
     split_data_form,
-    train_GNN_models,
+    train_GNN_models_form,
     train_TML_models,
 )
 from polynet.app.options.data import DataOptions
@@ -58,6 +58,7 @@ def train_models(
 
     general_experiment_options = GeneralConfigOptions(
         split_method=st.session_state[GeneralConfigStateKeys.SplitMethod],
+        train_set_balance=st.session_state.get(GeneralConfigStateKeys.DesiredProportion, None),
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed],
@@ -83,16 +84,19 @@ def train_models(
         representation_options=representation_options,
     )
 
-    predictions = predict_gnn_model(model=model, loaders=loaders)
+    for model_name, model in model.items():
 
-    if data_options.problem_type == ProblemTypes.Classification:
-        predictions_test = predictions.loc[predictions["Set"] == DataSets.Test]
-        fig = plot_confusion_matrix(
-            y_true=predictions_test[Results.Label.value],
-            y_pred=predictions_test[Results.Predicted.value],
-        )
+        predictions = predict_gnn_model(model=model, loaders=loaders)
 
-        st.pyplot(fig, clear_figure=True)
+        if data_options.problem_type == ProblemTypes.Classification:
+            predictions_test = predictions.loc[predictions["Set"] == DataSets.Test]
+            fig = plot_confusion_matrix(
+                y_true=predictions_test[Results.Label.value],
+                y_pred=predictions_test[Results.Predicted.value],
+                title=f"Confusion Matrix for {model_name}",
+            )
+
+            st.pyplot(fig, clear_figure=True)
 
 
 st.header("Train Models")
@@ -141,7 +145,7 @@ if experiment_name:
 
     if gnn_raw_data_path(experiment_path=experiment_path).exists():
 
-        gnn_conv_params = train_GNN_models()
+        gnn_conv_params = train_GNN_models_form()
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."
