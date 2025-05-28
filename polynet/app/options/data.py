@@ -18,6 +18,7 @@ class DataOptions:
     problem_type: ProblemTypes
     num_classes: int | None = None
     target_variable_name: str | None = None
+    class_names: dict[str, str] | None = None
     target_variable_units: str | None = None
 
     # graph_feats: dict[str, list[str]]
