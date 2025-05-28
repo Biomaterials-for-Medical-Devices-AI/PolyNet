@@ -9,6 +9,7 @@ from polynet.options.enums import Networks, Pooling, ProblemTypes
 class TransformerGNN(BaseNetwork):
     def __init__(
         self,
+        NumHeads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -38,6 +39,7 @@ class TransformerGNN(BaseNetwork):
 
         # Set class variables
         self._name = Networks.TransformerGNN
+        self.num_heads = NumHeads
 
         # Convolutions
         self.conv_layers = nn.ModuleList([])
@@ -46,6 +48,9 @@ class TransformerGNN(BaseNetwork):
                 in_channels=self.n_node_features,
                 out_channels=self.embedding_dim,
                 edge_dim=self.n_edge_features,
+                heads=self.num_heads,
+                concat=False,
+                dropout=self.dropout,
             )
         )
         for _ in range(self.n_convolutions - 1):
@@ -54,6 +59,9 @@ class TransformerGNN(BaseNetwork):
                     in_channels=self.embedding_dim,
                     out_channels=self.embedding_dim,
                     edge_dim=self.n_edge_features,
+                    heads=self.num_heads,
+                    concat=False,
+                    dropout=self.dropout,
                 )
             )
 
@@ -133,6 +141,7 @@ class TransformerGNN(BaseNetwork):
 class TransformerGNNClassifier(TransformerGNN):
     def __init__(
         self,
+        NumHeads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -146,6 +155,7 @@ class TransformerGNNClassifier(TransformerGNN):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
+            NumHeads=NumHeads,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -165,18 +175,21 @@ class TransformerGNNClassifier(TransformerGNN):
 class TransformerGNNRegressor(TransformerGNN):
     def __init__(
         self,
+        NumHeads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
         n_convolutions: int = 2,
         embedding_dim: int = 64,
         readout_layers: int = 2,
+        n_classes: int = 1,
         dropout: float = 0.5,
         seed: int = 42,
         cross_att: bool = False,
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
+            NumHeads=NumHeads,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -184,7 +197,7 @@ class TransformerGNNRegressor(TransformerGNN):
             embedding_dim=embedding_dim,
             readout_layers=readout_layers,
             problem_type=ProblemTypes.Regression,
-            n_classes=1,
+            n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
             seed=seed,
