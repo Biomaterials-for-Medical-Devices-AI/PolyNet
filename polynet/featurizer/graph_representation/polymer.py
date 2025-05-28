@@ -61,11 +61,12 @@ class CustomPolymerGraph(PolymerGraphDataset):
 
                 # Add node features
                 node_feats = self._atom_features(mol)
-                edge_index = self._get_edge_idx(mol)
+                edge_index, edge_features = self._get_edge_idx(mol)
 
                 if node_feats_polymer is None:
                     node_feats_polymer = node_feats
                     edge_index_polymer = edge_index
+                    edge_feats_polymer = edge_features
 
                     # Check if weights_col is provided and set the weight_monomer
                     if self.weights_col:
@@ -78,6 +79,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
                     node_feats_polymer = torch.cat((node_feats_polymer, node_feats), axis=0)
                     edge_index += max(edge_index_polymer[0]) + 1
                     edge_index_polymer = torch.cat((edge_index_polymer, edge_index), axis=1)
+                    edge_feats_polymer = torch.cat((edge_feats_polymer, edge_features), axis=0)
 
                     if self.weights_col:
                         weight_monomer = torch.cat(
@@ -101,7 +103,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
 
             data = Data(
                 x=node_feats_polymer,
-                edge_attr=None,
+                edge_attr=edge_feats_polymer,
                 edge_index=edge_index_polymer,
                 y=y,
                 weight_monomer=weight_monomer,
@@ -223,16 +225,52 @@ class CustomPolymerGraph(PolymerGraphDataset):
         return torch.tensor(mol_feats, dtype=torch.float)
 
     def _get_edge_idx(self, mol):
+        mol_edge_feats = []
         edge_indices = []
 
         for bond in mol.GetBonds():
+            bond_edge_feats = []
+            # Feature 1: Bond type (as double)
+            if BondFeatures.GetBondTypeAsDouble in self.edge_feats.keys():
+                bond_edge_feats += self._one_h_e(
+                    x=bond.GetBondTypeAsDouble(),
+                    allowable_set=self.edge_feats[BondFeatures.GetBondTypeAsDouble][
+                        AtomBondDescriptorDictKeys.AllowableVals
+                    ],
+                    allow_low_frequency=self.edge_feats[BondFeatures.GetBondTypeAsDouble][
+                        AtomBondDescriptorDictKeys.Wildcard
+                    ],
+                )
+            # Feature 2: Bond stereo
+            if BondFeatures.GetStereo in self.edge_feats.keys():
+                bond_edge_feats += self._one_h_e(
+                    x=bond.GetStereo(),
+                    allowable_set=self.edge_feats[BondFeatures.GetStereo][
+                        AtomBondDescriptorDictKeys.AllowableVals
+                    ],
+                    allow_low_frequency=self.edge_feats[BondFeatures.GetStereo][
+                        AtomBondDescriptorDictKeys.Wildcard
+                    ],
+                )
+            # Feature 3: Is in ring
+            if BondFeatures.IsInRing in self.edge_feats.keys():
+                bond_edge_feats += [int(bond.IsInRing())]
+            # Feature 4: Is conjugated
+            if BondFeatures.GetIsConjugated in self.edge_feats.keys():
+                bond_edge_feats += [int(bond.GetIsConjugated())]
+            # Feature 5: Is aromatic
+            if BondFeatures.GetIsAromatic in self.edge_feats.keys():
+                bond_edge_feats += [int(bond.GetIsAromatic())]
+
+            mol_edge_feats += [bond_edge_feats, bond_edge_feats]
             # Append edge indices to list (twice, per direction)
             i = bond.GetBeginAtomIdx()
             j = bond.GetEndAtomIdx()
             # create adjacency list
             edge_indices += [[i, j], [j, i]]
 
+        mol_edge_feats = torch.tensor(mol_edge_feats, dtype=torch.float)
         edge_indices = torch.tensor(edge_indices)
         edge_indices = edge_indices.t().to(torch.long).view(2, -1)
 
-        return edge_indices
+        return edge_indices, mol_edge_feats
