@@ -114,6 +114,8 @@ def parse_representation_options(
             edge_feats=edge_feats,
         )
 
+        st.write(dataset[0])
+
         if st.selectbox(
             "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
         ):
