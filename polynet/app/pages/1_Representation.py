@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from shutil import rmtree
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
@@ -12,6 +13,7 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_file,
     gnn_raw_data_path,
     polynet_experiments_base_dir,
+    representation_parent_directory,
     representation_file,
     representation_file_path,
     representation_options_path,
@@ -65,10 +67,16 @@ def parse_representation_options(
 
     experiment_path = polynet_experiments_base_dir() / experiment_name
 
-    save_options(
-        path=representation_options_path(experiment_path=experiment_path),
-        options=representation_options,
-    )
+    representation_opts_path = representation_options_path(experiment_path=experiment_path)
+
+    if representation_opts_path.exists():
+        representation_opts_path.unlink()
+
+    representation_path_dir = representation_parent_directory(experiment_path=experiment_path)
+    if representation_path_dir.exists():
+        rmtree(representation_path_dir)
+
+    save_options(path=representation_opts_path, options=representation_options)
 
     if rdkit_descriptors or df_descriptors:
 
@@ -152,9 +160,17 @@ experiment_name = experiment_selector(choices)
 
 if experiment_name:
 
-    path_to_data_opts = data_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    experiment_path = polynet_experiments_base_dir() / experiment_name
+
+    representation_opts = representation_options_path(experiment_path=experiment_path)
+
+    if representation_opts.exists():
+        st.error(
+            "Representation configuration already exists for this experiment. "
+            "You can modify the settings below, but be aware that this will overwrite the existing configuration."
+        )
+
+    path_to_data_opts = data_options_path(experiment_path=experiment_path)
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataOptions)
 
