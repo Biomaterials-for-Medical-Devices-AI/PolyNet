@@ -11,6 +11,8 @@ from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
 
 def select_data_form():
 
+    class_names = {}
+
     experiment_name = st.text_input(
         "Experiment name",
         placeholder="Enter a name for your experiment",
@@ -50,7 +52,7 @@ def select_data_form():
 
         if not smiles_cols:
             st.error("Please select at least one SMILES column.")
-            st.stop()
+            return False
 
         else:
             for col in smiles_cols:
@@ -101,11 +103,13 @@ def select_data_form():
                 suggested_problem_type = ProblemTypes.Regression
         elif target_col is None:
             st.error("Please select a target variable.")
+            return False
         else:
             st.error(
                 f"Target variable '{target_col}' is not numeric. Please select a numeric column."
             )
             suggested_problem_type = None
+            return False
 
         if target_col:
             problems = [ProblemTypes.Classification, ProblemTypes.Regression]
@@ -132,17 +136,47 @@ def select_data_form():
                 help="This will be used to create the plots and log information.",
                 disabled=True,
             )
-
-            st.text_input(
+            target_name = st.text_input(
                 "Target variable name",
                 value=target_col,
                 key=CreateExperimentStateKeys.TargetVariableName,
                 help="This name will be used to create the plots and log information.",
             )
+
             st.text_input(
                 "Target variable units",
                 key=CreateExperimentStateKeys.TargetVariableUnits,
                 help="This will be used to create the plots and log information.",
             )
 
-            return True
+            if problem_type == ProblemTypes.Classification:
+
+                class_names = {}
+
+                for vals in sorted(df[target_col].unique()):
+                    class_name = st.text_input(
+                        f"Class {vals} name",
+                        value=str(vals),
+                        key=f"{CreateExperimentStateKeys.ClassNames}_{vals}",
+                        help="This name will be used to create the plots and log information.",
+                    )
+                    class_names[int(vals)] = class_name
+
+                st.markdown("**Label Distribution**")
+                st.pyplot(
+                    show_label_distribution(
+                        data=df,
+                        target_variable=target_col,
+                        title=(
+                            f"Label Distribution for {target_name}"
+                            if target_name
+                            else "Label Distribution"
+                        ),
+                        class_names=class_names,
+                    )
+                )
+
+                return class_names
+
+            else:
+                return True
