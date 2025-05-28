@@ -14,6 +14,7 @@ class CreateExperimentStateKeys(StrEnum):
     TargetVariableCol = "TargetVariableCol"
     ProblemType = "ProblemType"
     NumClasses = "NumClasses"
+    ClassNames = "ClassNames"
     TargetVariableName = "TargetVariableName"
     TargetVariableUnits = "TargetVariableUnits"
     EditPlot = "EditPlot"
