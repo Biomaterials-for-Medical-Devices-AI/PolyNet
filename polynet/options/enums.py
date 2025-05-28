@@ -7,10 +7,10 @@ class ProblemTypes(StrEnum):
 
 
 class Networks(StrEnum):
-    GCN = "gcn"
-    GCNClassifier = "gcn_classifier"
-    GCNRegressor = "gcn_regressor"
-    TransformerGNN = "transformer_gnn"
+    GCN = "GCN"
+    GCNClassifier = "GCN Classifier"
+    GCNRegressor = "GCN Regressor"
+    TransformerGNN = "TransformerConvGNN"
     TransformerGNNClassifier = "transformer_gnn_classifier"
     TransformerGNNRegressor = "transformer_gnn_regressor"
     GAT = "gat"
@@ -19,7 +19,7 @@ class Networks(StrEnum):
 
 class NetworkParams(StrEnum):
     # GCN
-    Improved = "Improved"
+    Improved = "improved"
     # TransformerGNN
     NumHeads = "NumHeads"
 
@@ -40,10 +40,10 @@ class Schedulers(StrEnum):
 
 
 class Pooling(StrEnum):
-    GlobalMaxPool = "gmp"
-    GlobalAddPool = "gsp"
-    GlobalMeanPool = "gmeanp"
-    GlobalMeanMaxPool = "gmeanmaxp"
+    GlobalMaxPool = "GlobalMaxPool"
+    GlobalAddPool = "GlobalAddPool"
+    GlobalMeanPool = "GlobalMeanPool"
+    GlobalMeanMaxPool = "GlobalMeanMaxPool"
 
 
 class Split_types(StrEnum):
@@ -55,8 +55,8 @@ class Split_types(StrEnum):
 
 
 class SplitMethods(StrEnum):
-    Random = "random"
-    Stratified = "stratified"
+    Random = "Random"
+    Stratified = "Stratified"
 
 
 class DataSets(StrEnum):
