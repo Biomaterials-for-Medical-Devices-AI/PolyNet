@@ -222,20 +222,23 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
         select_all_atomic = st.checkbox("Select all atomic properties")
 
         if select_all_atomic:
-            selected_atomic_properties = atomic_properties
+            default_atomic_properties = atomic_properties
         else:
-            selected_atomic_properties = st.multiselect(
-                "Select atomic properties to compute:",
-                options=atomic_properties,
-                default=[
-                    AtomFeatures.GetAtomicNum,
-                    AtomFeatures.GetIsAromatic,
-                    AtomFeatures.GetTotalDegree,
-                    AtomFeatures.GetImplicitValence,
-                ],
-                key=DescriptorCalculationStateKeys.AtomProperties,
-                help="Choose which RDKit Atom-level properties to extract.",
-            )
+            default_atomic_properties = [
+                AtomFeatures.GetAtomicNum,
+                AtomFeatures.GetTotalNumHs,
+                AtomFeatures.GetTotalDegree,
+                AtomFeatures.GetImplicitValence,
+                AtomFeatures.GetIsAromatic,
+            ]
+
+        selected_atomic_properties = st.multiselect(
+            "Select atomic properties to compute:",
+            options=atomic_properties,
+            default=default_atomic_properties,
+            key=DescriptorCalculationStateKeys.AtomProperties,
+            help="Choose which RDKit Atom-level properties to extract.",
+        )
 
         if selected_atomic_properties:
             total_num_node_feats = 0
@@ -274,22 +277,25 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
         st.markdown("#### Bond Properties")
 
-        select_all_bond = st.checkbox("Select all bond properties")
+        select_all_bond = st.toggle("Select all bond properties")
 
         if select_all_bond:
-            selected_bond_properties = bond_properties
+            default_bond_properties = bond_properties
+
         else:
-            selected_bond_properties = st.multiselect(
-                "Select bond properties to compute:",
-                options=bond_properties,
-                default=[
-                    BondFeatures.GetBondTypeAsDouble,
-                    BondFeatures.GetIsAromatic,
-                    BondFeatures.GetStereo,
-                ],
-                key=DescriptorCalculationStateKeys.BondProperties,
-                help="Choose which RDKit Bond-level properties to extract.",
-            )
+            default_bond_properties = [
+                BondFeatures.GetBondTypeAsDouble,
+                BondFeatures.GetIsAromatic,
+                BondFeatures.GetStereo,
+            ]
+
+        selected_bond_properties = st.multiselect(
+            "Select bond properties to compute:",
+            options=bond_properties,
+            default=default_bond_properties,
+            key=DescriptorCalculationStateKeys.BondProperties,
+            help="Choose which RDKit Bond-level properties to extract.",
+        )
 
         if selected_bond_properties:
             total_num_edge_feats = 0
