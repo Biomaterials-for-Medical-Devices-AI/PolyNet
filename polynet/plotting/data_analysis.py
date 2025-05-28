@@ -2,13 +2,21 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 
-def show_label_distribution(
-    data, target_variable, title=None, show=False, save_path=None, return_fig=False
-):
-    fig = plt.figure(figsize=(4, 3), dpi=300)
-    ax = sns.countplot(
-        data=data, x=target_variable, hue=target_variable, legend=False, palette="Blues"
-    )
+def show_label_distribution(data, target_variable, title=None, class_names=None):
+    # If class_names dict is provided, map the target variable to human-readable names
+    if class_names:
+        label_column = f"{target_variable}_name"
+        data = data.copy()
+        data[label_column] = data[target_variable].map(class_names)
+        x_axis = label_column
+        hue_axis = label_column
+    else:
+        x_axis = target_variable
+        hue_axis = target_variable
+
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=500)
+    ax = sns.countplot(data=data, x=x_axis, hue=hue_axis, legend=False, palette="Blues")
+
     plt.title(title if title else "Label Distribution", fontsize=16)
     plt.xlabel("Labels", fontsize=14)
     plt.ylabel("Frequency", fontsize=14)
@@ -26,16 +34,7 @@ def show_label_distribution(
             textcoords="offset points",
         )
 
-    if show:
-        plt.show()
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches="tight")
-
-    if return_fig:
-        return fig
-
-    plt.close()
-    plt.clf()
+    return fig
 
 
 def show_continuous_distribution(data, target_variable, bins=30, title=None, plot_opts=None):
