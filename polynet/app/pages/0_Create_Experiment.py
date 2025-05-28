@@ -8,7 +8,7 @@ from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.app.services.experiments import create_experiment
 
 
-def save_experiment():
+def save_experiment(class_names):
 
     dataset_name = st.session_state[CreateExperimentStateKeys.DatasetName].name
 
@@ -29,6 +29,7 @@ def save_experiment():
         num_classes=st.session_state[CreateExperimentStateKeys.NumClasses],
         target_variable_name=st.session_state[CreateExperimentStateKeys.TargetVariableName],
         target_variable_units=st.session_state[CreateExperimentStateKeys.TargetVariableUnits],
+        class_names=class_names,  # Optional, can be None
     )
 
     create_experiment(
@@ -52,8 +53,10 @@ st.write(
     """
 )
 
-if select_data_form():
+class_names = select_data_form()
+
+if class_names is not False:
     if st.button("Save Experiment"):
-        save_experiment()
+        save_experiment(class_names)
         st.success("Experiment saved successfully!")
         st.balloons()
