@@ -14,7 +14,7 @@ def train_TML_models():
         pass
 
 
-def train_GNN_models():
+def train_GNN_models_form():
     if st.checkbox(
         "Train Graph Neural Networks (GNNs)", value=True, key=TrainGNNStateKeys.TrainGNN
     ):
@@ -38,11 +38,25 @@ def train_GNN_models():
 
         if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
             st.write("#### GCN Hyperparameters")
+
+            st.warning("Beaware that GCN does not support edge features. ")
             # Add GCN specific hyperparameters here
             improved = st.selectbox(
                 "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
             )
             gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
+
+        if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### Transformer GNN Hyperparameters")
+            # Add Transformer GNN specific hyperparameters here
+            num_heads = st.slider(
+                "Select the number of attention heads",
+                min_value=1,
+                max_value=8,
+                value=4,
+                key=TrainGNNStateKeys.NumHeads,
+            )
+            gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
 
         st.write(" ### General GNN Hyperparameters")
 
@@ -102,8 +116,6 @@ def train_GNN_models():
             key=TrainGNNStateKeys.GNNBatchSize,
         )
 
-        st.write(" ### Specific GNN Hyperparameters")
-
         return gnn_conv_params
 
 
@@ -114,9 +126,18 @@ def split_data_form(problem_type: ProblemTypes):
         st.selectbox(
             "Select a method to split the data",
             options=[SplitMethods.Random, SplitMethods.Stratified],
-            index=0,
+            index=1,
             key=GeneralConfigStateKeys.SplitMethod,
         )
+
+        if st.toggle("Balance classes on training set", key=GeneralConfigStateKeys.BalanceClasses):
+
+            st.select_slider(
+                "Select the target proportion of classes",
+                options=[0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65],
+                value=0.5,
+                key=GeneralConfigStateKeys.DesiredProportion,
+            )
 
     else:
         st.selectbox(
