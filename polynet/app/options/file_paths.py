@@ -67,6 +67,18 @@ def representation_options_path(experiment_path: Path) -> Path:
     return experiment_path / "representation_options.json"
 
 
+def representation_parent_directory(experiment_path: Path) -> Path:
+    """Return the path to the representation directory in the experiment directory.
+    The path will be to a directory called `representation`.
+
+    Args:
+        experiment_path (Path): The path of the experiment.
+
+    Returns:
+    """
+    return experiment_path / "representation"
+
+
 def gnn_raw_data_path(experiment_path: Path) -> Path:
     """Return the path to the raw data for a GNN experiment.
     The path will be to a `csv` file called `raw_data.csv`
