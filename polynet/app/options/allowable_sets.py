@@ -41,7 +41,7 @@ atom_properties[AtomFeatures.GetAtomicNum] = {
 
 atom_properties[AtomFeatures.GetTotalDegree] = {
     AtomBondDescriptorDictKeys.Options: list(range(0, 7)),
-    AtomBondDescriptorDictKeys.Default: list(range(5)),
+    AtomBondDescriptorDictKeys.Default: list(range(6)),
 }
 
 atom_properties[AtomFeatures.GetFormalCharge] = {
@@ -94,12 +94,12 @@ atom_properties[AtomFeatures.IsInRing] = None  # This is a boolean property, no 
 bond_features = {}
 bond_features[BondFeatures.GetBondTypeAsDouble] = {
     AtomBondDescriptorDictKeys.Options: [1.0, 1.5, 2.0, 3.0],
-    AtomBondDescriptorDictKeys.Default: [1.0, 1.5],
+    AtomBondDescriptorDictKeys.Default: [1.0, 1.5, 2.0, 3.0],
 }
 bond_features[BondFeatures.GetIsAromatic] = None  # This is a boolean property, no options needed
 bond_features[BondFeatures.GetIsConjugated] = None  # This is a boolean property, no options needed
 bond_features[BondFeatures.GetStereo] = {
     AtomBondDescriptorDictKeys.Options: [0, 1, 2, 3],
-    AtomBondDescriptorDictKeys.Default: [0, 1, 2],
+    AtomBondDescriptorDictKeys.Default: [1, 2],
 }  # 0: NONE, 1: UP, 2: DOWN, 3: EITHER
 bond_features[BondFeatures.IsInRing] = None  # This is a boolean property, no options needed
