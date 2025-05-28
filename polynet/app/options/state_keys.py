@@ -83,6 +83,9 @@ class TrainGNNStateKeys(StrEnum):
     # GCN
     Improved = "Improved"
 
+    # TransformerGNN
+    NumHeads = "NumHeads"
+
 
 class GeneralConfigStateKeys(StrEnum):
     """
@@ -90,6 +93,8 @@ class GeneralConfigStateKeys(StrEnum):
     """
 
     SplitData = "SplitData"
+    BalanceClasses = "BalanceClasses"
+    DesiredProportion = "DesiredProportion"
     SplitMethod = "SplitMethod"
     TrainSize = "TrainSize"
     TestSize = "TestSize"
