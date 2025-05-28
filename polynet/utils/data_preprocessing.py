@@ -29,7 +29,9 @@ def print_class_balance(data: pd.DataFrame, target: str):
     )
 
 
-def class_balancer(desired_class_proportion: float, data: pd.DataFrame, target: str):
+def class_balancer(
+    desired_class_proportion: float, data: pd.DataFrame, target: str, random_state: int = 1
+):
     """
     Balances the dataset by undersampling the majority class to achieve the desired class proportion.
 
@@ -79,7 +81,9 @@ def class_balancer(desired_class_proportion: float, data: pd.DataFrame, target: 
 
     # Randomly select rows to drop
     drop_indices = (
-        data[data[target] == majority_class].sample(n=samples_to_remove, random_state=1).index
+        data[data[target] == majority_class]
+        .sample(n=samples_to_remove, random_state=random_state)
+        .index
     )
     data_balanced = data.drop(index=drop_indices)
 
