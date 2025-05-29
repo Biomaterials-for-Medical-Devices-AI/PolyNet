@@ -153,8 +153,6 @@ class GCNClassifier(GCNBase):
             seed=seed,
         )
 
-        self._name = Networks.GCNClassifier
-
 
 class GCNRegressor(GCNBase):
     def __init__(
@@ -186,5 +184,3 @@ class GCNRegressor(GCNBase):
             cross_att=cross_att,
             seed=seed,
         )
-
-        self._name = Networks.GCNRegressor

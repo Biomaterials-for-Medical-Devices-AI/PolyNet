@@ -169,8 +169,6 @@ class TransformerGNNClassifier(TransformerGNN):
             seed=seed,
         )
 
-        self._name = Networks.TransformerGNNClassifier
-
 
 class TransformerGNNRegressor(TransformerGNN):
     def __init__(
@@ -202,5 +200,3 @@ class TransformerGNNRegressor(TransformerGNN):
             cross_att=cross_att,
             seed=seed,
         )
-
-        self._name = Networks.TransformerGNNRegressor
