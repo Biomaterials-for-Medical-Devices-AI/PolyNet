@@ -24,11 +24,10 @@ def train_GNN_models_form():
 
         gnn_conv_params = {}
 
-        conv_layers = st.selectbox(
+        conv_layers = st.multiselect(
             "Select a GNN convolutional layer to train",
             options=[Networks.GCN, Networks.TransformerGNN],
-            # default=[Networks.GCN],
-            index=0,
+            default=[Networks.GCN],
             key=TrainGNNStateKeys.GNNConvolutionalLayers,
         )
 
