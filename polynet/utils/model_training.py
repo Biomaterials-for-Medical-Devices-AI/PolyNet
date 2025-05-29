@@ -105,16 +105,22 @@ def predict_network(model, loader):
         y_pred = np.concatenate(y_pred, axis=0)
         y_true = np.concatenate(y_true, axis=0)
         idx = np.concatenate(idx, axis=0)
-        if model.problem_type == "classification":
+        if model.problem_type == ProblemTypes.Classification:
             y_score = np.concatenate(y_score, axis=0)
         else:
             y_score = None
 
-    results = {Results.Predicted.value: y_pred, Results.Label.value: y_true, "Index": idx}
+    return idx, y_true, y_pred, y_score
 
-    results = pd.DataFrame(results)
+    # results = {
+    #     Results.Predicted.value: y_pred,
+    #     Results.Label.value: y_true,
+    #     Results.Index.value: idx,
+    # }
 
-    return results
+    # results = pd.DataFrame(results)
+
+    # return results
 
 
 def plot_training_curve(train_losses, val_losses, test_losses, best_epoch=None):
