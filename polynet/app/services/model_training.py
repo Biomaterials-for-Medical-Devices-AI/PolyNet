@@ -1,4 +1,6 @@
 from sklearn.model_selection import train_test_split
+from torch import save
+import streamlit as st
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):
@@ -16,3 +18,27 @@ def split_data(data, test_size=0.2, random_state=1, stratify=None):
     """
 
     return train_test_split(data, test_size=test_size, random_state=random_state, stratify=stratify)
+
+
+def save_gnn_model(model, path):
+    """
+    Saves the GNN model to the specified path.
+
+    Args:
+        model: The GNN model to save.
+        path (str): The path where the model will be saved.
+    """
+
+    save(model, path)
+
+
+def save_plot(fig, path):
+    """
+    Saves the plot to the specified path.
+
+    Args:
+        fig: The figure to save.
+        path (str): The path where the plot will be saved.
+    """
+    fig.savefig(path)
+    print(f"Plot saved to {path}")
