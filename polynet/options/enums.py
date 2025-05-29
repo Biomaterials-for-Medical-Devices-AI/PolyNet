@@ -68,6 +68,10 @@ class DataSets(StrEnum):
 class Results(StrEnum):
     Label = "True"
     Predicted = "Predicted"
+    Index = "Index"
+    Set = "Set"
+    Score = "Score"
+    Model = "Model"
 
 
 class AtomBondDescriptorDictKeys(StrEnum):
