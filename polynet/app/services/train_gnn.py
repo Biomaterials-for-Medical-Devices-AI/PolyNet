@@ -7,6 +7,7 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_file,
     gnn_raw_data_path,
     polynet_experiments_base_dir,
+    gnn_model_dir,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -14,7 +15,7 @@ from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.model_training import split_data
 from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import DataSets, Optimizers, Schedulers, SplitMethods
+from polynet.options.enums import DataSets, Optimizers, Schedulers, SplitMethods, Results
 from polynet.utils.data_preprocessing import class_balancer
 from polynet.utils.model_training import predict_network, train_model
 
@@ -34,36 +35,9 @@ def train_network(
         index_col=0,
     )
 
-    train_data, test_data = split_data(
-        data=data,
-        test_size=general_experiment_options.test_ratio,
-        stratify=(
-            data[data_options.target_variable_col]
-            if general_experiment_options.split_method == SplitMethods.Stratified
-            else None
-        ),
-        random_state=general_experiment_options.random_seed,
+    train_ids, val_ids, test_ids = get_data_split_indices(
+        data=data, data_options=data_options, general_experiment_options=general_experiment_options
     )
-
-    if general_experiment_options.train_set_balance:
-        train_data = class_balancer(
-            data=train_data,
-            target=data_options.target_variable_col,
-            desired_class_proportion=general_experiment_options.train_set_balance,
-        )
-
-    train_data, val_data = split_data(
-        data=train_data,
-        test_size=general_experiment_options.val_ratio,
-        stratify=(
-            train_data[data_options.target_variable_col]
-            if general_experiment_options.split_method == SplitMethods.Stratified
-            else None
-        ),
-        random_state=general_experiment_options.random_seed,
-    )
-
-    train_ids, val_ids, test_ids = train_data.index, val_data.index, test_data.index
 
     # === Step 2: Create dataset and filter splits
     dataset = CustomPolymerGraph(
@@ -132,18 +106,110 @@ def train_network(
     return trained_models, loaders
 
 
-def predict_gnn_model(model, loaders):
+def predict_gnn_model(model, loaders, target_variable_name=None):
 
     train_loader, val_loader, test_loader = loaders
 
-    predictions_train = predict_network(model, train_loader)
-    predictions_train["Set"] = DataSets.Training.value
-    predictions_val = predict_network(model, val_loader)
-    predictions_val["Set"] = DataSets.Validation.value
-    prediction_test = predict_network(model, test_loader)
-    prediction_test["Set"] = DataSets.Test.value
+    idx, y_true, y_pred, y_score = predict_network(model, train_loader)
+    predictions_train = create_results_dataframe(
+        target_variable_name=target_variable_name,
+        idx=idx,
+        y_pred=y_pred,
+        y_true=y_true,
+        y_score=y_score,
+        set_name=DataSets.Training.value,
+        model_name=model._name,
+    )
+
+    idx, y_true, y_pred, y_score = predict_network(model, val_loader)
+    predictions_val = create_results_dataframe(
+        target_variable_name=target_variable_name,
+        idx=idx,
+        y_pred=y_pred,
+        y_true=y_true,
+        y_score=y_score,
+        set_name=DataSets.Validation.value,
+        model_name=model._name,
+    )
+    idx, y_true, y_pred, y_score = predict_network(model, test_loader)
+    prediction_test = create_results_dataframe(
+        target_variable_name=target_variable_name,
+        idx=idx,
+        y_pred=y_pred,
+        y_true=y_true,
+        y_score=y_score,
+        set_name=DataSets.Test.value,
+        model_name=model._name,
+    )
 
     predictions = pd.concat([predictions_train, predictions_val, prediction_test])
-    predictions["model"] = model.name
 
     return predictions
+
+
+def create_results_dataframe(
+    target_variable_name: str,
+    idx: list,
+    y_pred: list,
+    y_true: list,
+    y_score: list,
+    set_name: str,
+    model_name: str = None,
+):
+
+    true_label = (
+        f"{Results.Label.value} {target_variable_name}"
+        if target_variable_name
+        else Results.Label.value
+    )
+    predicted_label = (
+        f"{model_name} {Results.Predicted.value} {target_variable_name}"
+        if target_variable_name
+        else f"{model_name} {Results.Predicted.value}"
+    )
+    return pd.DataFrame(
+        {
+            Results.Index.value: idx,
+            Results.Set.value: set_name,
+            true_label: y_true,
+            predicted_label: y_pred,
+        }
+    )
+
+
+def get_data_split_indices(
+    data: pd.DataFrame, data_options: DataOptions, general_experiment_options: GeneralConfigOptions
+):
+    # Initial train-test split
+    train_data, test_data = split_data(
+        data=data,
+        test_size=general_experiment_options.test_ratio,
+        stratify=(
+            data[data_options.target_variable_col]
+            if general_experiment_options.split_method == SplitMethods.Stratified
+            else None
+        ),
+        random_state=general_experiment_options.random_seed,
+    )
+
+    # Optional class balancing on training set
+    if general_experiment_options.train_set_balance:
+        train_data = class_balancer(
+            data=train_data,
+            target=data_options.target_variable_col,
+            desired_class_proportion=general_experiment_options.train_set_balance,
+        )
+
+    # Further split train into train/validation
+    train_data, val_data = split_data(
+        data=train_data,
+        test_size=general_experiment_options.val_ratio,
+        stratify=(
+            train_data[data_options.target_variable_col]
+            if general_experiment_options.split_method == SplitMethods.Stratified
+            else None
+        ),
+        random_state=general_experiment_options.random_seed,
+    )
+
+    return train_data.index, val_data.index, test_data.index
