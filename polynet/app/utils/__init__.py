@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+from polynet.options.enums import Results
 
 
 def create_directory(path: Path):
@@ -75,3 +76,25 @@ def save_data(data_path: Path, data: pd.DataFrame):
             raise
     else:
         raise ValueError("data_path must be to a '.csv' or '.xlsx' file")
+
+
+def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
+    # Start with the first dataframe as base
+    base_df = dfs[0].copy()
+
+    # Keep track of new prediction columns
+    new_pred_cols = []
+
+    for df in dfs[1:]:
+        # Identify the new prediction column
+        pred_col = [col for col in df.columns if col not in base_df.columns][0]
+        new_pred_cols.append(pred_col)
+
+        # Merge prediction column by index
+        base_df = base_df.merge(df[[Results.Index.value, pred_col]], on=Results.Index.value)
+
+    # Reorder columns: all existing base columns first, then all prediction columns
+    existing_cols = [col for col in base_df.columns if col not in new_pred_cols]
+    final_columns = existing_cols + new_pred_cols
+
+    return base_df[final_columns]
