@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+
 from polynet.options.enums import Results
 
 
@@ -98,3 +99,7 @@ def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
     final_columns = existing_cols + new_pred_cols
 
     return base_df[final_columns]
+
+
+def filter_dataset_by_ids(dataset, ids):
+    return [data for data in dataset if data.idx in ids]
