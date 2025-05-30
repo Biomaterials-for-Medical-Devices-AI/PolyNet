@@ -1,5 +1,7 @@
-import streamlit as st
+from shutil import rmtree
+
 import pandas as pd
+import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
@@ -7,21 +9,22 @@ from polynet.app.components.forms.train_models import (
     train_GNN_models_form,
     train_TML_models,
 )
+from polynet.app.components.plots import display_plots, display_predictions
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
+    gnn_model_dir,
+    gnn_plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
-    gnn_model_dir,
+    ml_gnn_results_file_path,
+    ml_results_parent_directory,
     polynet_experiments_base_dir,
     representation_file,
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
-    gnn_plots_directory,
-    ml_gnn_results_file_path,
-    ml_results_parent_directory,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -33,14 +36,12 @@ from polynet.app.options.state_keys import (
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.services.model_training import save_gnn_model, save_plot
-from polynet.app.components.plots import display_plots, display_predictions
+from polynet.app.services.train_gnn import predict_gnn_model, train_network
+from polynet.app.utils import merge_model_predictions, save_data
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
 from polynet.utils.plot_utils import plot_confusion_matrix
-from polynet.app.utils import save_data, merge_model_predictions
-from shutil import rmtree
 
 
 def train_models(
@@ -185,10 +186,6 @@ if experiment_name:
 
             st.write("### Previous GNN Training Results")
 
-            train_gnn_options = load_options(
-                path=train_gnn_model_options_path(experiment_path=experiment_path),
-                options_class=TrainGNNOptions,
-            )
             predictions = pd.read_csv(
                 ml_gnn_results_file_path(
                     experiment_path=experiment_path, file_name="predictions.csv"
