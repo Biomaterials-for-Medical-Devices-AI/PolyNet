@@ -1,7 +1,39 @@
+import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.plots import display_plots, display_predictions
+from polynet.app.options.data import DataOptions
+from polynet.app.options.file_paths import (
+    data_options_path,
+    general_options_path,
+    gnn_model_dir,
+    gnn_plots_directory,
+    gnn_raw_data_file,
+    gnn_raw_data_path,
+    ml_gnn_results_file_path,
+    ml_results_parent_directory,
+    polynet_experiments_base_dir,
+    representation_file,
+    representation_file_path,
+    representation_options_path,
+    train_gnn_model_options_path,
+)
+from polynet.app.options.representation import RepresentationOptions
+from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
+from polynet.app.services.explain_model import explain_model
+from polynet.app.services.model_training import load_gnn_model
+from polynet.app.utils import filter_dataset_by_ids
+from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
+from polynet.options.enums import ExplainAlgorithms
+
+
+def run_explanations(
+    dataset: CustomPolymerGraph, explain_mol: str, gnn_model, explain_algorithm: ExplainAlgorithms
+):
+    pass
+
 
 st.header("Representation of Polymers")
 
@@ -17,3 +49,107 @@ st.markdown(
 
 choices = get_experiments()
 experiment_name = experiment_selector(choices)
+
+
+if experiment_name:
+
+    experiment_path = polynet_experiments_base_dir() / experiment_name
+
+    path_to_data_opts = data_options_path(
+        experiment_path=polynet_experiments_base_dir() / experiment_name
+    )
+
+    data_options = load_options(path=path_to_data_opts, options_class=DataOptions)
+
+    path_to_representation_opts = representation_options_path(
+        experiment_path=polynet_experiments_base_dir() / experiment_name
+    )
+    representation_options = load_options(
+        path=path_to_representation_opts, options_class=RepresentationOptions
+    )
+
+    train_gnn_options = train_gnn_model_options_path(
+        experiment_path=polynet_experiments_base_dir() / experiment_name
+    )
+
+    if not train_gnn_options.exists():
+        st.error(
+            "No models have been trained yet. Please train a model first in the 'Train GNN' section."
+        )
+        st.stop()
+
+    with st.expander("View Previous GNN Model Results", expanded=False):
+
+        st.write("### Previous GNN Training Results")
+
+        predictions = pd.read_csv(
+            ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv")
+        )
+        plots_path = gnn_plots_directory(experiment_path=experiment_path)
+        display_predictions(predictions_df=predictions)
+        display_plots(plots_path=plots_path)
+
+    dataset = CustomPolymerGraph(
+        filename=data_options.data_name,
+        root=gnn_raw_data_path(experiment_path=experiment_path).parent,
+        smiles_cols=data_options.smiles_cols,
+        target_col=data_options.target_variable_col,
+        id_col=data_options.id_col,
+        weights_col=representation_options.weights_col,
+        node_feats=representation_options.node_feats,
+        edge_feats=representation_options.edge_feats,
+    )
+    data = pd.read_csv(
+        gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
+        index_col=0,
+    )
+
+    explain_mol = st.selectbox(
+        "Select Polymer ID to View Representation", options=data.index, key="polymer_id_selector"
+    )
+
+    smiles_col = st.selectbox(
+        "Select SMILES Column", options=data_options.smiles_cols, key="smiles_col_selector"
+    )
+
+    gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
+
+    gnn_models = [
+        model.name
+        for model in gnn_models_dir.iterdir()
+        if model.is_file() and model.suffix == ".pt"
+    ]
+
+    model = st.selectbox(
+        "Select a GNN Model to Explain", options=gnn_models, key="gnn_model_selector"
+    )
+
+    if model:
+        model_path = gnn_models_dir / model
+        gnn_model = load_gnn_model(model_path)
+        st.success(f"GNN Model '{model}' loaded successfully.")
+
+    explain_algorithm = st.selectbox(
+        "Select Explainability Algorithm",
+        options=[
+            # ExplainAlgorithms.GNNExplainer,
+            # ExplainAlgorithms.IntegratedGradients,
+            # ExplainAlgorithms.Saliency,
+            # ExplainAlgorithms.InputXGradients,
+            # ExplainAlgorithms.Deconvolution,
+            ExplainAlgorithms.ShapleyValueSampling,
+            # ExplainAlgorithms.GuidedBackprop,
+        ],
+        key="explain_algorithm_selector",
+    )
+
+    if st.button("Run Explanations"):
+        explain_model(
+            model=gnn_model,
+            experiment_path=experiment_path,
+            dataset=dataset,
+            explain_mols=explain_mol,
+            explain_algorithm=explain_algorithm,
+            problem_type=data_options.problem_type,
+        )
+        st.write(f"Running {explain_algorithm} on Polymer ID: {explain_mol}...")
