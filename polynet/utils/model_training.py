@@ -112,16 +112,6 @@ def predict_network(model, loader):
 
     return idx, y_true, y_pred, y_score
 
-    # results = {
-    #     Results.Predicted.value: y_pred,
-    #     Results.Label.value: y_true,
-    #     Results.Index.value: idx,
-    # }
-
-    # results = pd.DataFrame(results)
-
-    # return results
-
 
 def plot_training_curve(train_losses, val_losses, test_losses, best_epoch=None):
     plt.plot(train_losses, label="Train Loss")
