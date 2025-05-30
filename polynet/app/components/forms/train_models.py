@@ -166,8 +166,8 @@ def split_data_form(problem_type: ProblemTypes):
     st.number_input(
         "Enter a random seed for reproducibility",
         min_value=0,
-        max_value=1000000,
-        value=1,
+        max_value=100000000,
+        value=1221,
         key=GeneralConfigStateKeys.RandomSeed,
     )
     pass
