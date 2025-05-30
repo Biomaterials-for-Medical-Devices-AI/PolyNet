@@ -12,7 +12,6 @@ from rdkit.Chem.Draw import SimilarityMaps
 def plot_mols_with_weights(
     smiles_list,
     weights_list,
-    save_path=None,
     grid_size=None,
     cbar=False,
     legend=None,
@@ -52,6 +51,7 @@ def plot_mols_with_weights(
     axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
 
     if min_weight is None or max_weight is None:
+        print(weights_list)
         vmin = min(min(weights) for weights in weights_list)
         print("vmin", vmin)
         vmax = max(max(weights) for weights in weights_list)
@@ -78,6 +78,8 @@ def plot_mols_with_weights(
         d2d.drawOptions().bondLineWidth = 2  # Thicker bond lines
         # d2d.drawOptions().useBWAtomPalette()
 
+        print("weights", len(weights))
+        print("mol", mol)
         _ = SimilarityMaps.GetSimilarityMapFromWeights(
             mol=mol,
             weights=weights,
@@ -106,11 +108,12 @@ def plot_mols_with_weights(
         cbar = fig.colorbar(sm, cax=cbar_ax, label="Weight Scale")
         cbar.ax.tick_params(labelsize=10)
 
+    return fig
     # plt.tight_layout(rect=[0, 0, 0.9 if cbar else 1, 1])
-    if save_path:
-        plt.savefig(save_path, dpi=600, bbox_inches="tight", transparent=True)
-    else:
-        plt.show()
+    # if save_path:
+    #     plt.savefig(save_path, dpi=600, bbox_inches="tight", transparent=True)
+    # else:
+    #     plt.show()
 
-    plt.close()
-    plt.clf()
+    # plt.close()
+    # plt.clf()
