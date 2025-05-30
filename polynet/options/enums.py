@@ -24,6 +24,16 @@ class NetworkParams(StrEnum):
     NumHeads = "NumHeads"
 
 
+class ExplainAlgorithms(StrEnum):
+    GNNExplainer = "GNNExplainer"
+    IntegratedGradients = "IntegratedGradients"
+    Saliency = "Saliency"
+    InputXGradients = "InputXGradients"
+    Deconvolution = "Deconvolution"
+    ShapleyValueSampling = "ShapleyValueSampling"
+    GuidedBackprop = "GuidedBackprop"
+
+
 class Optimizers(StrEnum):
     Adam = "adam"
     SGD = "sgd"
