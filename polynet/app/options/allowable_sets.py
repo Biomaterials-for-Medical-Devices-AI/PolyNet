@@ -1,4 +1,4 @@
-from rdkit.Chem.rdchem import HybridizationType, BondStereo
+from rdkit.Chem.rdchem import BondStereo, HybridizationType
 
 from polynet.options.enums import AtomBondDescriptorDictKeys, AtomFeatures, BondFeatures
 

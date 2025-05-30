@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import captum
@@ -12,7 +13,6 @@ from polynet.app.options.file_paths import (
     explanation_parent_directory,
     explanation_plots_path,
 )
-import json
 from polynet.app.utils import filter_dataset_by_ids
 from polynet.explain.explain_mol import plot_mols_with_weights
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
