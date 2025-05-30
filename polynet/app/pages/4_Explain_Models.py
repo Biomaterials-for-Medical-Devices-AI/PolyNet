@@ -104,13 +104,20 @@ if experiment_name:
         index_col=0,
     )
 
-    explain_mol = st.selectbox(
+    explain_mol = st.multiselect(
         "Select Polymer ID to View Representation", options=data.index, key="polymer_id_selector"
     )
 
-    smiles_col = st.selectbox(
-        "Select SMILES Column", options=data_options.smiles_cols, key="smiles_col_selector"
-    )
+    mol_names = {}
+
+    for mol in explain_mol:
+        mol_names[mol] = []
+        for smile in data_options.smiles_cols:
+            name = st.text_input(
+                f"Enter a name for {smile} in {mol} for the plot", key=f"mol_name_{mol}_{smile}"
+            )
+            if name:
+                mol_names[mol].append(name)
 
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
@@ -143,7 +150,36 @@ if experiment_name:
         key="explain_algorithm_selector",
     )
 
-    if st.button("Run Explanations"):
+    cols = st.columns(2)
+    with cols[0]:
+        neg_color = st.color_picker(
+            "Select Negative Color", key="neg_color_picker", value="#40bcde"  # Default red color
+        )
+
+    with cols[1]:
+        pos_color = st.color_picker(
+            "Select Positive Color", key="pos_color_picker", value="#e64747"  # Default green color
+        )
+
+    cutoff = st.select_slider(
+        "Select the cutoff for explanations",
+        options=[i / 10 for i in range(0, 11)],
+        value=0.1,
+        key="cutoff_selector",
+    )
+
+    normalisation_type = st.selectbox(
+        "Select Normalisation Type", options=["local", "global"], key="normalisation_type_selector"
+    )
+    if normalisation_type == "global":
+        st.selectbox(
+            "Which molecules to consider for global normalisation",
+            options=["All molecules", "Selected molecules only"],
+            index=0,
+            key="global_normalisation_selector",
+        )
+
+    if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
         explain_model(
             model=gnn_model,
             experiment_path=experiment_path,
@@ -151,5 +187,10 @@ if experiment_name:
             explain_mols=explain_mol,
             explain_algorithm=explain_algorithm,
             problem_type=data_options.problem_type,
+            neg_color=neg_color,
+            pos_color=pos_color,
+            cutoff_explain=cutoff,
+            mol_names=mol_names,
+            normalisation_type=normalisation_type,
         )
         st.write(f"Running {explain_algorithm} on Polymer ID: {explain_mol}...")
