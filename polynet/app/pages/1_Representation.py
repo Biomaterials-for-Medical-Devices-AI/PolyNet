@@ -1,6 +1,7 @@
+from shutil import rmtree
+
 import pandas as pd
 import streamlit as st
-from shutil import rmtree
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
@@ -13,10 +14,10 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_file,
     gnn_raw_data_path,
     polynet_experiments_base_dir,
-    representation_parent_directory,
     representation_file,
     representation_file_path,
     representation_options_path,
+    representation_parent_directory,
 )
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys

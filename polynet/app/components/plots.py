@@ -1,5 +1,5 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 
 def display_predictions(predictions_df: pd.DataFrame):
