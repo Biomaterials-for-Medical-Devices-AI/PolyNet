@@ -224,3 +224,35 @@ def results_plots_path(experiment_path: Path, file_name: str) -> Path:
     Returns:
     """
     return experiment_path / "ml_model" / "plots" / file_name
+
+
+def explanation_parent_directory(experiment_path: Path) -> Path:
+    """
+    Return the path to the explanation directory in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return experiment_path / "explanations"
+
+
+def explanation_json_file_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the explanation file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+        file_name (str): The name of the explanation file.
+    Returns:
+    """
+    return explanation_parent_directory(experiment_path) / "explanation.json"
+
+
+def explanation_plots_path(experiment_path: Path, file_name: str) -> Path:
+    """
+    Return the path to the explanation plots directory in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+        file_name (str): The name of the explanation plots file.
+    Returns:
+    """
+    return explanation_parent_directory(experiment_path) / "plots" / file_name
