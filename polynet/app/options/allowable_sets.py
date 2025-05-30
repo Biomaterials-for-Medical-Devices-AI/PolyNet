@@ -1,4 +1,4 @@
-from rdkit.Chem.rdchem import HybridizationType
+from rdkit.Chem.rdchem import HybridizationType, BondStereo
 
 from polynet.options.enums import AtomBondDescriptorDictKeys, AtomFeatures, BondFeatures
 
@@ -99,7 +99,7 @@ bond_features[BondFeatures.GetBondTypeAsDouble] = {
 bond_features[BondFeatures.GetIsAromatic] = None  # This is a boolean property, no options needed
 bond_features[BondFeatures.GetIsConjugated] = None  # This is a boolean property, no options needed
 bond_features[BondFeatures.GetStereo] = {
-    AtomBondDescriptorDictKeys.Options: [0, 1, 2, 3],
-    AtomBondDescriptorDictKeys.Default: [1, 2],
+    AtomBondDescriptorDictKeys.Options: [BondStereo.STEREOE, BondStereo.STEREOZ],
+    AtomBondDescriptorDictKeys.Default: [BondStereo.STEREOE, BondStereo.STEREOZ],
 }  # 0: NONE, 1: UP, 2: DOWN, 3: EITHER
 bond_features[BondFeatures.IsInRing] = None  # This is a boolean property, no options needed
