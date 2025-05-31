@@ -179,4 +179,17 @@ def select_data_form():
                 return class_names
 
             else:
+
+                st.markdown("**Continuous Distribution**")
+                st.pyplot(
+                    show_continuous_distribution(
+                        data=df,
+                        target_variable=target_col,
+                        title=(
+                            f"Continuous Distribution for {target_name}"
+                            if target_name
+                            else "Continuous Distribution"
+                        ),
+                    )
+                )
                 return True
