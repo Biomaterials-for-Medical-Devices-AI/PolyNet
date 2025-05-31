@@ -7,7 +7,7 @@ from torch_geometric.loader import DataLoader
 from polynet.models.GCN import GCNClassifier, GCNRegressor
 from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
 from polynet.models.graphsage import GraphSAGE
-from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, Split_types
+from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, SplitTypes
 
 
 def create_network(network: str, problem_type: ProblemTypes, **kwargs):
@@ -82,14 +82,14 @@ class Split_Generator:
     ):
         length = len(dataset)
         if self.split_type in [
-            Split_types.TrainValTest,
-            Split_types.TrainTest,
-            Split_types.CrossValidation,
-            Split_types.NestedCrossValidation,
+            SplitTypes.TrainValTest,
+            SplitTypes.TrainTest,
+            SplitTypes.CrossValidation,
+            SplitTypes.NestedCrossValidation,
         ]:
             raise NotImplementedError(f"Split type {self.split_type} is not yet implemented!")
 
-        elif self.split_type == Split_types.LeaveOneOut:
+        elif self.split_type == SplitTypes.LeaveOneOut:
             # Deduce the indices for the train set based on test and validation indices
             if train_split_indices is None:
                 train_split_indices = []
