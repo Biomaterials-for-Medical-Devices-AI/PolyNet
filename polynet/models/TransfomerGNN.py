@@ -91,7 +91,6 @@ class TransformerGNN(BaseNetwork):
     def forward(
         self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
     ):
-        # x = F.leaky_relu(self.batch_norm(self.linear(x)))
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
@@ -108,8 +107,6 @@ class TransformerGNN(BaseNetwork):
 
         x = self.pooling_fn(x, batch_index)
 
-        # x = self.dropout_layer(x)
-
         for layer in self.readout:
             x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
 
@@ -124,18 +121,20 @@ class TransformerGNN(BaseNetwork):
         self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
     ):
 
-        x = F.leaky_relu(self.batch_norm(self.linear(x)))
-        for conv_layer, norm_layer in zip(self.conv_layers, self.norm_layers):
-            x = F.leaky_relu(norm_layer(conv_layer(x, edge_index)))
+        for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
         if monomer_weight is not None:
-            x += monomer_weight
+            x *= monomer_weight
+
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
         x = self.pooling_fn(x, batch_index)
-        x = self.dropout_layer(x)
-
-        return x
 
 
 class TransformerGNNClassifier(TransformerGNN):
