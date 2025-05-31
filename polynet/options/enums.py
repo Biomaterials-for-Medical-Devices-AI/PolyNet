@@ -13,7 +13,7 @@ class Networks(StrEnum):
     TransformerGNN = "TransformerConvGNN"
     TransformerGNNClassifier = "transformer_gnn_classifier"
     TransformerGNNRegressor = "transformer_gnn_regressor"
-    GAT = "gat"
+    GAT = "GAT"
     GraphSAGE = "graphsage"
 
 
@@ -56,12 +56,20 @@ class Pooling(StrEnum):
     GlobalMeanMaxPool = "GlobalMeanMaxPool"
 
 
-class Split_types(StrEnum):
+class SplitTypes(StrEnum):
     TrainValTest = "train_val_test"
     TrainTest = "train_test"
     CrossValidation = "cross_validation"
     NestedCrossValidation = "nested_cross_validation"
     LeaveOneOut = "leave_one_out"
+
+
+class IteratorTypes(StrEnum):
+    BootstrapIteration = "Bootstrap Iteration"
+    CrossValidation = "Cross Validation"
+    Iteration = "Iteration"
+    Fold = "Fold"
+    LeaveOneOut = "Leave One Out"
 
 
 class SplitMethods(StrEnum):
@@ -82,6 +90,29 @@ class Results(StrEnum):
     Set = "Set"
     Score = "Score"
     Model = "Model"
+    Loaders = "Loaders"
+
+
+class EvaluationMetrics(StrEnum):
+    Accuracy = "Accuracy"
+    Precision = "Precision"
+    Recall = "Recall"
+    F1Score = "F1 Score"
+    AUC = "AUC"
+    RMSE = "RMSE"
+    MAE = "MAE"
+    R2 = "R2"
+
+
+class Plots(StrEnum):
+    Parity = "Parity"
+    ConfusionMatrix = "Confusion Matrix"
+    ROC = "ROC Curve"
+    PrecisionRecall = "Precision-Recall Curve"
+    Loss = "Loss"
+    TrainingHistory = "Training History"
+    FeatureImportance = "Feature Importance"
+    GraphVisualization = "Graph Visualization"
 
 
 class AtomBondDescriptorDictKeys(StrEnum):
