@@ -3,29 +3,117 @@ import seaborn as sns
 from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
 
 
-def plot_confusion_matrix(y_true, y_pred, display_labels=None, title=None):
+def plot_parity(
+    y_true,
+    y_pred,
+    dpi=300,
+    height=6,
+    width=6,
+    title=None,
+    title_fontsize=16,
+    x_label="True Values",
+    x_label_fontsize=14,
+    y_label="Predicted Values",
+    y_label_fontsize=14,
+    tick_size=12,
+    grid=True,
+    hue=None,
+    style_by=None,
+    point_color="steelblue",
+    border_color="black",
+    point_size=50,
+    palette=sns.color_palette(),
+    legend: bool = True,
+    legend_fontsize: int = 12,
+):
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+
+    # Plot the diagonal (perfect prediction line)
+    min_val = min(min(y_true), min(y_pred))
+    max_val = max(max(y_true), max(y_pred))
+    ax.plot(
+        [min_val, max_val],
+        [min_val, max_val],
+        ls="--",
+        color="black",
+        lw=2,
+        label="Parity Line (y=x)",
+    )
+
+    # Plot the predicted vs. true values
+    sns.scatterplot(
+        x=y_true,
+        y=y_pred,
+        ax=ax,
+        color=point_color,
+        edgecolor=border_color,
+        s=point_size,
+        hue=hue,
+        style=style_by,
+        palette=palette,
+    )
+
+    # Set labels and styling
+    ax.set_xlabel(x_label, fontsize=x_label_fontsize, fontweight="bold")
+    ax.set_ylabel(y_label, fontsize=y_label_fontsize, fontweight="bold")
+    ax.tick_params(axis="both", which="major", labelsize=tick_size)
+
+    if legend:
+        ax.legend(fontsize=legend_fontsize)
+    else:
+        ax.get_legend().remove()
+
+    if grid:
+        ax.grid(True, linestyle="--", alpha=0.7)
+
+    if title:
+        ax.set_title(title, fontsize=title_fontsize, fontweight="bold")
+
+    fig.tight_layout()  # Adjust layout to prevent clipping of labels
+
+    return fig
+
+
+def plot_confusion_matrix(
+    y_true,
+    y_pred,
+    dpi=300,
+    height=6,
+    width=6,
+    title=None,
+    title_fontsize=16,
+    x_label="Predicted label",
+    x_label_fontsize=14,
+    y_label="True label",
+    y_label_fontsize=14,
+    label_fontsize=16,
+    cmap="Blues",
+    tick_size=12,
+    display_labels=None,
+):
+
     disp = ConfusionMatrixDisplay(
         confusion_matrix(y_true=y_true, y_pred=y_pred), display_labels=display_labels
     )
 
     # Customize the figure size
-    fig, ax = plt.subplots(figsize=(6, 6), dpi=300)  # Adjust figure size if needed
-    disp.plot(ax=ax, cmap=plt.cm.Blues, values_format="d")  # Use 'd' for integer values
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)  # Adjust figure size if needed
+    disp.plot(ax=ax, cmap=cmap, values_format="d")  # Use 'd' for integer values
 
     # Increase label font size
-    ax.set_xticklabels(ax.get_xticklabels(), fontsize=12)
-    ax.set_yticklabels(ax.get_yticklabels(), fontsize=12)
+    ax.set_xticklabels(ax.get_xticklabels(), fontsize=tick_size)
+    ax.set_yticklabels(ax.get_yticklabels(), fontsize=tick_size)
 
     # Increase number (value) font size
     for text in ax.texts:
-        text.set_fontsize(16)  # Increase number size
+        text.set_fontsize(label_fontsize)  # Increase number size
         text.set_fontweight("bold")  # Make numbers bold
 
-    ax.set_ylabel("True label", fontsize=14, fontweight="bold")
-    ax.set_xlabel("Predicted label", fontsize=14, fontweight="bold")
+    ax.set_ylabel(y_label, fontsize=y_label_fontsize, fontweight="bold")
+    ax.set_xlabel(x_label, fontsize=x_label_fontsize, fontweight="bold")
 
     if title:
-        plt.title(title, fontsize=16, fontweight="bold")
+        plt.title(title, fontsize=title_fontsize, fontweight="bold")
 
     return fig
 
