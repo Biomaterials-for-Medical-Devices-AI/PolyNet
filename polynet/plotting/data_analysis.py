@@ -37,7 +37,7 @@ def show_label_distribution(data, target_variable, title=None, class_names=None)
     return fig
 
 
-def show_continuous_distribution(data, target_variable, bins=30, title=None, plot_opts=None):
+def show_continuous_distribution(data, target_variable, bins=30, title=None):
     """
     Plot the distribution of a continuous target variable.
 
@@ -49,13 +49,12 @@ def show_continuous_distribution(data, target_variable, bins=30, title=None, plo
         show (bool): Whether to display the plot.
         save_path (str, optional): Path to save the plot as an image.
     """
-    plt.style.use(plot_opts.plot_colour_scheme)
 
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=plot_opts.dpi)
+    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
     ax = sns.histplot(
         data=data, x=target_variable, bins=bins, kde=True, color="skyblue", edgecolor="black"
     )
-    plt.title(title if title else "Value Distribution", fontsize=plot_opts.plot_title_font_size)
+    plt.title(title if title else "Value Distribution", fontsize=14)
     plt.xlabel("Values", fontsize=14)
     plt.ylabel("Frequency", fontsize=14)
     plt.grid(axis="y", linestyle="--", alpha=0.7)
