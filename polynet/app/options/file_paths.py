@@ -203,17 +203,9 @@ def gnn_plots_directory(experiment_path: Path) -> Path:
     return ml_gnn_results_directory(experiment_path) / "plots"
 
 
-def gnn_predictions_file_path(experiment_path: Path, file_name: str) -> Path:
-    """
-    Return the path to the predictions file in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-        file_name (str): The name of the predictions file.
-    Returns:
+def gnn_model_metrics_file_path(experiment_path: Path) -> Path:
 
-    """
-
-    return experiment_path / "ml_model" / "predictions" / file_name
+    return ml_gnn_results_directory(experiment_path) / "metrics.json"
 
 
 def results_plots_path(experiment_path: Path, file_name: str) -> Path:
