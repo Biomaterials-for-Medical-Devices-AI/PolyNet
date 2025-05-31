@@ -93,7 +93,7 @@ class GeneralConfigStateKeys(StrEnum):
     Enum for the keys used in the state of the SplitData component.
     """
 
-    SplitData = "SplitData"
+    SplitType = "SplitType"
     BalanceClasses = "BalanceClasses"
     DesiredProportion = "DesiredProportion"
     SplitMethod = "SplitMethod"
@@ -101,6 +101,46 @@ class GeneralConfigStateKeys(StrEnum):
     TestSize = "TestSize"
     ValidationSize = "ValidationSize"
     RandomSeed = "RandomSeed"
+    BootstrapIterations = "BootstrapIterations"
 
     Stratify = "Stratify"
     Shuffle = "Shuffle"
+
+
+class AnalyseResultsStateKeys(StrEnum):
+    """
+    Enum for the keys used in the state of the AnalyseResults component.
+    """
+
+    PlotIterations = "PlotIterations"
+    PlotModels = "PlotModels"
+    PlotSet = "PlotSet"
+
+
+class PlotCustomiserStateKeys(StrEnum):
+    """
+    Enum for the keys used in the state of the PlotCustomiser component.
+    """
+
+    PlotTitle = "PlotTitle"
+    PlotFontSize = "PlotFontSize"
+    PlotGrid = "PlotGrid"
+    ShowLegend = "ShowLegend"
+    LegendFontSize = "LegendFontSize"
+    PlotXLabel = "PlotXLabel"
+    PlotXLabelFontSize = "PlotXLabelFontSize"
+    PlotYLabel = "PlotYLabel"
+    PlotYLabelFontSize = "PlotYLabelFontSize"
+    TickSize = "TickSize"
+
+    PlotPointSize = "PlotPointSize"
+    PlotPointBorderColour = "PlotPointBorderColour"
+
+    ColourBy = "ColourBy"
+    StyleBy = "StyleBy"
+
+    DPI = "DPI"
+
+    CMap = "CMap"
+    PlotLabelFontSize = "PlotLabelFontSize"
+    LabelNames = "LabelNames"
