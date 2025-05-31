@@ -5,7 +5,14 @@ from polynet.app.options.state_keys import (
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
-from polynet.options.enums import NetworkParams, Networks, Pooling, ProblemTypes, SplitMethods
+from polynet.options.enums import (
+    NetworkParams,
+    Networks,
+    Pooling,
+    ProblemTypes,
+    SplitMethods,
+    SplitTypes,
+)
 
 
 def train_TML_models():
@@ -120,6 +127,14 @@ def train_GNN_models_form():
 
 def split_data_form(problem_type: ProblemTypes):
 
+    split_type = st.selectbox(
+        "Select the split method",
+        options=[SplitTypes.TrainValTest],
+        index=0,
+        disabled=True,
+        key=GeneralConfigStateKeys.SplitType,
+    )
+
     if problem_type == ProblemTypes.Classification:
 
         st.selectbox(
@@ -147,6 +162,14 @@ def split_data_form(problem_type: ProblemTypes):
             key=GeneralConfigStateKeys.SplitMethod,
         )
 
+    if split_type == SplitTypes.TrainValTest:
+        st.select_slider(
+            "Select the number of bootstrap iterations",
+            options=list(range(1, 11)),
+            value=1,
+            key=GeneralConfigStateKeys.BootstrapIterations,
+        )
+
     st.slider(
         "Select the test split ratio",
         min_value=0.1,
@@ -170,4 +193,3 @@ def split_data_form(problem_type: ProblemTypes):
         value=1221,
         key=GeneralConfigStateKeys.RandomSeed,
     )
-    pass
