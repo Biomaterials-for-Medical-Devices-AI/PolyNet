@@ -9,7 +9,12 @@ from polynet.app.components.forms.train_models import (
     train_GNN_models_form,
     train_TML_models,
 )
-from polynet.app.components.plots import display_plots, display_predictions
+from polynet.app.components.plots import (
+    display_plots,
+    display_predictions,
+    display_model_metrics,
+    display_model_results,
+)
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -25,6 +30,7 @@ from polynet.app.options.file_paths import (
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
+    gnn_model_metrics_file_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -36,12 +42,15 @@ from polynet.app.options.state_keys import (
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import save_gnn_model, save_plot
+from polynet.app.services.model_training import save_gnn_model, save_plot, calculate_metrics
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.utils import merge_model_predictions, save_data
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
-from polynet.utils.plot_utils import plot_confusion_matrix
+from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity
+import json
+from polynet.app.utils import get_iterator_name
+from polynet.app.utils import get_true_label_column_name, get_predicted_label_column_name
 
 
 def train_models(
@@ -67,8 +76,12 @@ def train_models(
     )
 
     general_experiment_options = GeneralConfigOptions(
+        split_type=st.session_state[GeneralConfigStateKeys.SplitType],
         split_method=st.session_state[GeneralConfigStateKeys.SplitMethod],
         train_set_balance=st.session_state.get(GeneralConfigStateKeys.DesiredProportion, None),
+        n_bootstrap_iterations=st.session_state.get(
+            GeneralConfigStateKeys.BootstrapIterations, None
+        ),
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed],
@@ -90,7 +103,7 @@ def train_models(
     save_options(path=gnn_training_opts_path, options=train_gnn_options)
     save_options(path=gen_options_path, options=general_experiment_options)
 
-    model, loaders = train_network(
+    model = train_network(
         train_gnn_options=train_gnn_options,
         general_experiment_options=general_experiment_options,
         experiment_name=experiment_name,
@@ -98,46 +111,111 @@ def train_models(
         representation_options=representation_options,
     )
 
-    predictions_all = []
-
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
     gnn_models_dir.mkdir(parents=True, exist_ok=True)
 
     gnn_plots_dir = gnn_plots_directory(experiment_path=experiment_path)
     gnn_plots_dir.mkdir(parents=True, exist_ok=True)
 
-    for model_name, model in model.items():
+    metrics = {}
 
-        save_path = gnn_models_dir / f"{model_name}.pt"
-        save_gnn_model(model=model, path=save_path)
+    predictions_iterations = pd.DataFrame()
 
-        predictions = predict_gnn_model(model=model, loaders=loaders)
-        predictions_all.append(predictions)
+    iterator = get_iterator_name(general_experiment_options.split_type)
 
-        if data_options.problem_type == ProblemTypes.Classification:
-            predictions_test = predictions.loc[predictions[Results.Set.value] == DataSets.Test]
-            fig = plot_confusion_matrix(
-                y_true=predictions_test.iloc[:, 2],
-                y_pred=predictions_test.iloc[:, 3],
-                display_labels=(
-                    list(data_options.class_names.values()) if data_options.class_names else None
-                ),
-                title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name}",
+    for iteration, model_params in model.items():
+
+        loader = model_params[Results.Loaders.value]
+        models = model_params[Results.Model.value]
+
+        predictions_models = []
+
+        metrics[iteration + 1] = {}
+
+        for model_name, model in models.items():
+
+            save_path = gnn_models_dir / f"{model_name}_{iteration}.pt"
+            save_gnn_model(model=model, path=save_path)
+
+            label_col_name = get_true_label_column_name(
+                target_variable_name=data_options.target_variable_name
             )
-            save_plot_path = gnn_plots_dir / f"{model_name}_confusion_matrix.png"
-            save_plot(fig=fig, path=save_plot_path)
-        else:
-            pass
+            predicted_col_name = get_predicted_label_column_name(
+                target_variable_name=data_options.target_variable_name, model_name=model._name
+            )
 
-    predictions_all = merge_model_predictions(dfs=predictions_all)
+            predictions = predict_gnn_model(
+                model=model, loaders=loader, target_variable_name=data_options.target_variable_name
+            )
+
+            predictions_train = predictions.loc[predictions[Results.Set.value] == DataSets.Training]
+            predictions_val = predictions.loc[predictions[Results.Set.value] == DataSets.Validation]
+            predictions_test = predictions.loc[predictions[Results.Set.value] == DataSets.Test]
+
+            metrics[iteration + 1][model_name] = {}
+
+            if data_options.problem_type == ProblemTypes.Classification:
+
+                fig = plot_confusion_matrix(
+                    y_true=predictions_test[label_col_name],
+                    y_pred=predictions_test[predicted_col_name],
+                    display_labels=(
+                        list(data_options.class_names.values())
+                        if data_options.class_names
+                        else None
+                    ),
+                    title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name} - {iteration+1}",
+                )
+                save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_confusion_matrix.png"
+                save_plot(fig=fig, path=save_plot_path)
+            else:
+                fig = plot_parity(
+                    y_true=predictions_test[label_col_name],
+                    y_pred=predictions_test[predicted_col_name],
+                    title=f"{data_options.target_variable_name}\nParity Plot for\n {model_name} - {iteration+1}",
+                )
+
+                save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_parity_plot.png"
+                save_plot(fig=fig, path=save_plot_path)
+
+            metrics[iteration + 1][model_name][DataSets.Training.value] = calculate_metrics(
+                y_true=predictions_train[label_col_name],
+                y_pred=predictions_train[predicted_col_name],
+                problem_type=data_options.problem_type,
+            )
+            metrics[iteration + 1][model_name][DataSets.Validation.value] = calculate_metrics(
+                y_true=predictions_val[label_col_name],
+                y_pred=predictions_val[predicted_col_name],
+                problem_type=data_options.problem_type,
+            )
+            metrics[iteration + 1][model_name][DataSets.Test.value] = calculate_metrics(
+                y_true=predictions_test[label_col_name],
+                y_pred=predictions_test[predicted_col_name],
+                problem_type=data_options.problem_type,
+            )
+
+            predictions_models.append(predictions)
+
+        predictions_models = merge_model_predictions(dfs=predictions_models)
+        predictions_models[iterator] = iteration + 1
+        predictions_iterations = pd.concat(
+            [predictions_iterations, predictions_models], axis=0, ignore_index=True
+        )
 
     save_data(
-        data=predictions_all,
+        data=predictions_iterations,
         data_path=ml_gnn_results_file_path(
             experiment_path=experiment_path, file_name="predictions.csv"
         ),
     )
-    display_predictions(predictions_df=predictions_all)
+
+    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=4)
+
+    display_predictions(predictions_df=predictions_iterations)
+    display_model_metrics(metrics_dict=metrics)
     display_plots(plots_path=gnn_plots_dir)
 
 
@@ -181,19 +259,7 @@ if experiment_name:
             "GNN model options already exist for this experiment. "
             "You can modify the settings below, but be aware that this will overwrite the existing results."
         )
-
-        with st.expander("View Previous GNN Model Results", expanded=True):
-
-            st.write("### Previous GNN Training Results")
-
-            predictions = pd.read_csv(
-                ml_gnn_results_file_path(
-                    experiment_path=experiment_path, file_name="predictions.csv"
-                )
-            )
-            plots_path = gnn_plots_directory(experiment_path=experiment_path)
-            display_predictions(predictions_df=predictions)
-            display_plots(plots_path=plots_path)
+        display_model_results(experiment_path=experiment_path, expanded=False)
 
     st.markdown("## Train Machine Learning Models (TMLs)")
 
@@ -216,6 +282,8 @@ if experiment_name:
         gnn_conv_params = {}
 
     if gnn_conv_params:
+
+        st.markdown("### Data Splitting Options")
         split_data_form(problem_type=data_opts.problem_type)
 
     if st.button("Run Training"):
