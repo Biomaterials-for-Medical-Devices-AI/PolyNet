@@ -1,6 +1,19 @@
 from sklearn.model_selection import train_test_split
 import streamlit as st
 from torch import load, save
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    mean_absolute_error,
+    r2_score,
+    mean_squared_error,
+)
+from math import sqrt
+from polynet.options.enums import ProblemTypes
+import numpy as np
+from polynet.options.enums import EvaluationMetrics
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):
@@ -45,7 +58,7 @@ def load_gnn_model(path):
     return load(path, weights_only=False)
 
 
-def save_plot(fig, path):
+def save_plot(fig, path, dpi=300):
     """
     Saves the plot to the specified path.
 
@@ -53,5 +66,61 @@ def save_plot(fig, path):
         fig: The figure to save.
         path (str): The path where the plot will be saved.
     """
-    fig.savefig(path)
+    fig.savefig(path, bbox_inches="tight", dpi=dpi)
     print(f"Plot saved to {path}")
+
+
+def calculate_standard_error(actual_values, predicted_values):
+    return np.sqrt(np.mean((actual_values - predicted_values) ** 2))
+
+
+def calculate_sep(y_true, y_pred):
+    """
+    Calculates the Standard Error of Prediction (SEP).
+
+    Parameters:
+    - y_true: array-like of shape (n_samples,), ground truth values.
+    - y_pred: array-like of shape (n_samples,), predicted values.
+
+    Returns:
+    - sep: float, the standard error of prediction.
+    """
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+
+    if len(y_true) != len(y_pred):
+        raise ValueError("y_true and y_pred must be the same length")
+
+    residuals = y_true - y_pred
+    sep = np.sqrt(np.sum(residuals**2) / (len(residuals) - 1))
+    return sep
+
+
+def calculate_metrics(y_true, y_pred, problem_type):
+    """
+    Calculates evaluation metrics based on the problem type.
+
+    Args:
+        y_true (pd.Series): True labels.
+        y_pred (pd.Series): Predicted labels.
+        problem_type (str): Type of the problem ('classification' or 'regression').
+
+    Returns:
+        dict: Dictionary containing calculated metrics.
+    """
+    if problem_type == ProblemTypes.Classification:
+
+        return {
+            EvaluationMetrics.Accuracy: accuracy_score(y_true, y_pred),
+            EvaluationMetrics.F1Score: f1_score(y_true, y_pred, average="weighted"),
+            EvaluationMetrics.Precision: precision_score(y_true, y_pred, average="weighted"),
+            EvaluationMetrics.Recall: recall_score(y_true, y_pred, average="weighted"),
+        }
+    else:
+
+        return {
+            EvaluationMetrics.RMSE: sqrt(mean_squared_error(y_true, y_pred)),
+            EvaluationMetrics.R2: r2_score(y_true, y_pred),
+            EvaluationMetrics.MAE: mean_absolute_error(y_true, y_pred),
+            # "sep": calculate_standard_error(y_true, y_pred),
+        }
