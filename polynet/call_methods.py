@@ -4,6 +4,7 @@ from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlate
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
+from polynet.models.GAT import GATClassifier, GATRegressor
 from polynet.models.GCN import GCNClassifier, GCNRegressor
 from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
 from polynet.models.graphsage import GraphSAGE
@@ -11,17 +12,25 @@ from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers
 
 
 def create_network(network: str, problem_type: ProblemTypes, **kwargs):
+
     # Create a network
     if network == Networks.GCN:
         if problem_type == ProblemTypes.Classification:
             network = GCNClassifier(**kwargs)
         elif problem_type == ProblemTypes.Regression:
             network = GCNRegressor(**kwargs)
+
     elif network == Networks.TransformerGNN:
         if problem_type == ProblemTypes.Classification:
             network = TransformerGNNClassifier(**kwargs)
         elif problem_type == ProblemTypes.Regression:
             network = TransformerGNNRegressor(**kwargs)
+
+    elif network == Networks.GAT:
+        if problem_type == ProblemTypes.Classification:
+            network = GATClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = GATRegressor(**kwargs)
 
     elif network == Networks.GraphSAGE:
         network = GraphSAGE(**kwargs)
