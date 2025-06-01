@@ -1,19 +1,19 @@
-import streamlit as st
-import pandas as pd
-
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.options.data import DataOptions
-
-from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
-
-from polynet.options.enums import Results, DataSets, Plots
-from polynet.app.utils import get_iterator_name
-
-from polynet.app.utils import get_true_label_column_name, get_predicted_label_column_name
-from polynet.utils.plot_utils import plot_parity, plot_confusion_matrix
-
 import re
+
+import pandas as pd
+import streamlit as st
+
+from polynet.app.options.data import DataOptions
+from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
+from polynet.app.options.train_GNN import TrainGNNOptions
+from polynet.app.utils import (
+    get_iterator_name,
+    get_predicted_label_column_name,
+    get_true_label_column_name,
+)
+from polynet.options.enums import DataSets, Plots, Results
+from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity
 
 
 def get_plot_customisation_form(

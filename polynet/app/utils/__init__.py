@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from polynet.options.enums import Results, SplitTypes, IteratorTypes
+from polynet.options.enums import IteratorTypes, Results, SplitTypes
 
 
 def create_directory(path: Path):

@@ -1,11 +1,13 @@
+import json
+
 import pandas as pd
 import streamlit as st
+
 from polynet.app.options.file_paths import (
+    gnn_model_metrics_file_path,
     gnn_plots_directory,
     ml_gnn_results_file_path,
-    gnn_model_metrics_file_path,
 )
-import json
 
 
 def display_predictions(predictions_df: pd.DataFrame):

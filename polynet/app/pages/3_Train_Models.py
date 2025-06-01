@@ -1,3 +1,4 @@
+import json
 from shutil import rmtree
 
 import pandas as pd
@@ -10,16 +11,17 @@ from polynet.app.components.forms.train_models import (
     train_TML_models,
 )
 from polynet.app.components.plots import (
-    display_plots,
-    display_predictions,
     display_model_metrics,
     display_model_results,
+    display_plots,
+    display_predictions,
 )
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     gnn_model_dir,
+    gnn_model_metrics_file_path,
     gnn_plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
@@ -30,7 +32,6 @@ from polynet.app.options.file_paths import (
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
-    gnn_model_metrics_file_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -42,15 +43,18 @@ from polynet.app.options.state_keys import (
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import save_gnn_model, save_plot, calculate_metrics
+from polynet.app.services.model_training import calculate_metrics, save_gnn_model, save_plot
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
-from polynet.app.utils import merge_model_predictions, save_data
+from polynet.app.utils import (
+    get_iterator_name,
+    get_predicted_label_column_name,
+    get_true_label_column_name,
+    merge_model_predictions,
+    save_data,
+)
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
 from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity
-import json
-from polynet.app.utils import get_iterator_name
-from polynet.app.utils import get_true_label_column_name, get_predicted_label_column_name
 
 
 def train_models(

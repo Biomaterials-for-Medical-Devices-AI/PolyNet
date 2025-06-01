@@ -1,19 +1,20 @@
-from sklearn.model_selection import train_test_split
-import streamlit as st
-from torch import load, save
+from math import sqrt
+
+import numpy as np
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
-    precision_score,
-    recall_score,
     mean_absolute_error,
-    r2_score,
     mean_squared_error,
+    precision_score,
+    r2_score,
+    recall_score,
 )
-from math import sqrt
-from polynet.options.enums import ProblemTypes
-import numpy as np
-from polynet.options.enums import EvaluationMetrics
+from sklearn.model_selection import train_test_split
+import streamlit as st
+from torch import load, save
+
+from polynet.options.enums import EvaluationMetrics, ProblemTypes
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):

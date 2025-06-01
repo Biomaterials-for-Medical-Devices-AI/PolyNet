@@ -1,31 +1,29 @@
-import streamlit as st
 import pandas as pd
+import streamlit as st
+
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.forms.analyse_results import (
+    confusion_matrix_plot_form,
+    parity_plot_form,
+)
+from polynet.app.components.plots import display_model_results
+from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
-    polynet_experiments_base_dir,
     data_options_path,
+    general_options_path,
+    gnn_raw_data_file,
+    gnn_raw_data_path,
+    ml_gnn_results_file_path,
+    polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
-    ml_gnn_results_file_path,
-    general_options_path,
-    gnn_raw_data_path,
-    gnn_raw_data_file,
 )
-from polynet.app.options.data import DataOptions
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_GNN import TrainGNNOptions
-
-from polynet.app.services.experiments import get_experiments
 from polynet.app.services.configurations import load_options
-from polynet.app.components.plots import display_model_results
-
+from polynet.app.services.experiments import get_experiments
 from polynet.options.enums import ProblemTypes
-
-from polynet.app.components.forms.analyse_results import (
-    parity_plot_form,
-    confusion_matrix_plot_form,
-)
 
 st.header("Representation of Polymers")
 
