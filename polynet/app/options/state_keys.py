@@ -87,6 +87,9 @@ class TrainGNNStateKeys(StrEnum):
     # TransformerGNN
     NumHeads = "NumHeads"
 
+    # Gat
+    NHeads = "NHeads"
+
 
 class GeneralConfigStateKeys(StrEnum):
     """
