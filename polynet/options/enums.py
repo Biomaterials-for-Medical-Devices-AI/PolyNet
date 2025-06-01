@@ -8,13 +8,11 @@ class ProblemTypes(StrEnum):
 
 class Networks(StrEnum):
     GCN = "GCN"
-    GCNClassifier = "GCN Classifier"
-    GCNRegressor = "GCN Regressor"
     TransformerGNN = "TransformerConvGNN"
-    TransformerGNNClassifier = "transformer_gnn_classifier"
-    TransformerGNNRegressor = "transformer_gnn_regressor"
     GAT = "GAT"
-    GraphSAGE = "graphsage"
+    GraphSAGE = "GraphSAGE"
+    MPNN = "MPNN"
+    CGGNN = "CGGNN"
 
 
 class NetworkParams(StrEnum):
@@ -22,6 +20,11 @@ class NetworkParams(StrEnum):
     Improved = "improved"
     # TransformerGNN
     NumHeads = "NumHeads"
+    # GAT
+
+    # GraphSAGE
+    Bias = "bias"
+    # MPNN
 
 
 class ExplainAlgorithms(StrEnum):
