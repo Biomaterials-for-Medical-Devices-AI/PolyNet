@@ -4,6 +4,7 @@ from torch_geometric.nn import GATv2Conv
 
 from polynet.models.GNN import BaseNetwork
 from polynet.options.enums import Networks, Pooling, ProblemTypes
+from torch import Tensor
 
 
 class GAT(BaseNetwork):
@@ -89,7 +90,12 @@ class GAT(BaseNetwork):
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
     def forward(
-        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
     ):
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
@@ -118,7 +124,13 @@ class GAT(BaseNetwork):
         return x
 
     def return_graph_embedding(
-        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        edge_weight=None,
+        monomer_weight: Tensor = None,
     ):
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
@@ -135,6 +147,8 @@ class GAT(BaseNetwork):
             x = self._cross_attention(x, batch_index, monomer_weight)
 
         x = self.pooling_fn(x, batch_index)
+
+        return x
 
 
 class GATClassifier(GAT):
