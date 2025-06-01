@@ -7,7 +7,9 @@ from torch_geometric.loader import DataLoader
 from polynet.models.GAT import GATClassifier, GATRegressor
 from polynet.models.GCN import GCNClassifier, GCNRegressor
 from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
-from polynet.models.graphsage import GraphSAGE
+from polynet.models.CGGNN import CGGNNClassifier, CGGNNRegressor
+from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
+from polynet.models.MPNN import MPNNClassifier, MPNNRegressor
 from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, SplitTypes
 
 
@@ -20,11 +22,11 @@ def create_network(network: str, problem_type: ProblemTypes, **kwargs):
         elif problem_type == ProblemTypes.Regression:
             network = GCNRegressor(**kwargs)
 
-    elif network == Networks.TransformerGNN:
+    elif network == Networks.GraphSAGE:
         if problem_type == ProblemTypes.Classification:
-            network = TransformerGNNClassifier(**kwargs)
+            network = GraphSageClassifier(**kwargs)
         elif problem_type == ProblemTypes.Regression:
-            network = TransformerGNNRegressor(**kwargs)
+            network = GraphSageRegressor(**kwargs)
 
     elif network == Networks.GAT:
         if problem_type == ProblemTypes.Classification:
@@ -32,8 +34,26 @@ def create_network(network: str, problem_type: ProblemTypes, **kwargs):
         elif problem_type == ProblemTypes.Regression:
             network = GATRegressor(**kwargs)
 
-    elif network == Networks.GraphSAGE:
-        network = GraphSAGE(**kwargs)
+    elif network == Networks.TransformerGNN:
+        if problem_type == ProblemTypes.Classification:
+            network = TransformerGNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = TransformerGNNRegressor(**kwargs)
+
+    elif network == Networks.MPNN:
+        if problem_type == ProblemTypes.Classification:
+            network = MPNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = MPNNRegressor(**kwargs)
+
+    elif network == Networks.CGGNN:
+        if problem_type == ProblemTypes.Classification:
+            network = CGGNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = CGGNNRegressor(**kwargs)
+
+    else:
+        raise NotImplementedError(f"Network type {network} not implemented")
 
     return network
 
