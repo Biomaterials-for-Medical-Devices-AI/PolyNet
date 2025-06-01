@@ -33,7 +33,7 @@ def train_GNN_models_form():
 
         conv_layers = st.multiselect(
             "Select a GNN convolutional layer to train",
-            options=[Networks.GCN, Networks.TransformerGNN],
+            options=[Networks.GCN, Networks.TransformerGNN, Networks.GAT],
             default=[Networks.GCN],
             key=TrainGNNStateKeys.GNNConvolutionalLayers,
         )
@@ -63,6 +63,18 @@ def train_GNN_models_form():
                 key=TrainGNNStateKeys.NumHeads,
             )
             gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
+
+        if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### GAT Hyperparameters")
+            # Add GAT specific hyperparameters here
+            num_heads = st.slider(
+                "Select the number of attention heads",
+                min_value=1,
+                max_value=8,
+                value=4,
+                key=TrainGNNStateKeys.NHeads,
+            )
+            gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
 
         st.write(" ### General GNN Hyperparameters")
 
