@@ -33,7 +33,14 @@ def train_GNN_models_form():
 
         conv_layers = st.multiselect(
             "Select a GNN convolutional layer to train",
-            options=[Networks.GCN, Networks.TransformerGNN, Networks.GAT],
+            options=[
+                Networks.GCN,
+                Networks.GraphSAGE,
+                Networks.TransformerGNN,
+                Networks.GAT,
+                Networks.MPNN,
+                Networks.CGGNN,
+            ],
             default=[Networks.GCN],
             key=TrainGNNStateKeys.GNNConvolutionalLayers,
         )
@@ -51,6 +58,16 @@ def train_GNN_models_form():
                 "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
             )
             gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
+
+        if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### GraphSAGE Hyperparameters")
+
+            st.warning("Beaware that GCN does not support edge features. ")
+            # Add GraphSAGE specific hyperparameters here
+            bias = st.selectbox(
+                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0
+            )
+            gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
 
         if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
             st.write("#### Transformer GNN Hyperparameters")
@@ -75,6 +92,18 @@ def train_GNN_models_form():
                 key=TrainGNNStateKeys.NHeads,
             )
             gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
+
+        if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### MPNN Hyperparameters")
+            # Add MPNN specific hyperparameters here
+
+            gnn_conv_params[Networks.MPNN] = {}
+
+        if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### CGCGNN Hyperparameters")
+            # Add MPNN specific hyperparameters here
+
+            gnn_conv_params[Networks.CGGNN] = {}
 
         st.write(" ### General GNN Hyperparameters")
 
