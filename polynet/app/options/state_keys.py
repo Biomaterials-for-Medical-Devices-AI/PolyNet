@@ -90,6 +90,9 @@ class TrainGNNStateKeys(StrEnum):
     # Gat
     NHeads = "NHeads"
 
+    # GraphSAGE
+    Bias = "Bias"
+
 
 class GeneralConfigStateKeys(StrEnum):
     """
