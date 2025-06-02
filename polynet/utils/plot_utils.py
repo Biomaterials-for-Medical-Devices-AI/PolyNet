@@ -1,6 +1,12 @@
 import matplotlib.pyplot as plt
 import seaborn as sns
-from sklearn.metrics import ConfusionMatrixDisplay, confusion_matrix
+from sklearn.metrics import (
+    ConfusionMatrixDisplay,
+    confusion_matrix,
+    roc_curve,
+    RocCurveDisplay,
+    roc_auc_score,
+)
 
 
 def plot_parity(
@@ -141,3 +147,48 @@ def show_label_distribution(data, target_variable, title=None):
         )
 
     return plt
+
+
+def plot_auroc(
+    y_true,
+    y_scores,
+    dpi=300,
+    height=6,
+    width=6,
+    title=None,
+    title_fontsize=16,
+    x_label="False Positive Rate",
+    x_label_fontsize=14,
+    y_label="True Positive Rate",
+    y_label_fontsize=14,
+    tick_size=12,
+    grid=True,
+    legend: bool = True,
+    legend_fontsize: int = 12,
+):
+
+    # Calculate ROC curve
+    fpr, tpr, thresholds = roc_curve(y_true, y_scores)
+    roc_auc = roc_auc_score(y_true=y_true, y_score=y_scores)
+    roc_display = RocCurveDisplay(fpr=fpr, tpr=tpr, roc_auc=roc_auc)
+
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+    roc_display.plot(ax=ax)
+
+    if plt.title:
+        ax.set_title(title, fontsize=title_fontsize, fontweight="bold")
+
+    ax.set_xlabel(x_label, fontsize=x_label_fontsize, fontweight="bold")
+    ax.set_ylabel(y_label, fontsize=y_label_fontsize, fontweight="bold")
+
+    ax.tick_params(axis="both", which="major", labelsize=tick_size)
+
+    if grid:
+        ax.grid(True, linestyle="--", alpha=0.7)
+
+    if legend:
+        ax.legend(fontsize=legend_fontsize)
+    else:
+        ax.get_legend().remove()
+
+    return fig
