@@ -9,6 +9,7 @@ from sklearn.metrics import (
     precision_score,
     r2_score,
     recall_score,
+    roc_auc_score,
 )
 from sklearn.model_selection import train_test_split
 import streamlit as st
@@ -97,7 +98,7 @@ def calculate_sep(y_true, y_pred):
     return sep
 
 
-def calculate_metrics(y_true, y_pred, problem_type):
+def calculate_metrics(y_true, y_pred, y_probs, problem_type):
     """
     Calculates evaluation metrics based on the problem type.
 
@@ -113,9 +114,10 @@ def calculate_metrics(y_true, y_pred, problem_type):
 
         return {
             EvaluationMetrics.Accuracy: accuracy_score(y_true, y_pred),
-            EvaluationMetrics.F1Score: f1_score(y_true, y_pred, average="weighted"),
-            EvaluationMetrics.Precision: precision_score(y_true, y_pred, average="weighted"),
-            EvaluationMetrics.Recall: recall_score(y_true, y_pred, average="weighted"),
+            EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
+            EvaluationMetrics.Precision: precision_score(y_true, y_pred),
+            EvaluationMetrics.Recall: recall_score(y_true, y_pred),
+            EvaluationMetrics.AUROC: roc_auc_score(y_true=y_true, y_score=y_probs),
         }
     else:
 
