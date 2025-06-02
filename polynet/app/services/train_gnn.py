@@ -13,7 +13,11 @@ from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.model_training import split_data
-from polynet.app.utils import get_predicted_label_column_name, get_true_label_column_name
+from polynet.app.utils import (
+    get_predicted_label_column_name,
+    get_true_label_column_name,
+    get_score_column_name,
+)
 from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
@@ -26,6 +30,7 @@ from polynet.options.enums import (
 )
 from polynet.utils.data_preprocessing import class_balancer
 from polynet.utils.model_training import predict_network, train_model
+import numpy as np
 
 
 def train_network(
@@ -185,7 +190,7 @@ def create_results_dataframe(
         target_variable_name=target_variable_name, model_name=model_name
     )
 
-    return pd.DataFrame(
+    results = pd.DataFrame(
         {
             Results.Index.value: idx,
             Results.Set.value: set_name,
@@ -193,6 +198,49 @@ def create_results_dataframe(
             predicted_label: y_pred,
         }
     )
+
+    if y_score is not None:
+        probs = prepare_probs_df(
+            probs=y_score, target_variable_name=target_variable_name, model_name=model_name
+        )
+        results = pd.concat([results, probs], axis=1)
+
+    return results
+
+
+def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_name: str = None):
+    """
+    Convert probability predictions into a DataFrame.
+
+    - For binary classification (2 classes), include only the second class (index 1).
+    - For multi-class classification (3+ classes), include a column per class.
+
+    Args:
+        probs (np.ndarray): Array of shape (n_samples, n_classes)
+        target_variable_name (str): Name of the target variable
+        model_name (str): Name of the model
+
+    Returns:
+        pd.DataFrame: A DataFrame with appropriately named probability columns
+    """
+    n_classes = probs.shape[1] if probs.ndim > 1 else 1
+    probs_df = pd.DataFrame()
+
+    if n_classes == 2:
+        col_name = get_score_column_name(
+            target_variable_name=target_variable_name, model_name=model_name
+        )
+        # Binary classification: only use the second class (probability of class 1)
+        probs_df[f"{col_name}"] = probs[:, 1]
+    else:
+        # Multi-class classification: create one column per class
+        for i in range(n_classes):
+            col_name = get_score_column_name(
+                target_variable_name=target_variable_name, model_name=model_name, class_num=i
+            )
+            probs_df[f"{col_name} {i}"] = probs[:, i]
+
+    return probs_df
 
 
 def get_data_split_indices(
