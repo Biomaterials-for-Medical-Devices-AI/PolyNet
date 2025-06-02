@@ -137,7 +137,7 @@ def get_plot_customisation_form(
             else:
                 config["legend_fontsize"] = None
 
-            if len(color_by_opts) > 0:
+            if len(color_by_opts) > 1:
 
                 hue = st.selectbox(
                     "Color by",
@@ -349,7 +349,7 @@ def parity_plot_form(
     model_name = st.multiselect(
         "Select the model to display parity plot",
         options=trained_gnns,
-        default=trained_gnns[0],
+        default=list(trained_gnns)[0],
         key=AnalyseResultsStateKeys.PlotModels,
         help="Select the model for which you want to display the parity plot.",
     )
