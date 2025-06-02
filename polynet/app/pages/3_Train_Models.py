@@ -49,12 +49,13 @@ from polynet.app.utils import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
+    get_score_column_name,
     merge_model_predictions,
     save_data,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
-from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity
+from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity, plot_auroc
 
 
 def train_models(
@@ -172,6 +173,29 @@ def train_models(
                 )
                 save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_confusion_matrix.png"
                 save_plot(fig=fig, path=save_plot_path)
+
+                for class_num in range(int(data_options.num_classes)):
+
+                    if class_num == 0 and int(data_options.num_classes) == 2:
+                        continue  # Skip class 0 if binary classification
+
+                    probs_col_name = get_score_column_name(
+                        target_variable_name=data_options.target_variable_name,
+                        model_name=model._name,
+                        class_num=class_num,
+                    )
+
+                    fig = plot_auroc(
+                        y_true=predictions_test[label_col_name],
+                        y_scores=predictions_test[probs_col_name],
+                        title=f"{data_options.target_variable_name}\nROC Curve for\n {model_name} Class {class_num} - {iteration+1}",
+                    )
+
+                    save_plot_path = (
+                        gnn_plots_dir / f"{model_name}_{iteration}_class_{class_num}_roc_curve.png"
+                    )
+                    save_plot(fig=fig, path=save_plot_path)
+
             else:
                 fig = plot_parity(
                     y_true=predictions_test[label_col_name],
@@ -185,16 +209,31 @@ def train_models(
             metrics[iteration + 1][model_name][DataSets.Training.value] = calculate_metrics(
                 y_true=predictions_train[label_col_name],
                 y_pred=predictions_train[predicted_col_name],
+                y_probs=(
+                    predictions_train[probs_col_name]
+                    if data_options.problem_type == ProblemTypes.Classification
+                    else None
+                ),
                 problem_type=data_options.problem_type,
             )
             metrics[iteration + 1][model_name][DataSets.Validation.value] = calculate_metrics(
                 y_true=predictions_val[label_col_name],
                 y_pred=predictions_val[predicted_col_name],
+                y_probs=(
+                    predictions_val[probs_col_name]
+                    if data_options.problem_type == ProblemTypes.Classification
+                    else None
+                ),
                 problem_type=data_options.problem_type,
             )
             metrics[iteration + 1][model_name][DataSets.Test.value] = calculate_metrics(
                 y_true=predictions_test[label_col_name],
                 y_pred=predictions_test[predicted_col_name],
+                y_probs=(
+                    predictions_test[probs_col_name]
+                    if data_options.problem_type == ProblemTypes.Classification
+                    else None
+                ),
                 problem_type=data_options.problem_type,
             )
 
@@ -218,9 +257,7 @@ def train_models(
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=4)
 
-    display_predictions(predictions_df=predictions_iterations)
-    display_model_metrics(metrics_dict=metrics)
-    display_plots(plots_path=gnn_plots_dir)
+    display_model_results(experiment_path=experiment_path, expanded=True)
 
 
 st.header("Train Models")
