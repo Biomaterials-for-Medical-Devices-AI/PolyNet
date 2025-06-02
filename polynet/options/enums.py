@@ -101,7 +101,7 @@ class EvaluationMetrics(StrEnum):
     Precision = "Precision"
     Recall = "Recall"
     F1Score = "F1 Score"
-    AUC = "AUC"
+    AUROC = "AUROC"
     RMSE = "RMSE"
     MAE = "MAE"
     R2 = "R2"
