@@ -135,3 +135,17 @@ def get_predicted_label_column_name(target_variable_name: str, model_name: str =
         return f"{model_name} {Results.Predicted.value}"
     else:
         return f"{Results.Predicted.value}"
+
+
+def get_score_column_name(
+    target_variable_name: str, model_name: str = None, class_num: int = 1
+) -> str:
+    """Get the score column name based on the target variable name and model name."""
+    if model_name and target_variable_name:
+        return f"{model_name} {Results.Score.value} {target_variable_name} {class_num}"
+    elif target_variable_name:
+        return f"{Results.Score.value} {target_variable_name} {class_num}"
+    elif model_name:
+        return f"{model_name} {Results.Score.value} {class_num}"
+    else:
+        return Results.Score.value + f" {class_num}"
