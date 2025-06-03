@@ -1,7 +1,7 @@
 from pathlib import Path
+import re
 
 import pandas as pd
-import re
 
 from polynet.options.enums import IteratorTypes, Results, SplitTypes
 

@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
-from polynet.app.components.plots import display_plots, display_predictions, display_model_results
+from polynet.app.components.plots import display_model_results, display_plots, display_predictions
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -19,16 +19,20 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.app.options.representation import RepresentationOptions
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.explain_model import explain_model
 from polynet.app.services.model_training import load_gnn_model
-from polynet.app.utils import filter_dataset_by_ids
+from polynet.app.utils import (
+    extract_number,
+    filter_dataset_by_ids,
+    get_iterator_name,
+    get_predicted_label_column_name,
+)
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import ExplainAlgorithms, DataSets, Results
-from polynet.app.utils import extract_number, get_iterator_name, get_predicted_label_column_name
+from polynet.options.enums import DataSets, ExplainAlgorithms, Results
 
 
 def run_explanations(

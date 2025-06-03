@@ -4,12 +4,12 @@ from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlate
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
+from polynet.models.CGGNN import CGGNNClassifier, CGGNNRegressor
 from polynet.models.GAT import GATClassifier, GATRegressor
 from polynet.models.GCN import GCNClassifier, GCNRegressor
-from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
-from polynet.models.CGGNN import CGGNNClassifier, CGGNNRegressor
-from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
 from polynet.models.MPNN import MPNNClassifier, MPNNRegressor
+from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
+from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
 from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, SplitTypes
 
 

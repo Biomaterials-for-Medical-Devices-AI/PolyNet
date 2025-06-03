@@ -48,14 +48,14 @@ from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.utils import (
     get_iterator_name,
     get_predicted_label_column_name,
-    get_true_label_column_name,
     get_score_column_name,
+    get_true_label_column_name,
     merge_model_predictions,
     save_data,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.model_training import predict_network
-from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity, plot_auroc
+from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
 
 
 def train_models(

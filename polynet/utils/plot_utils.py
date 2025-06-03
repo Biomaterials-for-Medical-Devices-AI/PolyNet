@@ -2,10 +2,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
-    confusion_matrix,
-    roc_curve,
     RocCurveDisplay,
+    confusion_matrix,
     roc_auc_score,
+    roc_curve,
 )
 
 
