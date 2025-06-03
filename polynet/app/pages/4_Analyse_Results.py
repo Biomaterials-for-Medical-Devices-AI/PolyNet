@@ -97,12 +97,14 @@ if experiment_name:
             data_options=data_options,
         )
 
-        st.pyplot(parity_plot, clear_figure=True)
+        if parity_plot:
 
-        if st.button("Save Parity Plot"):
-            parity_plot_path = experiment_path / "parity_plot.png"
-            parity_plot.savefig(parity_plot_path)
-            st.success(f"Parity plot saved to {parity_plot_path}")
+            st.pyplot(parity_plot, clear_figure=True)
+
+            if st.button("Save Parity Plot"):
+                parity_plot_path = experiment_path / "parity_plot.png"
+                parity_plot.savefig(parity_plot_path)
+                st.success(f"Parity plot saved to {parity_plot_path}")
 
     elif data_options.problem_type == ProblemTypes.Classification:
         st.subheader("Confusion Matrix")
@@ -113,4 +115,6 @@ if experiment_name:
             gnn_training_options=train_gnn_options,
             data_options=data_options,
         )
-        st.pyplot(confusion_matrix_plot, clear_figure=True)
+
+        if confusion_matrix_plot:
+            st.pyplot(confusion_matrix_plot, clear_figure=True)
