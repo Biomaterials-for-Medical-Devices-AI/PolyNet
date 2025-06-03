@@ -139,7 +139,7 @@ def train_models(
 
         for model_name, model in models.items():
 
-            save_path = gnn_models_dir / f"{model_name}_{iteration}.pt"
+            save_path = gnn_models_dir / f"{model_name}_{iteration+1}.pt"
             save_gnn_model(model=model, path=save_path)
 
             label_col_name = get_true_label_column_name(
