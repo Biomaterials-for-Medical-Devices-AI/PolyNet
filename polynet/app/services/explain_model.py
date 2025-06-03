@@ -44,13 +44,15 @@ def explain_model(
     experiment_path: Path,
     dataset: CustomPolymerGraph,
     explain_mols: list,
+    plot_mols: list,
     explain_algorithm: ExplainAlgorithms,
     problem_type: ProblemTypes,
     neg_color: str = "#40bcde",
     pos_color: str = "#e64747",
     normalisation_type: str = "local",
     cutoff_explain: float = 0.1,
-    mol_names=dict,
+    mol_names: dict = {},
+    predictions: dict = {},
 ):
 
     cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
@@ -95,6 +97,62 @@ def explain_model(
 
     mols = filter_dataset_by_ids(dataset, explain_mols)
 
+    node_masks = calculate_attributions(
+        mols=mols, attrs_mol=attrs_mol, explain_algorithm=explain_algorithm, explainer=explainer
+    )
+
+    with open(explanation_file, "w") as f:
+        json.dump(node_masks, f, indent=4)
+
+    if normalisation_type == "global":
+
+        max_val = None
+
+        for mol in mols:
+            maks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
+            local_max_val = np.max(np.abs(maks))
+            if max_val is None or local_max_val > max_val:
+                max_val = local_max_val
+                st.write(
+                    f"New global max value found: {max_val} for molecule {mol.idx} with algorithm {explain_algorithm}"
+                )
+
+    plot_mols = filter_dataset_by_ids(dataset, plot_mols)
+
+    for mol in plot_mols:
+        names = mol_names.get(mol.idx, None)
+        masks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
+
+        if normalisation_type == "local":
+            masks = masks / np.max(np.abs(masks))
+        elif normalisation_type == "global":
+            masks = masks / max_val
+
+        masks = np.where(np.abs(masks) > cutoff_explain, masks, 0.0)
+        masks = masks.tolist()
+
+        masks_mol = []
+        ia = 0
+        for smiles in mol.mols:
+            molecule = Chem.MolFromSmiles(smiles)
+            n_atoms = molecule.GetNumAtoms()
+            masks_mol.append(masks[ia : ia + n_atoms])
+            ia += n_atoms
+
+        fig = plot_mols_with_weights(
+            smiles_list=mol.mols,
+            weights_list=masks_mol,
+            colormap=cmap,
+            legend=names,
+            # min_weight=-1.0,
+            # max_weight=1.0,
+        )
+        st.pyplot(fig, use_container_width=True)
+
+
+def calculate_attributions(
+    mols: list, attrs_mol: dict, explain_algorithm: ExplainAlgorithms, explainer: Explainer
+):
     node_masks = {}
 
     for mol in mols:
@@ -126,86 +184,4 @@ def explain_model(
             node_masks[mol_idx] = {}
         node_masks[mol_idx][explain_algorithm] = node_mask
 
-    with open(explanation_file, "w") as f:
-        json.dump(node_masks, f, indent=4)
-
-    if normalisation_type == "global":
-
-        max_val = None
-
-        for mol in mols:
-            maks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
-            local_max_val = np.max(np.abs(maks))
-            if max_val is None or local_max_val > max_val:
-                max_val = local_max_val
-                st.write(
-                    f"New global max value found: {max_val} for molecule {mol.idx} with algorithm {explain_algorithm}"
-                )
-
-    for mol in mols:
-        names = mol_names.get(mol.idx, None)
-        masks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
-
-        if normalisation_type == "local":
-            masks = masks / np.max(np.abs(masks))
-        elif normalisation_type == "global":
-            masks = masks / max_val
-
-        masks = np.where(np.abs(masks) > cutoff_explain, masks, 0.0)
-        masks = masks.tolist()
-
-        masks_mol = []
-        ia = 0
-        for smiles in mol.mols:
-            molecule = Chem.MolFromSmiles(smiles)
-            n_atoms = molecule.GetNumAtoms()
-            masks_mol.append(masks[ia : ia + n_atoms])
-            ia += n_atoms
-
-        fig = plot_mols_with_weights(
-            smiles_list=mol.mols,
-            weights_list=masks_mol,
-            colormap=cmap,
-            legend=names,
-            # min_weight=-1.0,
-            # max_weight=1.0,
-        )
-        st.pyplot(fig, use_container_width=True)
-
-
-def find_highest_contribution(
-    masks: dict,
-    normalisation_type="local",
-    explain_algorithm=ExplainAlgorithms.ShapleyValueSampling,
-):
-    """
-    Normalize the attributions based on the specified normalisation type.
-    Args:
-        masks (dict): Dictionary containing the attributions for each molecule.
-        normalisation_type (str): Type of normalization to apply. Options are "local" or "global".
-        cutoff_explain (float): Cutoff value to filter out low-attribution features.
-    Returns:
-        dict: Normalized attributions.
-    """
-
-    if normalisation_type == "local":
-        for mol_idx, mol_masks in masks.items():
-            for algorithm, mask in mol_masks.items():
-                if algorithm != explain_algorithm:
-                    continue
-                max_val = np.max(np.abs(mask))
-
-    elif normalisation_type == "global":
-        all_masks = []
-        for mol_masks in masks.values():
-            for algorithm, mask in mol_masks.items():
-                if algorithm != explain_algorithm:
-                    continue
-                all_masks.append(mask)
-        all_masks = np.concatenate([np.array(mol_masks) for mol_masks in all_masks])
-        max_val = np.max(np.abs(all_masks))
-
-    else:
-        raise ValueError(f"Unknown normalisation type: {normalisation_type}")
-
-    return max_val
+    return node_masks
