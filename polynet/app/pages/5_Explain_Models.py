@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
-from polynet.app.components.plots import display_plots, display_predictions
+from polynet.app.components.plots import display_plots, display_predictions, display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -20,13 +20,15 @@ from polynet.app.options.file_paths import (
     train_gnn_model_options_path,
 )
 from polynet.app.options.representation import RepresentationOptions
+from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.explain_model import explain_model
 from polynet.app.services.model_training import load_gnn_model
 from polynet.app.utils import filter_dataset_by_ids
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import ExplainAlgorithms
+from polynet.options.enums import ExplainAlgorithms, DataSets, Results
+from polynet.app.utils import extract_number, get_iterator_name, get_predicted_label_column_name
 
 
 def run_explanations(
@@ -72,22 +74,21 @@ if experiment_name:
         experiment_path=polynet_experiments_base_dir() / experiment_name
     )
 
+    path_to_general_opts = general_options_path(experiment_path=experiment_path)
+
+    general_experiment_options = load_options(
+        path=path_to_general_opts, options_class=GeneralConfigOptions
+    )
+
+    iterator_col = get_iterator_name(general_experiment_options.split_type)
+
     if not train_gnn_options.exists():
         st.error(
             "No models have been trained yet. Please train a model first in the 'Train GNN' section."
         )
         st.stop()
 
-    with st.expander("View Previous GNN Model Results", expanded=False):
-
-        st.write("### Previous GNN Training Results")
-
-        predictions = pd.read_csv(
-            ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv")
-        )
-        plots_path = gnn_plots_directory(experiment_path=experiment_path)
-        display_predictions(predictions_df=predictions)
-        display_plots(plots_path=plots_path)
+    display_model_results(experiment_path=experiment_path, expanded=False)
 
     dataset = CustomPolymerGraph(
         filename=data_options.data_name,
@@ -99,25 +100,16 @@ if experiment_name:
         node_feats=representation_options.node_feats,
         edge_feats=representation_options.edge_feats,
     )
+
     data = pd.read_csv(
         gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
         index_col=0,
     )
 
-    explain_mol = st.multiselect(
-        "Select Polymer ID to View Representation", options=data.index, key="polymer_id_selector"
+    preds = pd.read_csv(
+        ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv"),
+        index_col=0,
     )
-
-    mol_names = {}
-
-    for mol in explain_mol:
-        mol_names[mol] = []
-        for smile in data_options.smiles_cols:
-            name = st.text_input(
-                f"Enter a name for {smile} in {mol} for the plot", key=f"mol_name_{mol}_{smile}"
-            )
-            if name:
-                mol_names[mol].append(name)
 
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
@@ -128,13 +120,70 @@ if experiment_name:
     ]
 
     model = st.selectbox(
-        "Select a GNN Model to Explain", options=gnn_models, key="gnn_model_selector"
+        "Select a GNN Model to Explain", options=sorted(gnn_models), key="gnn_model_selector"
     )
 
     if model:
         model_path = gnn_models_dir / model
         gnn_model = load_gnn_model(model_path)
-        st.success(f"GNN Model '{model}' loaded successfully.")
+        gnn_model_name = gnn_model._name
+        number = extract_number(model)
+        preds = preds.loc[preds[iterator_col] == number]
+
+    else:
+        st.error("Please select a GNN model to explain.")
+        st.stop()
+
+    predicted_col_name = get_predicted_label_column_name(
+        target_variable_name=data_options.target_variable_name, model_name=gnn_model_name
+    )
+
+    set = st.pills(
+        "Select a set to explain",
+        options=[DataSets.Training, DataSets.Validation, DataSets.Test],
+        key="set_selector",
+    )
+
+    if set == DataSets.Training:
+        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Training, Results.Index.value]
+    elif set == DataSets.Validation:
+        explain_mols = preds.loc[
+            preds[Results.Set.value] == DataSets.Validation, Results.Index.value
+        ]
+    elif set == DataSets.Test:
+        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Test, Results.Index.value]
+    else:
+        explain_mols = preds.sample(5).index[:5]
+
+    explain_mol = st.multiselect(
+        "Select Polymers ID to Calculate Explaination",
+        options=data.index,
+        key="polymer_id_selector",
+        default=explain_mols,
+    )
+
+    plot_mols = st.multiselect(
+        "Select Polymers ID to Plot",
+        options=explain_mol,
+        key="polymer_id_plot_selector",
+        default=explain_mol,
+    )
+
+    if plot_mols:
+        preds_dict = {}
+        pass
+
+    mol_names = {}
+    if st.toggle("Set Monomer Name"):
+
+        for mol in explain_mol:
+            mol_names[mol] = []
+            for smile in data_options.smiles_cols:
+                name = st.text_input(
+                    f"Enter a name for {smile} in {mol} for the plot", key=f"mol_name_{mol}_{smile}"
+                )
+                if name:
+                    mol_names[mol].append(name)
 
     explain_algorithm = st.selectbox(
         "Select Explainability Algorithm",
@@ -185,6 +234,7 @@ if experiment_name:
             experiment_path=experiment_path,
             dataset=dataset,
             explain_mols=explain_mol,
+            plot_mols=plot_mols,
             explain_algorithm=explain_algorithm,
             problem_type=data_options.problem_type,
             neg_color=neg_color,
