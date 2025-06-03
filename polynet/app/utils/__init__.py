@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pandas as pd
+import re
 
 from polynet.options.enums import IteratorTypes, Results, SplitTypes
 
@@ -149,3 +150,11 @@ def get_score_column_name(
         return f"{model_name} {Results.Score.value} {class_num}"
     else:
         return Results.Score.value + f" {class_num}"
+
+
+def extract_number(filename):
+    match = re.search(r"_(\d+)\.pt$", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        raise ValueError(f"No number found in filename: {filename}")
