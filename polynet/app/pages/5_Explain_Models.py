@@ -30,9 +30,10 @@ from polynet.app.utils import (
     filter_dataset_by_ids,
     get_iterator_name,
     get_predicted_label_column_name,
+    get_true_label_column_name,
 )
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import DataSets, ExplainAlgorithms, Results
+from polynet.options.enums import DataSets, ExplainAlgorithms, Results, ProblemTypes
 
 
 def run_explanations(
@@ -142,6 +143,10 @@ if experiment_name:
         target_variable_name=data_options.target_variable_name, model_name=gnn_model_name
     )
 
+    true_col_name = get_true_label_column_name(
+        target_variable_name=data_options.target_variable_name
+    )
+
     set = st.pills(
         "Select a set to explain",
         options=[DataSets.Training, DataSets.Validation, DataSets.Test],
@@ -149,18 +154,16 @@ if experiment_name:
     )
 
     if set == DataSets.Training:
-        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Training, Results.Index.value]
+        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Training].index
     elif set == DataSets.Validation:
-        explain_mols = preds.loc[
-            preds[Results.Set.value] == DataSets.Validation, Results.Index.value
-        ]
+        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Validation].index
     elif set == DataSets.Test:
-        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Test, Results.Index.value]
+        explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Test].index
     else:
-        explain_mols = preds.sample(5).index[:5]
+        explain_mols = None
 
     explain_mol = st.multiselect(
-        "Select Polymers ID to Calculate Explaination",
+        "Select Polymers ID to Calculate Explanation",
         options=data.index,
         key="polymer_id_selector",
         default=explain_mols,
@@ -173,9 +176,24 @@ if experiment_name:
         default=explain_mol,
     )
 
+    class_names = data_options.class_names
+
     if plot_mols:
         preds_dict = {}
-        pass
+        for mol in plot_mols:
+            preds_dict[mol] = {}
+            if data_options.problem_type == ProblemTypes.Regression:
+                predicted_vals = preds[[true_col_name, predicted_col_name]].loc[mol].astype(str)
+                preds_dict[mol][Results.Predicted] = predicted_vals.loc[mol, predicted_col_name]
+                preds_dict[mol][Results.Label] = predicted_vals.loc[mol, true_col_name]
+            elif data_options.problem_type == ProblemTypes.Classification:
+                predicted_vals = (
+                    preds[[true_col_name, predicted_col_name]].loc[mol].astype(int).astype(str)
+                )
+                preds_dict[mol][Results.Predicted] = class_names[
+                    predicted_vals.loc[predicted_col_name]
+                ]
+                preds_dict[mol][Results.Label] = class_names[predicted_vals.loc[true_col_name]]
 
     mol_names = {}
     if st.toggle("Set Monomer Name"):
@@ -195,12 +213,20 @@ if experiment_name:
             # ExplainAlgorithms.GNNExplainer,
             # ExplainAlgorithms.IntegratedGradients,
             # ExplainAlgorithms.Saliency,
-            # ExplainAlgorithms.InputXGradients,
+            ExplainAlgorithms.InputXGradients,
             # ExplainAlgorithms.Deconvolution,
-            ExplainAlgorithms.ShapleyValueSampling,
+            # ExplainAlgorithms.ShapleyValueSampling,
             # ExplainAlgorithms.GuidedBackprop,
         ],
         key="explain_algorithm_selector",
+    )
+
+    feats = representation_options.node_feats
+
+    explain_feat = st.selectbox(
+        "Select Node Features to Explain",
+        options=list(feats.keys()) + ["All Features"],
+        key="node_feats_selector",
     )
 
     cols = st.columns(2)
@@ -246,5 +272,7 @@ if experiment_name:
             cutoff_explain=cutoff,
             mol_names=mol_names,
             normalisation_type=normalisation_type,
+            predictions=preds_dict,
+            node_features=feats,
+            explain_feature=explain_feat,
         )
-        st.write(f"Running {explain_algorithm} on Polymer ID: {explain_mol}...")
