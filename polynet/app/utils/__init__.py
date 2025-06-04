@@ -2,8 +2,10 @@ from pathlib import Path
 import re
 
 import pandas as pd
+from scipy.stats import mode
 
-from polynet.options.enums import IteratorTypes, Results, SplitTypes
+
+from polynet.options.enums import IteratorTypes, Results, SplitTypes, ProblemTypes
 
 
 def create_directory(path: Path):
@@ -100,6 +102,45 @@ def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
     final_columns = existing_cols + new_pred_cols
 
     return base_df[final_columns]
+
+
+def ensemble_predictions(pred_dfs, problem_type: ProblemTypes):
+    """
+    Computes ensemble predictions from a list of DataFrames with a single prediction column each.
+
+    Parameters:
+        pred_dfs (list of pd.DataFrame): Each DataFrame contains one column of predictions.
+        task_type (str, optional): 'classification' or 'regression'. If None, will try to infer automatically.
+
+    Returns:
+        pd.DataFrame: A DataFrame with a single column named 'ensemble_prediction'.
+    """
+
+    # Combine predictions into a single DataFrame
+    combined = pred_dfs[0].copy()
+
+    for df in pred_dfs[1:]:
+
+        pred_col = [col for col in df.columns if col not in combined.columns][0]
+
+        combined = combined.merge(
+            df[[Results.Index.value, pred_col]], on=Results.Index.value, how="left"
+        )
+
+    combined = combined.set_index(Results.Index.value, drop=True)
+
+    if problem_type == ProblemTypes.Classification:
+        # Use majority vote (mode)
+        majority_vote, _ = mode(combined.values, axis=1, keepdims=False)
+        result = pd.Series(majority_vote, index=combined.index, name="Ensemble Prediction")
+    elif problem_type == ProblemTypes.Regression:
+        # Use mean
+        mean_prediction = combined.mean(axis=1)
+        result = pd.Series(mean_prediction, index=combined.index, name="Ensemble Prediction")
+    else:
+        raise ValueError("task_type must be either 'classification' or 'regression'.")
+
+    return pd.DataFrame(result).reset_index()
 
 
 def filter_dataset_by_ids(dataset, ids):
