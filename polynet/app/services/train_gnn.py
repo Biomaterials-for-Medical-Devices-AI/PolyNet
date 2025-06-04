@@ -71,9 +71,9 @@ def train_network(
     trained_models = {}
 
     # === Step 4: Train one model for each GNN architecture
-    for iteration, (train_idxs, val_idxs, test_idxs) in enumerate(
-        zip(train_ids, val_ids, test_ids)
-    ):
+    for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
+
+        iteration = i + 1
 
         trained_models[iteration] = {}
         trained_models[iteration][Results.Model.value] = {}
