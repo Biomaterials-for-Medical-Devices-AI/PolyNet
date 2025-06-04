@@ -10,6 +10,7 @@ from sklearn.metrics import (
     r2_score,
     recall_score,
     roc_auc_score,
+    matthews_corrcoef as mcc,
 )
 from sklearn.model_selection import train_test_split
 import streamlit as st
@@ -116,8 +117,14 @@ def calculate_metrics(y_true, y_pred, y_probs, problem_type):
             EvaluationMetrics.Accuracy: accuracy_score(y_true, y_pred),
             EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
             EvaluationMetrics.Precision: precision_score(y_true, y_pred),
-            EvaluationMetrics.Recall: recall_score(y_true, y_pred),
+            EvaluationMetrics.Recall: recall_score(
+                y_true, y_pred
+            ),  # Also known as sensitivity or true positive rate
+            EvaluationMetrics.Specificity: recall_score(
+                y_true, y_pred, pos_label=0
+            ),  # Recall for negative samples or True negative rate
             EvaluationMetrics.AUROC: roc_auc_score(y_true=y_true, y_score=y_probs),
+            EvaluationMetrics.MCC: mcc(y_true, y_pred),
         }
     else:
 
