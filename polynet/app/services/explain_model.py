@@ -14,9 +14,15 @@ from polynet.app.options.file_paths import (
     explanation_plots_path,
 )
 from polynet.app.utils import filter_dataset_by_ids
-from polynet.explain.explain_mol import plot_mols_with_weights
+from polynet.explain.explain_mol import plot_mols_with_weights, plot_mols_with_atom_labels
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import ExplainAlgorithms, ProblemTypes
+from polynet.options.enums import (
+    ExplainAlgorithms,
+    ProblemTypes,
+    Results,
+    AtomBondDescriptorDictKeys,
+    AtomFeatures,
+)
 
 # Define a softer blue and red
 
@@ -53,22 +59,41 @@ def explain_model(
     cutoff_explain: float = 0.1,
     mol_names: dict = {},
     predictions: dict = {},
+    node_features: dict = {},
+    explain_feature: str = "All Features",
 ):
 
+    # get colormap for visualization
     cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
 
+    # Set the problem type passed to the model config
     if problem_type == ProblemTypes.Classification:
         task = "multiclass_classification"
     elif problem_type == ProblemTypes.Regression:
         task = "regression"
-
+    # Create the model configuration for explainer
     model_config = ModelConfig(mode=task, task_level="graph", return_type="raw")
 
+    # Initialize the explainer based on the selected algorithm
     if explain_algorithm == ExplainAlgorithms.GNNExplainer:
         algorithm = GNNExplainer(model=model, epochs=100, return_type="raw", explain_graph=True)
     elif explain_algorithm == ExplainAlgorithms.ShapleyValueSampling:
         algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
+    elif explain_algorithm == ExplainAlgorithms.InputXGradients:
+        algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
+    elif explain_algorithm == ExplainAlgorithms.Saliency:
+        algorithm = CaptumExplainer(attribution_method=captum.attr.Saliency)
+    elif explain_algorithm == ExplainAlgorithms.IntegratedGradients:
+        algorithm = CaptumExplainer(attribution_method=captum.attr.IntegratedGradients)
+    elif explain_algorithm == ExplainAlgorithms.Deconvolution:
+        algorithm = CaptumExplainer(attribution_method=captum.attr.Deconvolution)
+    elif explain_algorithm == ExplainAlgorithms.GuidedBackprop:
+        algorithm = CaptumExplainer(attribution_method=captum.attr.GuidedBackprop)
+    else:
+        st.error(f"Unknown explain algorithm: {explain_algorithm}")
+        return
 
+    # Initialize the explainer with the model and algorithm
     explainer = Explainer(
         model=model,
         algorithm=algorithm,
@@ -78,50 +103,75 @@ def explain_model(
         model_config=model_config,
     )
 
+    # Create the directory for explanations if it does not exist
     explain_path = explanation_parent_directory(experiment_path)
-
     if not explain_path.exists():
         explain_path.mkdir(parents=True, exist_ok=True)
 
+    # Load existing explanations if available
     explanation_file = explanation_json_file_path(experiment_path=experiment_path)
-
     if explanation_file.exists():
         with open(explanation_file) as f:
             attrs_mol = json.load(f)
-
     else:
         attrs_mol = None
 
     if isinstance(explain_mols, str):
         explain_mols = [explain_mols]
 
+    # Filter the dataset to only include the molecules we want to explain
     mols = filter_dataset_by_ids(dataset, explain_mols)
 
+    # Calculate the node masks for the selected molecules
     node_masks = calculate_attributions(
         mols=mols, attrs_mol=attrs_mol, explain_algorithm=explain_algorithm, explainer=explainer
     )
 
+    # Save the node masks to a JSON file
     with open(explanation_file, "w") as f:
         json.dump(node_masks, f, indent=4)
+
+    # Check the selected feature for explanation
+    if explain_feature != "All Features":
+        feature_lengths = get_node_feat_vector_size(node_features)
+
+        slicer_initial = 0
+        slicer_final = 0
+
+        for feat, length in feature_lengths.items():
+            slicer_final += length
+            if feat == explain_feature:
+                break
+            slicer_initial += slicer_final
+    else:
+        slicer_initial = 0
+        slicer_final = None
+
+    for mol in mols:
+        mask = np.array(node_masks[mol.idx][explain_algorithm])
+        if slicer_final is not None:
+            mask = mask[:, slicer_initial:slicer_final]
+        node_masks[mol.idx][explain_algorithm] = mask
 
     if normalisation_type == "global":
 
         max_val = None
 
         for mol in mols:
-            maks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
+            maks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
             local_max_val = np.max(np.abs(maks))
             if max_val is None or local_max_val > max_val:
                 max_val = local_max_val
                 st.write(
-                    f"New global max value found: {max_val} for molecule {mol.idx} with algorithm {explain_algorithm}"
+                    f"New global max value found: {max_val:.3f} for molecule {mol.idx} with algorithm {explain_algorithm}"
                 )
 
     plot_mols = filter_dataset_by_ids(dataset, plot_mols)
 
     for mol in plot_mols:
+        container = st.container(border=True, key=f"mol_{mol.idx}_container")
         names = mol_names.get(mol.idx, None)
-        masks = np.array(node_masks[mol.idx][explain_algorithm]).sum(axis=1)
+        masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
 
         if normalisation_type == "local":
             masks = masks / np.max(np.abs(masks))
@@ -139,15 +189,24 @@ def explain_model(
             masks_mol.append(masks[ia : ia + n_atoms])
             ia += n_atoms
 
+        container.write(f"Plotting molecule {mol.idx} with algorithm {explain_algorithm}")
+        container.write(f"True label: `{predictions.get(mol.idx, {}).get(Results.Label, 'N/A')}`")
+        container.write(
+            f"Predicted label: `{predictions.get(mol.idx, {}).get(Results.Predicted, 'N/A')}`"
+        )
+
         fig = plot_mols_with_weights(
             smiles_list=mol.mols,
             weights_list=masks_mol,
             colormap=cmap,
             legend=names,
-            # min_weight=-1.0,
-            # max_weight=1.0,
+            min_weight=-1.0,
+            max_weight=1.0,
         )
-        st.pyplot(fig, use_container_width=True)
+        container.pyplot(fig, use_container_width=True)
+
+        # fig = plot_mols_with_atom_labels(smiles_list=mol.mols, weights_list=masks_mol, legend=names)
+        # container.pyplot(fig, use_container_width=True)
 
 
 def calculate_attributions(
@@ -185,3 +244,17 @@ def calculate_attributions(
         node_masks[mol_idx][explain_algorithm] = node_mask
 
     return node_masks
+
+
+def get_node_feat_vector_size(node_features: dict) -> dict:
+
+    lengths_dict = {}
+
+    for key, value in node_features.items():
+        if value == {}:
+            lengths_dict[key] = 1
+            continue
+        allowed_features_size = len(value[AtomBondDescriptorDictKeys.AllowableVals])
+        wildcard_feat_size = int(value[AtomBondDescriptorDictKeys.Wildcard])
+        lengths_dict[key] = allowed_features_size + wildcard_feat_size
+    return lengths_dict
