@@ -10,12 +10,7 @@ from polynet.app.components.forms.train_models import (
     train_GNN_models_form,
     train_TML_models,
 )
-from polynet.app.components.plots import (
-    display_model_metrics,
-    display_model_results,
-    display_plots,
-    display_predictions,
-)
+from polynet.app.components.plots import display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -23,23 +18,17 @@ from polynet.app.options.file_paths import (
     gnn_model_dir,
     gnn_model_metrics_file_path,
     gnn_plots_directory,
-    gnn_raw_data_file,
     gnn_raw_data_path,
     ml_gnn_results_file_path,
     ml_results_parent_directory,
     polynet_experiments_base_dir,
-    representation_file,
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.state_keys import (
-    GeneralConfigStateKeys,
-    TrainGNNStateKeys,
-    TrainTMLStateKeys,
-)
+from polynet.app.options.state_keys import GeneralConfigStateKeys, TrainGNNStateKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
@@ -52,9 +41,9 @@ from polynet.app.utils import (
     get_true_label_column_name,
     merge_model_predictions,
     save_data,
+    ensemble_predictions,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results
-from polynet.utils.model_training import predict_network
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
 
 
@@ -134,12 +123,12 @@ def train_models(
         models = model_params[Results.Model.value]
 
         predictions_models = []
-
-        metrics[iteration + 1] = {}
+        ensemple_models = []
+        metrics[iteration] = {}
 
         for model_name, model in models.items():
 
-            save_path = gnn_models_dir / f"{model_name}_{iteration+1}.pt"
+            save_path = gnn_models_dir / f"{model_name}_{iteration}.pt"
             save_gnn_model(model=model, path=save_path)
 
             label_col_name = get_true_label_column_name(
@@ -157,7 +146,7 @@ def train_models(
             predictions_val = predictions.loc[predictions[Results.Set.value] == DataSets.Validation]
             predictions_test = predictions.loc[predictions[Results.Set.value] == DataSets.Test]
 
-            metrics[iteration + 1][model_name] = {}
+            metrics[iteration][model_name] = {}
 
             if data_options.problem_type == ProblemTypes.Classification:
 
@@ -169,7 +158,7 @@ def train_models(
                         if data_options.class_names
                         else None
                     ),
-                    title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name} - {iteration+1}",
+                    title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name} - {iteration}",
                 )
                 save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_confusion_matrix.png"
                 save_plot(fig=fig, path=save_plot_path)
@@ -188,7 +177,7 @@ def train_models(
                     fig = plot_auroc(
                         y_true=predictions_test[label_col_name],
                         y_scores=predictions_test[probs_col_name],
-                        title=f"{data_options.target_variable_name}\nROC Curve for\n {model_name} Class {class_num} - {iteration+1}",
+                        title=f"{data_options.target_variable_name}\nROC Curve for\n {model_name} Class {class_num} - {iteration}",
                     )
 
                     save_plot_path = (
@@ -200,13 +189,13 @@ def train_models(
                 fig = plot_parity(
                     y_true=predictions_test[label_col_name],
                     y_pred=predictions_test[predicted_col_name],
-                    title=f"{data_options.target_variable_name}\nParity Plot for\n {model_name} - {iteration+1}",
+                    title=f"{data_options.target_variable_name}\nParity Plot for\n {model_name} - {iteration}",
                 )
 
                 save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_parity_plot.png"
                 save_plot(fig=fig, path=save_plot_path)
 
-            metrics[iteration + 1][model_name][DataSets.Training.value] = calculate_metrics(
+            metrics[iteration][model_name][DataSets.Training.value] = calculate_metrics(
                 y_true=predictions_train[label_col_name],
                 y_pred=predictions_train[predicted_col_name],
                 y_probs=(
@@ -216,7 +205,7 @@ def train_models(
                 ),
                 problem_type=data_options.problem_type,
             )
-            metrics[iteration + 1][model_name][DataSets.Validation.value] = calculate_metrics(
+            metrics[iteration][model_name][DataSets.Validation.value] = calculate_metrics(
                 y_true=predictions_val[label_col_name],
                 y_pred=predictions_val[predicted_col_name],
                 y_probs=(
@@ -226,7 +215,7 @@ def train_models(
                 ),
                 problem_type=data_options.problem_type,
             )
-            metrics[iteration + 1][model_name][DataSets.Test.value] = calculate_metrics(
+            metrics[iteration][model_name][DataSets.Test.value] = calculate_metrics(
                 y_true=predictions_test[label_col_name],
                 y_pred=predictions_test[predicted_col_name],
                 y_probs=(
@@ -238,9 +227,17 @@ def train_models(
             )
 
             predictions_models.append(predictions)
+            ensemple_models.append(predictions[[Results.Index.value, predicted_col_name]])
 
         predictions_models = merge_model_predictions(dfs=predictions_models)
-        predictions_models[iterator] = iteration + 1
+        ensemble_preds = ensemble_predictions(
+            pred_dfs=ensemple_models, problem_type=data_options.problem_type
+        )
+        predictions_models = predictions_models.merge(
+            ensemble_preds, on=Results.Index.value, how="left"
+        )
+        predictions_models[iterator] = iteration
+
         predictions_iterations = pd.concat(
             [predictions_iterations, predictions_models], axis=0, ignore_index=True
         )
