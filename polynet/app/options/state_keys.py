@@ -113,6 +113,24 @@ class GeneralConfigStateKeys(StrEnum):
     Shuffle = "Shuffle"
 
 
+class ExplainModelStateKeys(StrEnum):
+    """
+    Enum for the keys used in the state of the ExplainModel component.
+    """
+
+    ExplainModel = "ExplainModel"
+    ExplainSet = "ExplainSet"
+    ExplainIDSelector = "ExplainIDSelector"
+    PlotIDSelector = "PlotIDSelector"
+    SetMolName = "SetMolName"
+    ExplainAlgorithm = "ExplainAlgorithm"
+    ExplainNodeFeats = "ExplainNodeFeats"
+    NegColorPlots = "NegColorPlots"
+    PosColorPlots = "PosColorPlots"
+    CutoffSelector = "CutoffSelector"
+    NormalisationMethodSelector = "NormalisationMethodSelector"
+
+
 class AnalyseResultsStateKeys(StrEnum):
     """
     Enum for the keys used in the state of the AnalyseResults component.
