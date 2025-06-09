@@ -154,3 +154,9 @@ class DescriptorMergingMethods(StrEnum):
     WeightedAverage = "Weighted Average"
     Concatenate = "Concatenate"
     NoMerging = "No Merging"
+
+
+class ImportanceNormalisationMethods(StrEnum):
+    Local = "Local"
+    Global = "Global"
+    NoNormalisation = "No Normalisation"
