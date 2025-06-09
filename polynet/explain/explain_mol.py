@@ -7,6 +7,7 @@ import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps
+from rdkit.Chem.Draw import rdMolDraw2D
 
 
 def plot_mols_with_weights(
@@ -105,4 +106,65 @@ def plot_mols_with_weights(
 
     plt.tight_layout(rect=[0, 0, 0.9 if cbar else 1, 1])
 
+    return fig
+
+
+def plot_mols_with_numeric_weights(
+    smiles_list, weights_list, grid_size=None, legend=None, decimals=2
+):
+    """
+    Plots multiple molecules and displays the atomic weights as text next to each atom.
+
+    :param smiles_list: List of SMILES strings
+    :param weights_list: List of lists containing weights for each molecule
+    :param grid_size: Tuple specifying the grid layout (rows, cols), optional
+    :param legend: List of legend titles for each molecule (optional)
+    :param decimals: Number of decimal places to round weights in labels
+    """
+    mols = [Chem.MolFromSmiles(smiles) for smiles in smiles_list]
+
+    for mol, weights in zip(mols, weights_list):
+        assert mol is not None, "Invalid SMILES string in input"
+        assert (
+            len(weights) == mol.GetNumAtoms()
+        ), f"Number of weights must match number of atoms in molecule. Got {len(weights)} weights for {mol.GetNumAtoms()} atoms."
+
+    num_mols = len(mols)
+    if grid_size is None:
+        cols = math.ceil(math.sqrt(num_mols))
+        rows = math.ceil(num_mols / cols)
+    else:
+        rows, cols = grid_size
+
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
+    axes = axes.flatten() if isinstance(axes, np.ndarray) else [axes]
+
+    for i, (mol, weights) in enumerate(zip(mols, weights_list)):
+        AllChem.Compute2DCoords(mol)
+
+        drawer = rdMolDraw2D.MolDraw2DCairo(600, 600)
+        opts = drawer.drawOptions()
+        opts.clearBackground = True
+        opts.addStereoAnnotation = True
+        opts.addAtomIndices = False
+        opts.bondLineWidth = 2
+
+        # Set weight as atom label using the correct C++ binding
+        for idx, weight in enumerate(weights):
+            label = f"{weight:.{decimals}f}"
+            opts.atomLabels[idx] = label
+
+        drawer.DrawMolecule(mol)
+        drawer.FinishDrawing()
+        image = Image.open(BytesIO(drawer.GetDrawingText()))
+
+        axes[i].imshow(image, aspect="auto")
+        axes[i].axis("off")
+        if legend and i < len(legend):
+            axes[i].set_title(legend[i], fontsize=12, pad=10)
+
+    for j in range(i + 1, len(axes)):
+        axes[j].axis("off")
+
+    plt.tight_layout()
     return fig
