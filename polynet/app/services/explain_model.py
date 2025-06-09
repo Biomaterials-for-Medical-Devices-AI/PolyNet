@@ -5,7 +5,7 @@ import captum
 import matplotlib.colors as mcolors
 import numpy as np
 from rdkit import Chem
-from rdkit.Chem import BRICS
+
 import streamlit as st
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
 
@@ -15,18 +15,22 @@ from polynet.app.options.file_paths import (
     explanation_plots_path,
 )
 from polynet.app.utils import filter_dataset_by_ids
-from polynet.explain.explain_mol import plot_mols_with_weights, plot_mols_with_numeric_weights
+from polynet.explain.explain_mol import (
+    plot_mols_with_weights,
+    plot_mols_with_numeric_weights,
+    plot_attribution_distribution,
+    get_fragment_importance,
+)
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     ExplainAlgorithms,
     ProblemTypes,
     Results,
     AtomBondDescriptorDictKeys,
-    AtomFeatures,
+    ImportanceNormalisationMethods,
 )
 
-from scipy.stats import gaussian_kde
-from matplotlib.collections import PolyCollection
+
 import matplotlib.pyplot as plt
 
 # Define a softer blue and red
@@ -158,7 +162,7 @@ def explain_model(
             mask = mask[:, slicer_initial:slicer_final]
         node_masks[mol.idx][explain_algorithm] = mask
 
-    if normalisation_type == "global":
+    if normalisation_type == ImportanceNormalisationMethods.Global:
 
         max_val = None
 
@@ -172,9 +176,6 @@ def explain_model(
                 )
 
     frags_importances = get_fragment_importance(mols, node_masks, explain_algorithm)
-
-    # st.write(frags_importances)
-    # Save the fragment importances to a JSON file
 
     fig = plot_attribution_distribution(
         attribution_dict=frags_importances, neg_color=neg_color, pos_color=pos_color
@@ -205,9 +206,9 @@ def explain_model(
         names = mol_names.get(mol.idx, None)
         masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
 
-        if normalisation_type == "local":
+        if normalisation_type == ImportanceNormalisationMethods.Local:
             masks = masks / np.max(np.abs(masks))
-        elif normalisation_type == "global":
+        elif normalisation_type == ImportanceNormalisationMethods.Global:
             masks = masks / max_val
         else:
             pass
@@ -295,239 +296,3 @@ def get_node_feat_vector_size(node_features: dict) -> dict:
         wildcard_feat_size = int(value[AtomBondDescriptorDictKeys.Wildcard])
         lengths_dict[key] = allowed_features_size + wildcard_feat_size
     return lengths_dict
-
-
-def plot_attribution_distribution(
-    attribution_dict,
-    figsize=(8, 10),
-    neg_color="#1f77b4",
-    pos_color="#ff7f0e",
-    kde_bandwidth=0.2,
-    linewidth=0.7,
-    show_averages=True,
-):
-    """
-    Plot attribution distribution with KDE for multiple values per functional group.
-
-    Parameters:
-    -----------
-    attribution_dict : dict
-        Keys are functional groups (str), values are lists of attribution values
-    figsize : tuple, optional
-        Figure size (width, height)
-    neg_color : str, optional
-        Color for negative attributions (blue default)
-    pos_color : str, optional
-        Color for positive attributions (orange default)
-    kde_bandwidth : float, optional
-        Bandwidth for KDE smoothing (default 0.2)
-    linewidth : float, optional
-        Width of distribution lines (default 0.7)
-    show_averages : bool, optional
-        Whether to show average markers (default True)
-
-    Returns:
-    --------
-    matplotlib.figure.Figure
-    """
-
-    # Prepare data
-    labels = list(attribution_dict.keys())
-    values = list(attribution_dict.values())
-
-    # Create figure with adjusted layout
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.3)  # Make room for y-axis labels
-
-    # Calculate positions for each label
-    y_pos = np.arange(len(labels))
-
-    # Plot zero line
-    ax.axvline(0, color="black", linewidth=0.8, linestyle="-", zorder=1)
-
-    # Plot each distribution
-    verts_pos = []
-    verts_neg = []
-
-    for i, (label, vals) in enumerate(zip(labels, values)):
-        vals = np.array(vals)
-
-        # Skip if no data
-        if len(vals) == 0:
-            continue
-
-        # Add small noise if all values are identical
-        if len(vals) > 1 and np.allclose(vals, vals[0]):
-            vals = vals + np.random.normal(0, 1e-6, size=len(vals))
-
-        # Calculate average
-        avg = np.mean(vals)
-
-        # Create KDE for positive values
-        pos_vals = vals[vals > 0]
-        if len(pos_vals) > 1:
-            try:
-                kde_pos = gaussian_kde(pos_vals, bw_method=kde_bandwidth)
-                x_pos = np.linspace(0, max(3, vals.max() * 1.5), 100)
-                density_pos = kde_pos(x_pos)
-                # Scale density for visualization
-                density_pos = density_pos / (density_pos.max() + 1e-8) * 0.4
-                # Create vertices for polygon
-                verts_pos.append(list(zip(x_pos, i + density_pos)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass  # Skip if KDE fails
-
-        # Create KDE for negative values
-        neg_vals = vals[vals < 0]
-        if len(neg_vals) > 1:
-            try:
-                kde_neg = gaussian_kde(neg_vals, bw_method=kde_bandwidth)
-                x_neg = np.linspace(min(-3, vals.min() * 1.5), 0, 100)
-                density_neg = kde_neg(x_neg)
-                # Scale density for visualization
-                density_neg = density_neg / (density_neg.max() + 1e-8) * 0.4
-                # Create vertices for polygon
-                verts_neg.append(list(zip(x_neg, i - density_neg)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass  # Skip if KDE fails
-
-    # Plot positive distributions (orange)
-    if verts_pos:
-        poly_pos = PolyCollection(
-            verts_pos,
-            facecolors=pos_color,
-            edgecolors=pos_color,
-            linewidths=linewidth,
-            alpha=0.7,
-            zorder=2,
-        )
-        ax.add_collection(poly_pos)
-
-    # Plot negative distributions (blue)
-    if verts_neg:
-        poly_neg = PolyCollection(
-            verts_neg,
-            facecolors=neg_color,
-            edgecolors=neg_color,
-            linewidths=linewidth,
-            alpha=0.7,
-            zorder=3,
-        )
-        ax.add_collection(poly_neg)
-
-    # Add average markers if requested
-    if show_averages:
-        for i, vals in enumerate(values):
-            if len(vals) > 0:
-                avg = np.mean(np.array(vals))  # Ensure we use original values for average
-                color = pos_color if avg > 0 else neg_color
-                ax.plot(avg, i, "o", color=color, markersize=8, markeredgecolor="white", zorder=4)
-                # Add average value text
-                ax.text(
-                    avg + 0.1 * np.sign(avg),
-                    i,
-                    f"{avg:.2f}",
-                    va="center",
-                    ha="left" if avg > 0 else "right",
-                    fontsize=9,
-                    zorder=5,
-                )
-
-    # Customize axes
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels)
-    ax.set_xlabel("Attribution", fontsize=12)
-    ax.set_title("Attribution Distribution", fontsize=14, pad=20)
-
-    # Set symmetrical x-limits if needed
-    xlim = max(3, np.abs(ax.get_xlim()).max())
-    ax.set_xlim(-xlim, xlim)
-
-    # Add grid lines
-    ax.grid(True, axis="x", linestyle="--", alpha=0.5)
-
-    # Custom spines
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-
-    return fig
-
-
-def get_fragment_importance(mols, node_masks, explain_algorithm):
-
-    frags_importances = {}
-
-    for mol in mols:
-        mol_idx = mol.idx
-        frag_importance = node_masks[mol_idx][explain_algorithm]
-
-        break_early = not mol_idx.endswith(")")
-
-        # st.write(frag_importance)
-
-        num_atoms = 0
-
-        for smiles in mol.mols:
-
-            frags = fragment_and_match(smiles)
-
-            for frag_smiles, atom_indices in frags.items():
-
-                if len(frag_smiles) < 3:
-                    continue
-
-                if frag_smiles not in frags_importances:
-                    frags_importances[frag_smiles] = []
-
-                for idx in atom_indices:
-                    idx = [num_atoms + i for i in idx]
-                    frag_score = np.sum(frag_importance[idx])
-                    frags_importances[frag_smiles].append(frag_score)
-
-            if break_early:
-                continue
-
-            num_atoms += Chem.MolFromSmiles(smiles).GetNumAtoms()
-
-    return frags_importances
-
-
-def sanitize_fragment(frag):
-    """Remove dummy atoms from a BRICS fragment to make it matchable."""
-    editable = Chem.EditableMol(frag)
-    atoms_to_remove = [atom.GetIdx() for atom in frag.GetAtoms() if atom.GetAtomicNum() == 0]
-
-    # Remove from the end to preserve indices
-    for idx in sorted(atoms_to_remove, reverse=True):
-        editable.RemoveAtom(idx)
-    return editable.GetMol()
-
-
-def fragment_and_match(smiles):
-    """
-    BRICS-decomposes a molecule and matches cleaned fragments back to the original.
-
-    Parameters:
-        smiles (str): SMILES string of the molecule.
-
-    Returns:
-        dict: {fragment_smiles: [list of atom index lists in original mol]}
-    """
-    mol = Chem.MolFromSmiles(smiles)
-    if mol is None:
-        raise ValueError("Invalid SMILES provided.")
-
-    # Get BRICS fragments with dummy atoms
-    raw_frags = list(BRICS.BRICSDecompose(mol, returnMols=True))
-
-    matches = {}
-    for raw_frag in raw_frags:
-        frag = sanitize_fragment(raw_frag)
-        Chem.SanitizeMol(frag)
-
-        substruct_matches = mol.GetSubstructMatches(frag, uniquify=True)
-        if substruct_matches:
-            frag_smiles = Chem.MolToSmiles(frag)
-            matches[frag_smiles] = [list(match) for match in substruct_matches]
-
-    return matches
