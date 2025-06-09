@@ -83,7 +83,7 @@ def explain_model(
     if explain_algorithm == ExplainAlgorithms.GNNExplainer:
         algorithm = GNNExplainer(model=model, epochs=100, return_type="raw", explain_graph=True)
     elif explain_algorithm == ExplainAlgorithms.ShapleyValueSampling:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
+        algorithm = CaptumExplainer(attribution_method=captum.attr.ShapleyValueSampling)
     elif explain_algorithm == ExplainAlgorithms.InputXGradients:
         algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
     elif explain_algorithm == ExplainAlgorithms.Saliency:
@@ -184,6 +184,23 @@ def explain_model(
     plot_mols = filter_dataset_by_ids(dataset, plot_mols)
 
     for mol in plot_mols:
+        st.write(
+            model(
+                x=mol.x,
+                edge_index=mol.edge_index,
+                edge_attr=mol.edge_attr,
+                monomer_weight=mol.weight_monomer,
+            )
+        )
+        st.write(
+            explainer.get_prediction(
+                x=mol.x,
+                edge_index=mol.edge_index,
+                edge_attr=mol.edge_attr,
+                monomer_weight=mol.weight_monomer,
+                batch_index=None,
+            )
+        )
         container = st.container(border=True, key=f"mol_{mol.idx}_container")
         names = mol_names.get(mol.idx, None)
         masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
@@ -211,6 +228,8 @@ def explain_model(
         container.write(
             f"Predicted label: `{predictions.get(mol.idx, {}).get(Results.Predicted, 'N/A')}`"
         )
+        container.write(mol.y)
+        container.write(masks_mol)
 
         fig = plot_mols_with_weights(
             smiles_list=mol.mols,
