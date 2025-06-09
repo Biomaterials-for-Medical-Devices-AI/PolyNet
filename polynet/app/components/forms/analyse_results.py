@@ -252,7 +252,7 @@ def confusion_matrix_plot_form(
 
     trained_gnns = gnn_training_options.GNNConvolutionalLayers.keys()
     model_name = st.multiselect(
-        "Select the model to display parity plot",
+        "Select the model to display the confusion matrix",
         options=trained_gnns,
         default=list(trained_gnns)[0],
         key=AnalyseResultsStateKeys.PlotModels,
