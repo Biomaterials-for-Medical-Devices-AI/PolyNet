@@ -212,12 +212,12 @@ if experiment_name:
     explain_algorithm = st.selectbox(
         "Select Explainability Algorithm",
         options=[
-            # ExplainAlgorithms.GNNExplainer,
+            ExplainAlgorithms.GNNExplainer,
             # ExplainAlgorithms.IntegratedGradients,
             # ExplainAlgorithms.Saliency,
             ExplainAlgorithms.InputXGradients,
             # ExplainAlgorithms.Deconvolution,
-            # ExplainAlgorithms.ShapleyValueSampling,
+            ExplainAlgorithms.ShapleyValueSampling,
             # ExplainAlgorithms.GuidedBackprop,
         ],
         key="explain_algorithm_selector",
