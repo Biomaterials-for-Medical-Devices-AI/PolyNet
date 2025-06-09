@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
-from polynet.app.components.plots import display_model_results, display_plots, display_predictions
+from polynet.app.components.plots import display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -27,13 +27,19 @@ from polynet.app.services.explain_model import explain_model
 from polynet.app.services.model_training import load_gnn_model
 from polynet.app.utils import (
     extract_number,
-    filter_dataset_by_ids,
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import DataSets, ExplainAlgorithms, Results, ProblemTypes
+from polynet.options.enums import (
+    DataSets,
+    ExplainAlgorithms,
+    Results,
+    ProblemTypes,
+    ImportanceNormalisationMethods,
+)
+from polynet.app.options.state_keys import ExplainModelStateKeys
 
 
 def run_explanations(
@@ -125,7 +131,9 @@ if experiment_name:
     ]
 
     model = st.selectbox(
-        "Select a GNN Model to Explain", options=sorted(gnn_models), key="gnn_model_selector"
+        "Select a GNN Model to Explain",
+        options=sorted(gnn_models),
+        key=ExplainModelStateKeys.ExplainModel,
     )
 
     if model:
@@ -150,7 +158,7 @@ if experiment_name:
     set = st.pills(
         "Select a set to explain",
         options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
-        key="set_selector",
+        key=ExplainModelStateKeys.ExplainSet,
     )
 
     if set == DataSets.Training:
@@ -167,14 +175,14 @@ if experiment_name:
     explain_mol = st.multiselect(
         "Select Polymers ID to Calculate Explanation",
         options=data.index,
-        key="polymer_id_selector",
+        key=ExplainModelStateKeys.ExplainIDSelector,
         default=explain_mols,
     )
 
     plot_mols = st.multiselect(
         "Select Polymers ID to Plot",
         options=explain_mol,
-        key="polymer_id_plot_selector",
+        key=ExplainModelStateKeys.PlotIDSelector,
         default=None,
     )
 
@@ -204,7 +212,8 @@ if experiment_name:
             mol_names[mol] = []
             for smile in data_options.smiles_cols:
                 name = st.text_input(
-                    f"Enter a name for {smile} in {mol} for the plot", key=f"mol_name_{mol}_{smile}"
+                    f"Enter a name for {smile} in {mol} for the plot",
+                    key=f"{ExplainModelStateKeys.SetMolName}_{mol}_{smile}",
                 )
                 if name:
                     mol_names[mol].append(name)
@@ -220,7 +229,7 @@ if experiment_name:
             ExplainAlgorithms.ShapleyValueSampling,
             # ExplainAlgorithms.GuidedBackprop,
         ],
-        key="explain_algorithm_selector",
+        key=ExplainModelStateKeys.ExplainAlgorithm,
     )
 
     feats = representation_options.node_feats
@@ -228,39 +237,41 @@ if experiment_name:
     explain_feat = st.selectbox(
         "Select Node Features to Explain",
         options=list(feats.keys()) + ["All Features"],
-        key="node_feats_selector",
+        index=list(feats.keys()).index("All Features") if "All Features" in feats else 0,
+        key=ExplainModelStateKeys.ExplainNodeFeats,
     )
 
     cols = st.columns(2)
     with cols[0]:
         neg_color = st.color_picker(
-            "Select Negative Color", key="neg_color_picker", value="#40bcde"  # Default red color
+            "Select Negative Color",
+            key=ExplainModelStateKeys.NegColorPlots,
+            value="#40bcde",  # Default red color
         )
 
     with cols[1]:
         pos_color = st.color_picker(
-            "Select Positive Color", key="pos_color_picker", value="#e64747"  # Default green color
+            "Select Positive Color",
+            key=ExplainModelStateKeys.PosColorPlots,
+            value="#e64747",  # Default green color
         )
 
     cutoff = st.select_slider(
         "Select the cutoff for explanations",
         options=[i / 10 for i in range(0, 11)],
         value=0.1,
-        key="cutoff_selector",
+        key=ExplainModelStateKeys.CutoffSelector,
     )
 
     normalisation_type = st.selectbox(
         "Select Normalisation Type",
-        options=["local", "global", "No normalise"],
-        key="normalisation_type_selector",
+        options=[
+            ImportanceNormalisationMethods.Local,
+            ImportanceNormalisationMethods.Global,
+            ImportanceNormalisationMethods.NoNormalisation,
+        ],
+        key=ExplainModelStateKeys.NormalisationMethodSelector,
     )
-    if normalisation_type == "global":
-        st.selectbox(
-            "Which molecules to consider for global normalisation",
-            options=["All molecules", "Selected molecules only"],
-            index=0,
-            key="global_normalisation_selector",
-        )
 
     if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
         explain_model(
