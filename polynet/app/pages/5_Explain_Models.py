@@ -149,7 +149,7 @@ if experiment_name:
 
     set = st.pills(
         "Select a set to explain",
-        options=[DataSets.Training, DataSets.Validation, DataSets.Test],
+        options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
         key="set_selector",
     )
 
@@ -159,6 +159,8 @@ if experiment_name:
         explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Validation].index
     elif set == DataSets.Test:
         explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Test].index
+    elif set == "All":
+        explain_mols = preds.index
     else:
         explain_mols = None
 
@@ -173,13 +175,13 @@ if experiment_name:
         "Select Polymers ID to Plot",
         options=explain_mol,
         key="polymer_id_plot_selector",
-        default=explain_mol,
+        default=None,
     )
 
     class_names = data_options.class_names
 
+    preds_dict = {}
     if plot_mols:
-        preds_dict = {}
         for mol in plot_mols:
             preds_dict[mol] = {}
             if data_options.problem_type == ProblemTypes.Regression:
@@ -248,7 +250,9 @@ if experiment_name:
     )
 
     normalisation_type = st.selectbox(
-        "Select Normalisation Type", options=["local", "global"], key="normalisation_type_selector"
+        "Select Normalisation Type",
+        options=["local", "global", "No normalise"],
+        key="normalisation_type_selector",
     )
     if normalisation_type == "global":
         st.selectbox(
