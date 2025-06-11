@@ -72,7 +72,11 @@ def fragment_and_match(smiles):
     matches = {}
     for raw_frag in raw_frags:
         frag = sanitize_fragment(raw_frag)
-        Chem.SanitizeMol(frag)
+        try:
+            Chem.SanitizeMol(frag)
+        except Exception as e:
+            print(f"Error sanitizing fragment: {Chem.MolToSmiles(raw_frag)}. Exception: {e}")
+            continue
 
         substruct_matches = mol.GetSubstructMatches(frag, uniquify=True)
         if substruct_matches:
