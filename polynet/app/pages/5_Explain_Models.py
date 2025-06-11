@@ -181,7 +181,7 @@ if experiment_name:
 
     plot_mols = st.multiselect(
         "Select Polymers ID to Plot",
-        options=explain_mol,
+        options=sorted(explain_mol),
         key=ExplainModelStateKeys.PlotIDSelector,
         default=None,
     )
@@ -194,8 +194,8 @@ if experiment_name:
             preds_dict[mol] = {}
             if data_options.problem_type == ProblemTypes.Regression:
                 predicted_vals = preds[[true_col_name, predicted_col_name]].loc[mol].astype(str)
-                preds_dict[mol][Results.Predicted] = predicted_vals.loc[mol, predicted_col_name]
-                preds_dict[mol][Results.Label] = predicted_vals.loc[mol, true_col_name]
+                preds_dict[mol][Results.Predicted] = predicted_vals.loc[predicted_col_name]
+                preds_dict[mol][Results.Label] = predicted_vals.loc[true_col_name]
             elif data_options.problem_type == ProblemTypes.Classification:
                 predicted_vals = (
                     preds[[true_col_name, predicted_col_name]].loc[mol].astype(int).astype(str)
@@ -236,8 +236,8 @@ if experiment_name:
 
     explain_feat = st.selectbox(
         "Select Node Features to Explain",
-        options=list(feats.keys()) + ["All Features"],
-        index=list(feats.keys()).index("All Features") if "All Features" in feats else 0,
+        options=["All Features"] + list(feats.keys()),
+        index=0,
         key=ExplainModelStateKeys.ExplainNodeFeats,
     )
 
@@ -271,6 +271,7 @@ if experiment_name:
             ImportanceNormalisationMethods.NoNormalisation,
         ],
         key=ExplainModelStateKeys.NormalisationMethodSelector,
+        index=1,
     )
 
     if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
