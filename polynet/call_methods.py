@@ -4,27 +4,56 @@ from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlate
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
+from polynet.models.CGGNN import CGGNNClassifier, CGGNNRegressor
+from polynet.models.GAT import GATClassifier, GATRegressor
 from polynet.models.GCN import GCNClassifier, GCNRegressor
+from polynet.models.MPNN import MPNNClassifier, MPNNRegressor
 from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
-from polynet.models.graphsage import GraphSAGE
-from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, Split_types
+from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
+from polynet.options.enums import Networks, Optimizers, ProblemTypes, Schedulers, SplitTypes
 
 
 def create_network(network: str, problem_type: ProblemTypes, **kwargs):
+
     # Create a network
     if network == Networks.GCN:
         if problem_type == ProblemTypes.Classification:
             network = GCNClassifier(**kwargs)
         elif problem_type == ProblemTypes.Regression:
             network = GCNRegressor(**kwargs)
+
+    elif network == Networks.GraphSAGE:
+        if problem_type == ProblemTypes.Classification:
+            network = GraphSageClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = GraphSageRegressor(**kwargs)
+
+    elif network == Networks.GAT:
+        if problem_type == ProblemTypes.Classification:
+            network = GATClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = GATRegressor(**kwargs)
+
     elif network == Networks.TransformerGNN:
         if problem_type == ProblemTypes.Classification:
             network = TransformerGNNClassifier(**kwargs)
         elif problem_type == ProblemTypes.Regression:
             network = TransformerGNNRegressor(**kwargs)
 
-    elif network == Networks.GraphSAGE:
-        network = GraphSAGE(**kwargs)
+    elif network == Networks.MPNN:
+        if problem_type == ProblemTypes.Classification:
+            network = MPNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = MPNNRegressor(**kwargs)
+
+    elif network == Networks.CGGNN:
+        if problem_type == ProblemTypes.Classification:
+            network = CGGNNClassifier(**kwargs)
+        elif problem_type == ProblemTypes.Regression:
+            network = CGGNNRegressor(**kwargs)
+
+    else:
+        raise NotImplementedError(f"Network type {network} not implemented")
 
     return network
 
@@ -82,14 +111,14 @@ class Split_Generator:
     ):
         length = len(dataset)
         if self.split_type in [
-            Split_types.TrainValTest,
-            Split_types.TrainTest,
-            Split_types.CrossValidation,
-            Split_types.NestedCrossValidation,
+            SplitTypes.TrainValTest,
+            SplitTypes.TrainTest,
+            SplitTypes.CrossValidation,
+            SplitTypes.NestedCrossValidation,
         ]:
             raise NotImplementedError(f"Split type {self.split_type} is not yet implemented!")
 
-        elif self.split_type == Split_types.LeaveOneOut:
+        elif self.split_type == SplitTypes.LeaveOneOut:
             # Deduce the indices for the train set based on test and validation indices
             if train_split_indices is None:
                 train_split_indices = []

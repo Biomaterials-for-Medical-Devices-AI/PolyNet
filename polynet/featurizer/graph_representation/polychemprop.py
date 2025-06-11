@@ -12,7 +12,7 @@ from tqdm import tqdm
 from polynet.featurizer.graph_representation.polymer_graph import PolymerGraphDataset
 
 
-class CoPolyGraph(PolymerGraphDataset):
+class PolyChemprop(PolymerGraphDataset):
     def __init__(
         self,
         filename=None,

@@ -1,16 +1,15 @@
 from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from torch_geometric.nn import SAGEConv
+from torch_geometric.nn import NNConv
 
 from polynet.models.GNN import BaseNetwork
 from polynet.options.enums import Networks, Pooling, ProblemTypes
 
 
-class GraphSageBase(BaseNetwork):
+class MPNNBase(BaseNetwork):
     def __init__(
         self,
-        bias: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -39,20 +38,27 @@ class GraphSageBase(BaseNetwork):
         )
 
         # Set class variables
-        self._name = Networks.GraphSAGE
-        self.bias = bias
+        self._name = Networks.MPNN
 
-        # Convolutions
+        self.project_nodes = nn.Linear(self.n_node_features, self.embedding_dim)
+
         self.conv_layers = nn.ModuleList([])
-        self.conv_layers.append(
-            SAGEConv(in_channels=self.n_node_features, out_channels=self.embedding_dim, bias=bias)
-        )
-        for _ in range(self.n_convolutions - 1):
+
+        for _ in range(self.n_convolutions):
+            edge_network = nn.Sequential(
+                nn.Linear(self.n_edge_features, self.embedding_dim),
+                nn.ReLU(),
+                nn.Linear(self.embedding_dim, self.embedding_dim * self.embedding_dim),
+            )
             self.conv_layers.append(
-                SAGEConv(in_channels=self.embedding_dim, out_channels=self.embedding_dim, bias=bias)
+                NNConv(
+                    in_channels=self.embedding_dim,
+                    out_channels=self.embedding_dim,
+                    nn=edge_network,
+                    aggr="add",
+                )
             )
 
-        # Batch normalization layers
         self.norm_layers = nn.ModuleList(
             [nn.BatchNorm1d(num_features=self.embedding_dim) for _ in range(self.n_convolutions)]
         )
@@ -85,9 +91,13 @@ class GraphSageBase(BaseNetwork):
         monomer_weight: Tensor = None,
     ):
 
+        x = F.leaky_relu(self.project_nodes(x))
+
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
-                F.leaky_relu(bn(conv_layer(x, edge_index))), p=self.dropout, training=self.training
+                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
             )
 
         if monomer_weight is not None:
@@ -118,9 +128,13 @@ class GraphSageBase(BaseNetwork):
         monomer_weight: Tensor = None,
     ):
 
+        x = F.leaky_relu(self.project_nodes(x))
+
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
-                F.leaky_relu(bn(conv_layer(x, edge_index))), p=self.dropout, training=self.training
+                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
             )
 
         if monomer_weight is not None:
@@ -131,13 +145,10 @@ class GraphSageBase(BaseNetwork):
 
         x = self.pooling_fn(x, batch_index)
 
-        return x
 
-
-class GraphSageClassifier(GraphSageBase):
+class MPNNClassifier(MPNNBase):
     def __init__(
         self,
-        bias: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -151,7 +162,6 @@ class GraphSageClassifier(GraphSageBase):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            bias=bias,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -166,10 +176,9 @@ class GraphSageClassifier(GraphSageBase):
         )
 
 
-class GraphSageRegressor(GraphSageBase):
+class MPNNRegressor(MPNNBase):
     def __init__(
         self,
-        bias: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -183,7 +192,6 @@ class GraphSageRegressor(GraphSageBase):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            bias=bias,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,

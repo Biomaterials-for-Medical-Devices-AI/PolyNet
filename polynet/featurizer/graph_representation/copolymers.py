@@ -1,5 +1,4 @@
 import os
-import sys
 
 import numpy as np
 import pandas as pd
@@ -116,12 +115,6 @@ class CoPolyGraph(PolymerGraphDataset):
             # aromaticity
             node_feats += [a.GetIsAromatic()]
 
-            # node_feats += self._one_h_e(a.GetFormalCharge(), sets["formal_charge"])
-            # node_feats += self._one_h_e(int(a.GetChiralTag()), sets["chirality"])
-            # node_feats += self._one_h_e(int(a.GetTotalNumHs()), sets["num_Hs"])
-            # node_feats += self._one_h_e(a.GetHybridization(), sets["hybridization"])
-            # node_feats += [a.GetIsAromatic()]
-            # node_feats += [a.GetMass() / 100]
             mol_feats.append(node_feats)
 
         mol_feats = np.asarray(mol_feats, dtype=np.float32)
@@ -148,16 +141,5 @@ class CoPolyGraph(PolymerGraphDataset):
             "num_Hs": list(range(5)),
             "degree": list(range(6)),
             "implicit_valence": list(range(6)),
-            "formal_charge": list(range(-2, 2)),
-            "chirality": list(range(4)),
-            "hybridization": [
-                HybridizationType.S,
-                HybridizationType.SP,
-                HybridizationType.SP2,
-                HybridizationType.SP2D,
-                HybridizationType.SP3,
-                HybridizationType.SP3D,
-                HybridizationType.SP3D2,
-            ],
         }
         return sets

@@ -1,3 +1,4 @@
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GCNConv
@@ -9,7 +10,7 @@ from polynet.options.enums import Networks, Pooling, ProblemTypes
 class GCNBase(BaseNetwork):
     def __init__(
         self,
-        improved,
+        improved: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -75,9 +76,14 @@ class GCNBase(BaseNetwork):
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
     def forward(
-        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        edge_weight=None,
+        monomer_weight: Tensor = None,
     ):
-        # x = F.leaky_relu(self.batch_norm(self.linear(x)))
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
@@ -92,8 +98,6 @@ class GCNBase(BaseNetwork):
 
         x = self.pooling_fn(x, batch_index)
 
-        # x = self.dropout_layer(x)
-
         for layer in self.readout:
             x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
 
@@ -105,19 +109,27 @@ class GCNBase(BaseNetwork):
         return x
 
     def return_graph_embedding(
-        self, x, edge_index, batch_index=None, edge_attr=None, edge_weight=None, monomer_weight=None
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        edge_weight=None,
+        monomer_weight: Tensor = None,
     ):
 
-        x = F.leaky_relu(self.batch_norm(self.linear(x)))
-        for conv_layer, norm_layer in zip(self.conv_layers, self.norm_layers):
-            x = F.leaky_relu(norm_layer(conv_layer(x, edge_index)))
+        for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv_layer(x, edge_index))), p=self.dropout, training=self.training
+            )
+
         if monomer_weight is not None:
-            x += monomer_weight
+            x *= monomer_weight
+
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
         x = self.pooling_fn(x, batch_index)
-        x = self.dropout_layer(x)
 
         return x
 
@@ -125,7 +137,7 @@ class GCNBase(BaseNetwork):
 class GCNClassifier(GCNBase):
     def __init__(
         self,
-        improved,
+        improved: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -153,19 +165,18 @@ class GCNClassifier(GCNBase):
             seed=seed,
         )
 
-        self._name = Networks.GCNClassifier
-
 
 class GCNRegressor(GCNBase):
     def __init__(
         self,
-        improved,
+        improved: bool,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
         n_convolutions: int = 2,
         embedding_dim: int = 64,
         readout_layers: int = 2,
+        n_classes: int = 1,
         dropout: float = 0.5,
         seed: int = 42,
         cross_att: bool = False,
@@ -180,10 +191,8 @@ class GCNRegressor(GCNBase):
             embedding_dim=embedding_dim,
             readout_layers=readout_layers,
             problem_type=ProblemTypes.Regression,
-            n_classes=1,
+            n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
             seed=seed,
         )
-
-        self._name = Networks.GCNRegressor
