@@ -225,12 +225,11 @@ def explain_model(
             ia += n_atoms
 
         container.write(f"Plotting molecule {mol.idx} with algorithm {explain_algorithm}")
+
         container.write(f"True label: `{predictions.get(mol.idx, {}).get(Results.Label, 'N/A')}`")
         container.write(
             f"Predicted label: `{predictions.get(mol.idx, {}).get(Results.Predicted, 'N/A')}`"
         )
-        container.write(mol.y)
-        container.write(masks_mol)
 
         fig = plot_mols_with_weights(
             smiles_list=mol.mols,
