@@ -1,0 +1,25 @@
+name: Code Quality Check
+
+on:
+  - pull_request
+
+jobs:
+  format_python_code:
+   runs-on: ubuntu-latest
+   steps:
+     - uses: actions/checkout@v4
+       with:
+         submodules: 'recursive'
+         ref: ${{ github.ref }}
+     - name: Install UV
+       uses: astral-sh/setup-uv@v5
+       with:
+        pyproject-file: "pyproject.toml"
+        python-version: '3.11'
+     - name: Install dependencies
+       run: uv sync --all-groups
+     - name: Run black
+       run: uv run black helix tests
+
+
+
