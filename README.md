@@ -33,4 +33,4 @@ This virtual environment will contain all of the developed code as well as its d
 
 `source .venv/bin/activate`
 
-Then your enviroment will be ready to start running experiments!
+Then your environment will be ready to start running experiments!
