@@ -8,7 +8,7 @@
 *PolyNet* is a python module designed for quantitative structure activity relationships model development. For this end, a csv containing the *SMILES* strings representation of the composing monomers and target variable to model must be provided. Current features include: data analysis tools, calculation of molecular descriptors, creation of graph representations of molecules, GNN model training, and explainable AI functions.
 
 
-PolyNet is still in early development stage.
+PolyNet is still in an early development stage.
 
 # Dependencies
 
