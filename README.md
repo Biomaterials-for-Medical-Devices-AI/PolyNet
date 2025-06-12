@@ -27,7 +27,7 @@ Then, install poetry on your python environment:
 
 Create a virtual environment by running:
 
-`poetry intall`
+`poetry install`
 
 This virtual environment will contain all of the developed code as well as its dependencies. Lastly, activate your virtual environment:
 
