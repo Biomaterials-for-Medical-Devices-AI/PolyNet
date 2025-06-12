@@ -22,7 +22,7 @@ jobs:
         run: poetry install --no-root
 
       - name: Run Black (check mode)
-        run: poetry run black --check Polynet
+        run: poetry run black --check polynet
 
 
 
