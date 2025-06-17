@@ -14,6 +14,9 @@ from polynet.options.enums import (
     SplitTypes,
 )
 
+from polynet.app.options.representation import RepresentationOptions
+from polynet.options.enums import ApplyWeightingToGraph
+
 
 def train_TML_models():
 
@@ -21,7 +24,7 @@ def train_TML_models():
         pass
 
 
-def train_GNN_models_form():
+def train_GNN_models_form(representation_opts: RepresentationOptions):
     # if st.checkbox(
     #     "Train Graph Neural Networks (GNNs)", value=True, key=TrainGNNStateKeys.TrainGNN
     # ):
@@ -160,6 +163,16 @@ def train_GNN_models_form():
         step=16,
         key=TrainGNNStateKeys.GNNBatchSize,
     )
+
+    if representation_opts.weights_col:
+        st.selectbox(
+            "Select when you would like to apply the weighting to the graph",
+            options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
+            index=0,
+            key=TrainGNNStateKeys.GNNMonomerWeighting,
+        )
+    else:
+        st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = ApplyWeightingToGraph.NoWeighting
 
     return gnn_conv_params
 
