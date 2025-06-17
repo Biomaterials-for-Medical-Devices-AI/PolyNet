@@ -8,7 +8,7 @@ from torch_geometric.nn import global_max_pool as gmp
 from torch_geometric.nn import global_mean_pool as gmeanp
 from torch_geometric.seed import seed_everything
 
-from polynet.options.enums import Pooling, ProblemTypes
+from polynet.options.enums import Pooling, ProblemTypes, ApplyWeightingToGraph
 
 
 def max_mean_pool(x, batch_index):
@@ -37,6 +37,7 @@ class BaseNetwork(nn.Module):
         n_classes: int = 1,
         dropout: float = 0.5,
         cross_att: bool = False,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
     ):
         super().__init__()
@@ -52,6 +53,7 @@ class BaseNetwork(nn.Module):
         self.n_classes = n_classes
         self.dropout = dropout
         self.cross_att = cross_att
+        self.apply_weighting_to_graph = apply_weighting_to_graph
         self.seed = seed
         self._seed_everything(seed)
 
