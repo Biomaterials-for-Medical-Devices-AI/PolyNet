@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import NNConv
 
 from polynet.models.GNN import BaseNetwork
-from polynet.options.enums import Networks, Pooling, ProblemTypes
+from polynet.options.enums import Networks, Pooling, ProblemTypes, ApplyWeightingToGraph
 
 
 class MPNNBase(BaseNetwork):
@@ -20,6 +20,7 @@ class MPNNBase(BaseNetwork):
         n_classes: int = 2,
         dropout: float = 0.5,
         cross_att: bool = False,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
     ):
         # Call the constructor of the parent class (BaseNetwork)
@@ -34,6 +35,7 @@ class MPNNBase(BaseNetwork):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
 
