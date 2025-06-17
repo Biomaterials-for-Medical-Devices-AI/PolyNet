@@ -100,6 +100,12 @@ class GAT(BaseNetwork):
         monomer_weight: Tensor = None,
     ):
 
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x *= monomer_weight
+
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
                 F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
@@ -107,7 +113,10 @@ class GAT(BaseNetwork):
                 training=self.training,
             )
 
-        if monomer_weight is not None:
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
             x *= monomer_weight
 
         if self.cross_att:

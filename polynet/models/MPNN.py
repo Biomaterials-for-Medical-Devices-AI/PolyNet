@@ -93,6 +93,12 @@ class MPNNBase(BaseNetwork):
         monomer_weight: Tensor = None,
     ):
 
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x *= monomer_weight
+
         x = F.leaky_relu(self.project_nodes(x))
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
@@ -102,7 +108,10 @@ class MPNNBase(BaseNetwork):
                 training=self.training,
             )
 
-        if monomer_weight is not None:
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
             x *= monomer_weight
 
         if self.cross_att:

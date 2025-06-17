@@ -86,13 +86,21 @@ class GCNBase(BaseNetwork):
         edge_weight=None,
         monomer_weight: Tensor = None,
     ):
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x *= monomer_weight
 
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
                 F.leaky_relu(bn(conv_layer(x, edge_index))), p=self.dropout, training=self.training
             )
 
-        if monomer_weight is not None:
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
             x *= monomer_weight
 
         if self.cross_att:
