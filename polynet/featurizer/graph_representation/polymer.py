@@ -90,12 +90,13 @@ class CustomPolymerGraph(PolymerGraphDataset):
                             )
                         )
 
-            y = torch.tensor(mols[target_col], dtype=torch.float32)
+            y = (
+                torch.tensor(mols[target_col], dtype=torch.float32)
+                if target_col is not None
+                else None
+            )
 
-            if id_col is not None:
-                id = mols[id_col]
-            else:
-                id = index
+            id = mols[id_col] if id_col is not None else None
 
             if not self.weights_col:
                 weight_monomer = None
