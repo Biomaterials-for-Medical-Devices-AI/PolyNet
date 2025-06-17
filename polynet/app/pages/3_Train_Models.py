@@ -312,7 +312,7 @@ if experiment_name:
 
     if gnn_raw_data_path(experiment_path=experiment_path).exists():
 
-        gnn_conv_params = train_GNN_models_form()
+        gnn_conv_params = train_GNN_models_form(representation_opts=representation_opts)
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."
