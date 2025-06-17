@@ -55,6 +55,7 @@ class Schedulers(StrEnum):
 class ApplyWeightingToGraph(StrEnum):
     BeforeMPP = "Before MPP"
     BeforePooling = "Before Pooling"
+    NoWeighting = "No Weighting"
 
 
 class Pooling(StrEnum):
