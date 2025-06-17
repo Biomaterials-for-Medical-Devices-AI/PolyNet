@@ -299,14 +299,14 @@ if experiment_name:
         )
         display_model_results(experiment_path=experiment_path, expanded=False)
 
-    st.markdown("## Train Machine Learning Models (TMLs)")
+    # st.markdown("## Train Machine Learning Models (TMLs)")
 
-    if representation_file_path(experiment_path=experiment_path).exists():
+    # if representation_file_path(experiment_path=experiment_path).exists():
 
-        train_TML_models()
+    #     train_TML_models()
 
-    else:
-        st.error("No representation found. Please build a representation of your polymers first.")
+    # else:
+    #     st.error("No representation found. Please build a representation of your polymers first.")
 
     st.markdown("## Graph Neural Networks (GNNs)")
 
