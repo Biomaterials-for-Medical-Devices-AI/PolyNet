@@ -168,6 +168,7 @@ class MPNNClassifier(MPNNBase):
         readout_layers: int = 2,
         n_classes: int = 2,
         dropout: float = 0.5,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
         cross_att: bool = False,
     ):
@@ -183,6 +184,7 @@ class MPNNClassifier(MPNNBase):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
 
@@ -199,6 +201,7 @@ class MPNNRegressor(MPNNBase):
         n_classes: int = 1,
         dropout: float = 0.5,
         seed: int = 42,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         cross_att: bool = False,
     ):
         # Call the constructor of the parent class (BaseNetwork)
@@ -213,5 +216,6 @@ class MPNNRegressor(MPNNBase):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )

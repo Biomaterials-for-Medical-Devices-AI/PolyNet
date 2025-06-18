@@ -163,6 +163,7 @@ class CGGNNClassifier(CGGNNBase):
         readout_layers: int = 2,
         n_classes: int = 2,
         dropout: float = 0.5,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
         cross_att: bool = False,
     ):
@@ -178,6 +179,7 @@ class CGGNNClassifier(CGGNNBase):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
 
@@ -193,6 +195,7 @@ class CGGNNRegressor(CGGNNBase):
         readout_layers: int = 2,
         n_classes: int = 1,
         dropout: float = 0.5,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
         cross_att: bool = False,
     ):
@@ -208,5 +211,6 @@ class CGGNNRegressor(CGGNNBase):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
