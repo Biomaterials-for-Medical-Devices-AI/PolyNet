@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from polynet.options.enums import ApplyWeightingToGraph
 
 
 @dataclass
@@ -12,3 +13,4 @@ class TrainGNNOptions:
     GNNDropoutRate: float
     GNNLearningRate: float
     GNNBatchSize: int
+    ApplyMonomerWeighting: ApplyWeightingToGraph
