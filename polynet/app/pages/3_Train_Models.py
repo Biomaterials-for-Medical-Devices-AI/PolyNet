@@ -67,6 +67,7 @@ def train_models(
         GNNDropoutRate=st.session_state[TrainGNNStateKeys.GNNDropoutRate],
         GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
         GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
+        ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
     )
 
     general_experiment_options = GeneralConfigOptions(
