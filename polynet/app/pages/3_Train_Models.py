@@ -67,6 +67,7 @@ def train_models(
         GNNDropoutRate=st.session_state[TrainGNNStateKeys.GNNDropoutRate],
         GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
         GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
+        ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
     )
 
     general_experiment_options = GeneralConfigOptions(
@@ -299,20 +300,20 @@ if experiment_name:
         )
         display_model_results(experiment_path=experiment_path, expanded=False)
 
-    st.markdown("## Train Machine Learning Models (TMLs)")
+    # st.markdown("## Train Machine Learning Models (TMLs)")
 
-    if representation_file_path(experiment_path=experiment_path).exists():
+    # if representation_file_path(experiment_path=experiment_path).exists():
 
-        train_TML_models()
+    #     train_TML_models()
 
-    else:
-        st.error("No representation found. Please build a representation of your polymers first.")
+    # else:
+    #     st.error("No representation found. Please build a representation of your polymers first.")
 
     st.markdown("## Graph Neural Networks (GNNs)")
 
     if gnn_raw_data_path(experiment_path=experiment_path).exists():
 
-        gnn_conv_params = train_GNN_models_form()
+        gnn_conv_params = train_GNN_models_form(representation_opts=representation_opts)
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."

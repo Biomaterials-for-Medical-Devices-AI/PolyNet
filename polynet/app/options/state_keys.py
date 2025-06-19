@@ -78,6 +78,7 @@ class TrainGNNStateKeys(StrEnum):
     GNNDropoutRate = "GNNDropoutRate"
     GNNLearningRate = "GNNLearningRate"
     GNNBatchSize = "GNNBatchSize"
+    GNNMonomerWeighting = "GNNMonomerWeighting"
 
     # Specific GNN Hyperparameters
 

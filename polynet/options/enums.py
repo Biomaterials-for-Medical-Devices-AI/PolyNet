@@ -52,6 +52,12 @@ class Schedulers(StrEnum):
     ReduceLROnPlateau = "reducelronplateau"
 
 
+class ApplyWeightingToGraph(StrEnum):
+    BeforeMPP = "Before MPP"
+    BeforePooling = "Before Pooling"
+    NoWeighting = "No Weighting"
+
+
 class Pooling(StrEnum):
     GlobalMaxPool = "GlobalMaxPool"
     GlobalAddPool = "GlobalAddPool"

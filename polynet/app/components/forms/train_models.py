@@ -14,6 +14,9 @@ from polynet.options.enums import (
     SplitTypes,
 )
 
+from polynet.app.options.representation import RepresentationOptions
+from polynet.options.enums import ApplyWeightingToGraph
+
 
 def train_TML_models():
 
@@ -21,149 +24,157 @@ def train_TML_models():
         pass
 
 
-def train_GNN_models_form():
-    if st.checkbox(
-        "Train Graph Neural Networks (GNNs)", value=True, key=TrainGNNStateKeys.TrainGNN
-    ):
-        st.write(
-            "Graph Neural Networks (GNNs) are a type of neural network that operates on graph-structured data. They are particularly well-suited for tasks involving molecular structures, such as predicting properties of polymers based on their chemical structure."
+def train_GNN_models_form(representation_opts: RepresentationOptions):
+    # if st.checkbox(
+    #     "Train Graph Neural Networks (GNNs)", value=True, key=TrainGNNStateKeys.TrainGNN
+    # ):
+    st.write(
+        "Graph Neural Networks (GNNs) are a type of neural network that operates on graph-structured data. They are particularly well-suited for tasks involving molecular structures, such as predicting properties of polymers based on their chemical structure."
+    )
+
+    gnn_conv_params = {}
+
+    conv_layers = st.multiselect(
+        "Select a GNN convolutional layer to train",
+        options=[
+            Networks.GCN,
+            Networks.GraphSAGE,
+            Networks.TransformerGNN,
+            Networks.GAT,
+            Networks.MPNN,
+            Networks.CGGNN,
+        ],
+        default=[Networks.GCN],
+        key=TrainGNNStateKeys.GNNConvolutionalLayers,
+    )
+
+    if not conv_layers:
+        st.error("Please select at least one GNN convolutional layer to train.")
+        st.stop()
+
+    if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### GCN Hyperparameters")
+
+        st.warning("Beaware that GCN does not support edge features. ")
+        # Add GCN specific hyperparameters here
+        improved = st.selectbox(
+            "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
         )
+        gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
 
-        gnn_conv_params = {}
+    if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### GraphSAGE Hyperparameters")
 
-        conv_layers = st.multiselect(
-            "Select a GNN convolutional layer to train",
-            options=[
-                Networks.GCN,
-                Networks.GraphSAGE,
-                Networks.TransformerGNN,
-                Networks.GAT,
-                Networks.MPNN,
-                Networks.CGGNN,
-            ],
-            default=[Networks.GCN],
-            key=TrainGNNStateKeys.GNNConvolutionalLayers,
-        )
+        st.warning("Beaware that GCN does not support edge features. ")
+        # Add GraphSAGE specific hyperparameters here
+        bias = st.selectbox("Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0)
+        gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
 
-        if not conv_layers:
-            st.error("Please select at least one GNN convolutional layer to train.")
-            st.stop()
-
-        if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GCN Hyperparameters")
-
-            st.warning("Beaware that GCN does not support edge features. ")
-            # Add GCN specific hyperparameters here
-            improved = st.selectbox(
-                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
-            )
-            gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
-
-        if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GraphSAGE Hyperparameters")
-
-            st.warning("Beaware that GCN does not support edge features. ")
-            # Add GraphSAGE specific hyperparameters here
-            bias = st.selectbox(
-                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0
-            )
-            gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
-
-        if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### Transformer GNN Hyperparameters")
-            # Add Transformer GNN specific hyperparameters here
-            num_heads = st.slider(
-                "Select the number of attention heads",
-                min_value=1,
-                max_value=8,
-                value=4,
-                key=TrainGNNStateKeys.NumHeads,
-            )
-            gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
-
-        if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GAT Hyperparameters")
-            # Add GAT specific hyperparameters here
-            num_heads = st.slider(
-                "Select the number of attention heads",
-                min_value=1,
-                max_value=8,
-                value=4,
-                key=TrainGNNStateKeys.NHeads,
-            )
-            gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
-
-        if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### MPNN Hyperparameters")
-            # Add MPNN specific hyperparameters here
-
-            gnn_conv_params[Networks.MPNN] = {}
-
-        if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### CGCGNN Hyperparameters")
-            # Add MPNN specific hyperparameters here
-
-            gnn_conv_params[Networks.CGGNN] = {}
-
-        st.write(" ### General GNN Hyperparameters")
-
-        st.select_slider(
-            "Select the number of convolutional GNN layers",
-            options=list(range(1, 6)),
-            value=2,
-            key=TrainGNNStateKeys.GNNNumberOfLayers,
-        )
-
-        st.select_slider(
-            "Select the embedding dimension",
-            options=list(range(16, 257, 16)),
-            value=128,
-            key=TrainGNNStateKeys.GNNEmbeddingDimension,
-        )
-
-        st.selectbox(
-            "Select the pooling method",
-            options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
-            key=TrainGNNStateKeys.GNNPoolingMethod,
-            index=2,
-        )
-
-        st.slider(
-            "Select the number of readout layers",
+    if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### Transformer GNN Hyperparameters")
+        # Add Transformer GNN specific hyperparameters here
+        num_heads = st.slider(
+            "Select the number of attention heads",
             min_value=1,
-            max_value=5,
-            value=2,
-            key=TrainGNNStateKeys.GNNReadoutLayers,
+            max_value=8,
+            value=4,
+            key=TrainGNNStateKeys.NumHeads,
         )
+        gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
 
-        st.slider(
-            "Select the dropout rate",
-            min_value=0.0,
-            max_value=0.5,
-            value=0.01,
-            step=0.01,
-            key=TrainGNNStateKeys.GNNDropoutRate,
+    if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### GAT Hyperparameters")
+        # Add GAT specific hyperparameters here
+        num_heads = st.slider(
+            "Select the number of attention heads",
+            min_value=1,
+            max_value=8,
+            value=4,
+            key=TrainGNNStateKeys.NHeads,
         )
+        gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
 
-        st.slider(
-            "Select the learning rate",
-            min_value=0.0001,
-            max_value=0.1,
-            value=0.01,
-            step=0.001,
-            key=TrainGNNStateKeys.GNNLearningRate,
+    if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### MPNN Hyperparameters")
+        # Add MPNN specific hyperparameters here
+
+        gnn_conv_params[Networks.MPNN] = {}
+
+    if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+        st.write("#### CGCGNN Hyperparameters")
+        # Add MPNN specific hyperparameters here
+
+        gnn_conv_params[Networks.CGGNN] = {}
+
+    st.write(" ### General GNN Hyperparameters")
+
+    st.select_slider(
+        "Select the number of convolutional GNN layers",
+        options=list(range(1, 6)),
+        value=2,
+        key=TrainGNNStateKeys.GNNNumberOfLayers,
+    )
+
+    st.select_slider(
+        "Select the embedding dimension",
+        options=list(range(16, 257, 16)),
+        value=128,
+        key=TrainGNNStateKeys.GNNEmbeddingDimension,
+    )
+
+    st.selectbox(
+        "Select the pooling method",
+        options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
+        key=TrainGNNStateKeys.GNNPoolingMethod,
+        index=2,
+    )
+
+    st.slider(
+        "Select the number of readout layers",
+        min_value=1,
+        max_value=5,
+        value=2,
+        key=TrainGNNStateKeys.GNNReadoutLayers,
+    )
+
+    st.slider(
+        "Select the dropout rate",
+        min_value=0.0,
+        max_value=0.5,
+        value=0.01,
+        step=0.01,
+        key=TrainGNNStateKeys.GNNDropoutRate,
+    )
+
+    st.slider(
+        "Select the learning rate",
+        min_value=0.0001,
+        max_value=0.1,
+        value=0.01,
+        step=0.001,
+        key=TrainGNNStateKeys.GNNLearningRate,
+    )
+
+    st.slider(
+        "Select the batch size",
+        min_value=16,
+        max_value=128,
+        value=32,
+        step=16,
+        key=TrainGNNStateKeys.GNNBatchSize,
+    )
+
+    if representation_opts.weights_col:
+        st.selectbox(
+            "Select when you would like to apply the weighting to the graph",
+            options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
+            index=0,
+            key=TrainGNNStateKeys.GNNMonomerWeighting,
         )
+    else:
+        st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = ApplyWeightingToGraph.NoWeighting
 
-        st.slider(
-            "Select the batch size",
-            min_value=16,
-            max_value=128,
-            value=32,
-            step=16,
-            key=TrainGNNStateKeys.GNNBatchSize,
-        )
-
-        return gnn_conv_params
+    return gnn_conv_params
 
 
 def split_data_form(problem_type: ProblemTypes):

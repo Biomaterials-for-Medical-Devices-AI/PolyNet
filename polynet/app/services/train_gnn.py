@@ -102,6 +102,7 @@ def train_network(
                 "readout_layers": train_gnn_options.GNNReadoutLayers,
                 "n_classes": int(data_options.num_classes),
                 "dropout": train_gnn_options.GNNDropoutRate,
+                "apply_weighting_to_graph": train_gnn_options.ApplyMonomerWeighting,
                 "seed": general_experiment_options.random_seed + iteration,
             }
 

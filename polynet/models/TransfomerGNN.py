@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import TransformerConv
 
 from polynet.models.GNN import BaseNetwork
-from polynet.options.enums import Networks, Pooling, ProblemTypes
+from polynet.options.enums import Networks, Pooling, ProblemTypes, ApplyWeightingToGraph
 
 
 class TransformerGNN(BaseNetwork):
@@ -21,6 +21,7 @@ class TransformerGNN(BaseNetwork):
         n_classes: int = 2,
         dropout: float = 0.5,
         cross_att: bool = False,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
     ):
         # Call the constructor of the parent class (BaseNetwork)
@@ -35,6 +36,7 @@ class TransformerGNN(BaseNetwork):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
 
@@ -99,6 +101,12 @@ class TransformerGNN(BaseNetwork):
         monomer_weight: Tensor = None,
     ):
 
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x *= monomer_weight
+
         for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
                 F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
@@ -106,7 +114,10 @@ class TransformerGNN(BaseNetwork):
                 training=self.training,
             )
 
-        if monomer_weight is not None:
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
             x *= monomer_weight
 
         if self.cross_att:
@@ -158,6 +169,7 @@ class TransformerGNNClassifier(TransformerGNN):
         readout_layers: int = 2,
         n_classes: int = 2,
         dropout: float = 0.5,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
         cross_att: bool = False,
     ):
@@ -174,6 +186,7 @@ class TransformerGNNClassifier(TransformerGNN):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )
 
@@ -190,6 +203,7 @@ class TransformerGNNRegressor(TransformerGNN):
         readout_layers: int = 2,
         n_classes: int = 1,
         dropout: float = 0.5,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
         seed: int = 42,
         cross_att: bool = False,
     ):
@@ -206,5 +220,6 @@ class TransformerGNNRegressor(TransformerGNN):
             n_classes=n_classes,
             dropout=dropout,
             cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
             seed=seed,
         )

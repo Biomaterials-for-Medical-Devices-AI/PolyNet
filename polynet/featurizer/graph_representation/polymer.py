@@ -70,7 +70,6 @@ class CustomPolymerGraph(PolymerGraphDataset):
 
                     # Check if weights_col is provided and set the weight_monomer
                     if self.weights_col:
-                        print(self.weights_col)
                         weight_monomer = torch.full(
                             (node_feats.shape[0], 1), mols[self.weights_col[monomer]] / 100
                         )
@@ -91,12 +90,13 @@ class CustomPolymerGraph(PolymerGraphDataset):
                             )
                         )
 
-            y = torch.tensor(mols[target_col], dtype=torch.float32)
+            y = (
+                torch.tensor(mols[target_col], dtype=torch.float32)
+                if target_col is not None
+                else None
+            )
 
-            if id_col is not None:
-                id = mols[id_col]
-            else:
-                id = index
+            id = mols[id_col] if id_col is not None else None
 
             if not self.weights_col:
                 weight_monomer = None
