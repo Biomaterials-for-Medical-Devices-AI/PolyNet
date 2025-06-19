@@ -22,6 +22,7 @@ from polynet.app.options.file_paths import (
     ml_gnn_results_file_path,
     ml_results_parent_directory,
     polynet_experiments_base_dir,
+    gnn_raw_data_file,
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
@@ -32,7 +33,12 @@ from polynet.app.options.state_keys import GeneralConfigStateKeys, TrainGNNState
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import calculate_metrics, save_gnn_model, save_plot
+from polynet.app.services.model_training import (
+    calculate_metrics,
+    save_gnn_model,
+    save_plot,
+    get_data_split_indices,
+)
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.utils import (
     get_iterator_name,
@@ -98,12 +104,22 @@ def train_models(
     save_options(path=gnn_training_opts_path, options=train_gnn_options)
     save_options(path=gen_options_path, options=general_experiment_options)
 
+    data = pd.read_csv(
+        gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
+        index_col=0,
+    )
+
+    train_val_test_idxs = get_data_split_indices(
+        data=data, data_options=data_options, general_experiment_options=general_experiment_options
+    )
+
     model = train_network(
         train_gnn_options=train_gnn_options,
         general_experiment_options=general_experiment_options,
         experiment_name=experiment_name,
         data_options=data_options,
         representation_options=representation_options,
+        train_val_test_idxs=train_val_test_idxs,
     )
 
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
