@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import CGConv
 
-from polynet.models.GNN import BaseNetwork
+from polynet.models.GNN import BaseNetwork, BaseNetworkClassifier
 from polynet.options.enums import Networks, Pooling, ProblemTypes, ApplyWeightingToGraph
 
 
@@ -78,13 +78,12 @@ class CGGNNBase(BaseNetwork):
         # Final readout layer
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
-    def forward(
+    def get_graph_embedding(
         self,
         x: Tensor,
         edge_index: Tensor,
         batch_index=None,
         edge_attr: Tensor = None,
-        edge_weight=None,
         monomer_weight: Tensor = None,
     ):
 
@@ -113,14 +112,6 @@ class CGGNNBase(BaseNetwork):
             x = self._cross_attention(x, batch_index, monomer_weight)
 
         x = self.pooling_fn(x, batch_index)
-
-        for layer in self.readout:
-            x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
-
-        x = self.output_layer(x)
-
-        if self.n_classes == 1:
-            x = x.float()
 
         return x
 
@@ -152,7 +143,7 @@ class CGGNNBase(BaseNetwork):
         x = self.pooling_fn(x, batch_index)
 
 
-class CGGNNClassifier(CGGNNBase):
+class CGGNNClassifier(CGGNNBase, BaseNetworkClassifier):
     def __init__(
         self,
         n_node_features: int,
