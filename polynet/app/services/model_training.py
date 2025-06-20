@@ -1,22 +1,25 @@
 from math import sqrt
 
 import numpy as np
+import pandas as pd
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
     r2_score,
     recall_score,
     roc_auc_score,
-    matthews_corrcoef as mcc,
 )
+from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import matthews_corrcoef as mcc
 from sklearn.model_selection import train_test_split
 import streamlit as st
 from torch import load, save
 
-from polynet.options.enums import EvaluationMetrics, ProblemTypes
+from polynet.app.options.data import DataOptions
+from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
+from polynet.utils.data_preprocessing import class_balancer
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):
@@ -34,6 +37,55 @@ def split_data(data, test_size=0.2, random_state=1, stratify=None):
     """
 
     return train_test_split(data, test_size=test_size, random_state=random_state, stratify=stratify)
+
+
+def get_data_split_indices(
+    data: pd.DataFrame, data_options: DataOptions, general_experiment_options: GeneralConfigOptions
+):
+
+    if general_experiment_options.split_type == SplitTypes.TrainValTest:
+
+        train_data_idxs, val_data_idxs, test_data_idxs = [], [], []
+
+        for i in range(general_experiment_options.n_bootstrap_iterations):
+            # Initial train-test split
+            train_data, test_data = split_data(
+                data=data,
+                test_size=general_experiment_options.test_ratio,
+                stratify=(
+                    data[data_options.target_variable_col]
+                    if general_experiment_options.split_method == SplitMethods.Stratified
+                    else None
+                ),
+                random_state=general_experiment_options.random_seed + i,
+            )
+
+            # Optional class balancing on training set
+            if general_experiment_options.train_set_balance:
+                train_data = class_balancer(
+                    data=train_data,
+                    target=data_options.target_variable_col,
+                    desired_class_proportion=general_experiment_options.train_set_balance,
+                    random_state=general_experiment_options.random_seed + i,
+                )
+
+            # Further split train into train/validation
+            train_data, val_data = split_data(
+                data=train_data,
+                test_size=general_experiment_options.val_ratio,
+                stratify=(
+                    train_data[data_options.target_variable_col]
+                    if general_experiment_options.split_method == SplitMethods.Stratified
+                    else None
+                ),
+                random_state=general_experiment_options.random_seed + i,
+            )
+
+            train_data_idxs.append(train_data.index.tolist())
+            val_data_idxs.append(val_data.index.tolist())
+            test_data_idxs.append(test_data.index.tolist())
+
+    return train_data_idxs, val_data_idxs, test_data_idxs
 
 
 def save_gnn_model(model, path):

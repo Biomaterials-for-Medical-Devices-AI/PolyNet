@@ -2,15 +2,14 @@ from io import BytesIO
 import math
 
 from PIL import Image
+from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
-from rdkit.Chem.Draw import SimilarityMaps
-from rdkit.Chem.Draw import rdMolDraw2D
-
+from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 from scipy.stats import gaussian_kde
-from matplotlib.collections import PolyCollection
+
 from polynet.utils.chem_utils import fragment_and_match
 
 

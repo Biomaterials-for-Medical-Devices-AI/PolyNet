@@ -3,8 +3,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import GATv2Conv
 
-from polynet.models.GNN import BaseNetwork
-from polynet.options.enums import Networks, Pooling, ProblemTypes, ApplyWeightingToGraph
+from polynet.models.GNN import BaseNetwork, BaseNetworkClassifier
+from polynet.options.enums import ApplyWeightingToGraph, Networks, Pooling, ProblemTypes
 
 
 class GAT(BaseNetwork):
@@ -91,78 +91,8 @@ class GAT(BaseNetwork):
         # Final readout layer
         self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
-    def forward(
-        self,
-        x: Tensor,
-        edge_index: Tensor,
-        batch_index=None,
-        edge_attr: Tensor = None,
-        monomer_weight: Tensor = None,
-    ):
 
-        if (
-            monomer_weight is not None
-            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
-        ):
-            x *= monomer_weight
-
-        for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
-            x = F.dropout(
-                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
-                p=self.dropout,
-                training=self.training,
-            )
-
-        if (
-            monomer_weight is not None
-            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
-        ):
-            x *= monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
-
-        x = self.pooling_fn(x, batch_index)
-
-        for layer in self.readout:
-            x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
-
-        x = self.output_layer(x)
-
-        if self.n_classes == 1:
-            x = x.float()
-
-        return x
-
-    def return_graph_embedding(
-        self,
-        x: Tensor,
-        edge_index: Tensor,
-        batch_index=None,
-        edge_attr: Tensor = None,
-        edge_weight=None,
-        monomer_weight: Tensor = None,
-    ):
-
-        for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
-            x = F.dropout(
-                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
-                p=self.dropout,
-                training=self.training,
-            )
-
-        if monomer_weight is not None:
-            x *= monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
-
-        x = self.pooling_fn(x, batch_index)
-
-        return x
-
-
-class GATClassifier(GAT):
+class GATClassifier(GAT, BaseNetworkClassifier):
     def __init__(
         self,
         NumHeads: int,

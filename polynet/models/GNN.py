@@ -1,6 +1,8 @@
 from abc import abstractmethod
 
+import numpy as np
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.nn import global_add_pool as gap
@@ -8,7 +10,7 @@ from torch_geometric.nn import global_max_pool as gmp
 from torch_geometric.nn import global_mean_pool as gmeanp
 from torch_geometric.seed import seed_everything
 
-from polynet.options.enums import Pooling, ProblemTypes, ApplyWeightingToGraph
+from polynet.options.enums import ApplyWeightingToGraph, Pooling, ProblemTypes
 
 
 def max_mean_pool(x, batch_index):
@@ -64,9 +66,90 @@ class BaseNetwork(nn.Module):
         else:
             self.graph_embedding = self.embedding_dim
 
-    @abstractmethod
-    def forward(self):
-        raise NotImplementedError
+    def forward(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
+    ):
+        """
+        Forward pass of the model.
+        Args:
+            x (Tensor): Node features.
+            edge_index (Tensor): Edge indices.
+            batch_index (Tensor, optional): Batch indices for graph-level pooling.
+            edge_attr (Tensor, optional): Edge attributes.
+            monomer_weight (Tensor, optional): Monomer weights for weighting features.
+        Returns:
+            Tensor: Graph-level embeddings or predictions.
+        """
+
+        graph_embedding = self.get_graph_embedding(
+            x=x,
+            edge_index=edge_index,
+            batch_index=batch_index,
+            edge_attr=edge_attr,
+            monomer_weight=monomer_weight,
+        )
+
+        preds = self.readout_function(graph_embedding)
+
+        if self.n_classes == 1:
+            preds = preds.float()
+
+        return preds
+
+    def get_graph_embedding(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
+    ):
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x *= monomer_weight
+
+        for conv_layer, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv_layer(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
+            x *= monomer_weight
+
+        if self.cross_att:
+            x = self._cross_attention(x, batch_index, monomer_weight)
+
+        x = self.pooling_fn(x, batch_index)
+
+        return x
+
+    def readout_function(self, x: Tensor):
+        """
+        Applies a series of readout layers to the input tensor.
+        Args:
+            x (Tensor): Input tensor.
+        Returns:
+            Tensor: Output tensor after applying readout layers.
+        """
+        for layer in self.readout:
+            x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
+
+        x = self.output_layer(x)
+
+        return x
 
     @property
     def name(self):
@@ -139,3 +222,134 @@ class BaseNetwork(nn.Module):
         x = torch.cat(updated_polymer_feats, dim=0)
 
         return x
+
+    def predict(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
+    ):
+        """
+        Predicts the output for the given input.
+        Args:
+            x (Tensor): Node features.
+            edge_index (Tensor): Edge indices.
+            batch_index (Tensor, optional): Batch indices for graph-level pooling.
+            edge_attr (Tensor, optional): Edge attributes.
+            monomer_weight (Tensor, optional): Monomer weights for weighting features.
+        Returns:
+            Tensor: Predicted output.
+        """
+
+        preds = (
+            self.forward(
+                x=x,
+                edge_index=edge_index,
+                batch_index=batch_index,
+                edge_attr=edge_attr,
+                monomer_weight=monomer_weight,
+            )
+            .detach()
+            .numpy()
+            .flatten()
+        )
+
+        return preds
+
+
+class BaseNetworkClassifier(BaseNetwork):
+    def __init__(
+        self,
+        n_node_features: int,
+        n_edge_features: int,
+        pooling: str = Pooling.GlobalMeanPool,
+        n_convolutions: int = 2,
+        embedding_dim: int = 64,
+        readout_layers: int = 2,
+        problem_type: str = ProblemTypes.Classification,
+        n_classes: int = 1,
+        dropout: float = 0.5,
+        cross_att: bool = False,
+        apply_weighting_to_graph: str = ApplyWeightingToGraph.BeforePooling,
+        seed: int = 42,
+    ):
+        super().__init__(
+            n_node_features=n_node_features,
+            n_edge_features=n_edge_features,
+            pooling=pooling,
+            n_convolutions=n_convolutions,
+            embedding_dim=embedding_dim,
+            readout_layers=readout_layers,
+            problem_type=problem_type,
+            n_classes=n_classes,
+            dropout=dropout,
+            cross_att=cross_att,
+            apply_weighting_to_graph=apply_weighting_to_graph,
+            seed=seed,
+        )
+
+        self._name = "BaseNetworkClassifier"
+
+    def predict(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
+    ):
+        """
+        Predicts the output for the given input.
+        Args:
+            x (Tensor): Node features.
+            edge_index (Tensor): Edge indices.
+            batch_index (Tensor, optional): Batch indices for graph-level pooling.
+            edge_attr (Tensor, optional): Edge attributes.
+            monomer_weight (Tensor, optional): Monomer weights for weighting features.
+        Returns:
+            Tensor: Predicted class probabilities.
+        """
+        probs = self.predict_probs(
+            x=x,
+            edge_index=edge_index,
+            batch_index=batch_index,
+            edge_attr=edge_attr,
+            monomer_weight=monomer_weight,
+        )
+
+        preds = np.argmax(probs, axis=1)
+
+        return preds
+
+    def predict_probs(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor = None,
+        monomer_weight: Tensor = None,
+    ):
+        """
+        Predicts the class probabilities for the given input.
+        Args:
+            x (Tensor): Node features.
+            edge_index (Tensor): Edge indices.
+            batch_index (Tensor, optional): Batch indices for graph-level pooling.
+            edge_attr (Tensor, optional): Edge attributes.
+            monomer_weight (Tensor, optional): Monomer weights for weighting features.
+        Returns:
+            Tensor: Predicted class probabilities.
+        """
+        out = self.forward(
+            x=x,
+            edge_index=edge_index,
+            batch_index=batch_index,
+            edge_attr=edge_attr,
+            monomer_weight=monomer_weight,
+        )
+
+        probs = torch.softmax(out, dim=1).detach().numpy()
+
+        return probs

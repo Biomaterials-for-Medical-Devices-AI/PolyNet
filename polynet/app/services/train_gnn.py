@@ -29,7 +29,6 @@ from polynet.options.enums import (
     SplitMethods,
     SplitTypes,
 )
-from polynet.utils.data_preprocessing import class_balancer
 from polynet.utils.model_training import predict_network, train_model
 
 
@@ -39,6 +38,7 @@ def train_network(
     data_options: DataOptions,
     representation_options: RepresentationOptions,
     experiment_name: str,
+    train_val_test_idxs: tuple,
 ):
     experiment_path = polynet_experiments_base_dir() / experiment_name
 
@@ -60,9 +60,7 @@ def train_network(
         edge_feats=representation_options.edge_feats,
     )
 
-    train_ids, val_ids, test_ids = get_data_split_indices(
-        data=data, data_options=data_options, general_experiment_options=general_experiment_options
-    )
+    train_ids, val_ids, test_ids = train_val_test_idxs
 
     def filter_dataset_by_ids(dataset, ids):
         return [data for data in dataset if data.idx in ids]
@@ -242,52 +240,3 @@ def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_
             probs_df[f"{col_name} {i}"] = probs[:, i]
 
     return probs_df
-
-
-def get_data_split_indices(
-    data: pd.DataFrame, data_options: DataOptions, general_experiment_options: GeneralConfigOptions
-):
-
-    if general_experiment_options.split_type == SplitTypes.TrainValTest:
-
-        train_data_idxs, val_data_idxs, test_data_idxs = [], [], []
-
-        for i in range(general_experiment_options.n_bootstrap_iterations):
-            # Initial train-test split
-            train_data, test_data = split_data(
-                data=data,
-                test_size=general_experiment_options.test_ratio,
-                stratify=(
-                    data[data_options.target_variable_col]
-                    if general_experiment_options.split_method == SplitMethods.Stratified
-                    else None
-                ),
-                random_state=general_experiment_options.random_seed + i,
-            )
-
-            # Optional class balancing on training set
-            if general_experiment_options.train_set_balance:
-                train_data = class_balancer(
-                    data=train_data,
-                    target=data_options.target_variable_col,
-                    desired_class_proportion=general_experiment_options.train_set_balance,
-                    random_state=general_experiment_options.random_seed + i,
-                )
-
-            # Further split train into train/validation
-            train_data, val_data = split_data(
-                data=train_data,
-                test_size=general_experiment_options.val_ratio,
-                stratify=(
-                    train_data[data_options.target_variable_col]
-                    if general_experiment_options.split_method == SplitMethods.Stratified
-                    else None
-                ),
-                random_state=general_experiment_options.random_seed + i,
-            )
-
-            train_data_idxs.append(train_data.index.tolist())
-            val_data_idxs.append(val_data.index.tolist())
-            test_data_idxs.append(test_data.index.tolist())
-
-    return train_data_idxs, val_data_idxs, test_data_idxs

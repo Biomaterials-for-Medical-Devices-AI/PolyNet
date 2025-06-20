@@ -3,9 +3,9 @@ from pathlib import Path
 
 import captum
 import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
 import numpy as np
 from rdkit import Chem
-
 import streamlit as st
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
 
@@ -16,22 +16,19 @@ from polynet.app.options.file_paths import (
 )
 from polynet.app.utils import filter_dataset_by_ids
 from polynet.explain.explain_mol import (
-    plot_mols_with_weights,
-    plot_mols_with_numeric_weights,
-    plot_attribution_distribution,
     get_fragment_importance,
+    plot_attribution_distribution,
+    plot_mols_with_numeric_weights,
+    plot_mols_with_weights,
 )
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
+    AtomBondDescriptorDictKeys,
     ExplainAlgorithms,
+    ImportanceNormalisationMethods,
     ProblemTypes,
     Results,
-    AtomBondDescriptorDictKeys,
-    ImportanceNormalisationMethods,
 )
-
-
-import matplotlib.pyplot as plt
 
 # Define a softer blue and red
 
