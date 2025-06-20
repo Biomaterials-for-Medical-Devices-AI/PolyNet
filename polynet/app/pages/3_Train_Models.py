@@ -18,11 +18,11 @@ from polynet.app.options.file_paths import (
     gnn_model_dir,
     gnn_model_metrics_file_path,
     gnn_plots_directory,
+    gnn_raw_data_file,
     gnn_raw_data_path,
     ml_gnn_results_file_path,
     ml_results_parent_directory,
     polynet_experiments_base_dir,
-    gnn_raw_data_file,
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
@@ -35,19 +35,19 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import (
     calculate_metrics,
+    get_data_split_indices,
     save_gnn_model,
     save_plot,
-    get_data_split_indices,
 )
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.utils import (
+    ensemble_predictions,
     get_iterator_name,
     get_predicted_label_column_name,
     get_score_column_name,
     get_true_label_column_name,
     merge_model_predictions,
     save_data,
-    ensemble_predictions,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 from torch_geometric.nn import SAGEConv
 
 from polynet.models.GNN import BaseNetwork, BaseNetworkClassifier
-from polynet.options.enums import Networks, Pooling, ProblemTypes, ApplyWeightingToGraph
+from polynet.options.enums import ApplyWeightingToGraph, Networks, Pooling, ProblemTypes
 
 
 class GraphSageBase(BaseNetwork):

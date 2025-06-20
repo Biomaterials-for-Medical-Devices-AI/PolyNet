@@ -3,23 +3,23 @@ from math import sqrt
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
     r2_score,
     recall_score,
     roc_auc_score,
-    matthews_corrcoef as mcc,
 )
+from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import matthews_corrcoef as mcc
 from sklearn.model_selection import train_test_split
 import streamlit as st
 from torch import load, save
-from polynet.utils.data_preprocessing import class_balancer
-from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
+
 from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
+from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
+from polynet.utils.data_preprocessing import class_balancer
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):

@@ -21,6 +21,7 @@ from polynet.app.options.file_paths import (
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
+from polynet.app.options.state_keys import ExplainModelStateKeys
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.explain_model import explain_model
@@ -35,11 +36,10 @@ from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     DataSets,
     ExplainAlgorithms,
-    Results,
-    ProblemTypes,
     ImportanceNormalisationMethods,
+    ProblemTypes,
+    Results,
 )
-from polynet.app.options.state_keys import ExplainModelStateKeys
 
 
 def run_explanations(

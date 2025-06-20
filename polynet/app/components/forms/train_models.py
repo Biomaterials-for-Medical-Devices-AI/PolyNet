@@ -1,11 +1,13 @@
 import streamlit as st
 
+from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
 from polynet.options.enums import (
+    ApplyWeightingToGraph,
     NetworkParams,
     Networks,
     Pooling,
@@ -13,9 +15,6 @@ from polynet.options.enums import (
     SplitMethods,
     SplitTypes,
 )
-
-from polynet.app.options.representation import RepresentationOptions
-from polynet.options.enums import ApplyWeightingToGraph
 
 
 def train_TML_models():

@@ -10,7 +10,7 @@ from torch_geometric.nn import global_max_pool as gmp
 from torch_geometric.nn import global_mean_pool as gmeanp
 from torch_geometric.seed import seed_everything
 
-from polynet.options.enums import Pooling, ProblemTypes, ApplyWeightingToGraph
+from polynet.options.enums import ApplyWeightingToGraph, Pooling, ProblemTypes
 
 
 def max_mean_pool(x, batch_index):

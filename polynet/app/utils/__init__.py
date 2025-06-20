@@ -4,8 +4,7 @@ import re
 import pandas as pd
 from scipy.stats import mode
 
-
-from polynet.options.enums import IteratorTypes, Results, SplitTypes, ProblemTypes
+from polynet.options.enums import IteratorTypes, ProblemTypes, Results, SplitTypes
 
 
 def create_directory(path: Path):

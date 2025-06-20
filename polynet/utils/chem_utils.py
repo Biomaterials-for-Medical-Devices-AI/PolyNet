@@ -1,6 +1,7 @@
 from typing import Optional
-from rdkit.Chem import BRICS
+
 from rdkit import Chem
+from rdkit.Chem import BRICS
 
 
 def check_smiles(smiles: str) -> bool:
