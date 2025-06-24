@@ -1,5 +1,7 @@
 from math import sqrt
 
+from imblearn.metrics import geometric_mean_score as gmean
+from imblearn.metrics import specificity_score
 import numpy as np
 import pandas as pd
 from sklearn.metrics import (
@@ -167,16 +169,17 @@ def calculate_metrics(y_true, y_pred, y_probs, problem_type):
 
         return {
             EvaluationMetrics.Accuracy: accuracy_score(y_true, y_pred),
-            EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
             EvaluationMetrics.Precision: precision_score(y_true, y_pred),
             EvaluationMetrics.Recall: recall_score(
                 y_true, y_pred
             ),  # Also known as sensitivity or true positive rate
-            EvaluationMetrics.Specificity: recall_score(
-                y_true, y_pred, pos_label=0
+            EvaluationMetrics.Specificity: specificity_score(
+                y_true, y_pred
             ),  # Recall for negative samples or True negative rate
             EvaluationMetrics.AUROC: roc_auc_score(y_true=y_true, y_score=y_probs),
             EvaluationMetrics.MCC: mcc(y_true, y_pred),
+            EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
+            EvaluationMetrics.GScore: gmean(y_true, y_pred),
         }
     else:
 
