@@ -7,7 +7,7 @@ def show_label_distribution(data, target_variable, title=None, class_names=None)
     if class_names:
         label_column = f"{target_variable}_name"
         data = data.copy()
-        data[label_column] = data[target_variable].map(class_names)
+        data[label_column] = data[target_variable].astype(str).map(class_names)
         x_axis = label_column
         hue_axis = label_column
     else:

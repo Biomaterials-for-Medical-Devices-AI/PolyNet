@@ -16,9 +16,13 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import matthews_corrcoef as mcc
 from sklearn.model_selection import train_test_split
 import streamlit as st
+import torch
 from torch import load, save
+from torch_geometric.data import Dataset
+from torch_geometric.loader import DataLoader
 
 from polynet.app.options.data import DataOptions
+from polynet.app.options.file_paths import gnn_model_dir
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
 from polynet.utils.data_preprocessing import class_balancer
@@ -189,3 +193,58 @@ def calculate_metrics(y_true, y_pred, y_probs, problem_type):
             EvaluationMetrics.MAE: mean_absolute_error(y_true, y_pred),
             # "sep": calculate_standard_error(y_true, y_pred),
         }
+
+
+def load_models_from_experiment(experiment_path: str, model_names: list) -> dict:
+    """
+    Loads trained GNN models from the specified experiment path.
+
+    Args:
+        experiment_path (str): Path to the experiment directory.
+
+    Returns:
+        dict: Dictionary containing model names as keys and loaded models as values.
+    """
+
+    gnn_models_path = gnn_model_dir(experiment_path)
+    models = {}
+
+    for model_name in model_names:
+        model_file = gnn_models_path / model_name
+        model_name = model_file.stem
+        models[model_name] = load_gnn_model(model_file)
+
+    return models
+
+
+def predict_network(models: dict, dataset: Dataset) -> pd.DataFrame:
+
+    indexes = [data.idx for data in dataset]
+    loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+
+    predictions_models = {}
+
+    for model_name, model in models.items():
+        model.eval()
+        predictions = []
+
+        with torch.no_grad():
+            for batch in loader:
+
+                preds = model.predict(
+                    x=batch.x,
+                    edge_index=batch.edge_index,
+                    edge_attr=batch.edge_attr,
+                    batch_index=batch.batch,
+                    monomer_weight=batch.weight_monomer,
+                )
+
+                predictions.append(preds)
+
+        predictions_models[model_name] = pd.Series(
+            np.concatenate(predictions), index=indexes, name=model_name
+        )
+
+    predictions_models = pd.DataFrame(predictions_models)
+
+    return predictions_models

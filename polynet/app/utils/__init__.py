@@ -5,6 +5,7 @@ import pandas as pd
 from scipy.stats import mode
 
 from polynet.options.enums import IteratorTypes, ProblemTypes, Results, SplitTypes
+from polynet.utils.chem_utils import check_smiles
 
 
 def create_directory(path: Path):
@@ -198,3 +199,18 @@ def extract_number(filename):
         return int(match.group(1))
     else:
         raise ValueError(f"No number found in filename: {filename}")
+
+
+def check_smiles_cols(col_names, df):
+
+    invalid_smiles = {}
+    for col in col_names:
+        invalid_smiles[col] = []
+        for smiles in df[col]:
+            if not check_smiles(smiles):
+                invalid_smiles[col].append(str(smiles))
+
+    # Remove empty lists
+    invalid_smiles = {k: v for k, v in invalid_smiles.items() if v}
+
+    return invalid_smiles
