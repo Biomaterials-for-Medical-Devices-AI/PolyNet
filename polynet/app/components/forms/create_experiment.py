@@ -7,6 +7,7 @@ from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.app.utils import check_smiles_cols
 
 
 def select_data_form():
@@ -55,16 +56,12 @@ def select_data_form():
             return False
 
         else:
-            for col in smiles_cols:
-                invalid_smiles_list = []
-                for smiles in df[col]:
-                    if not check_smiles(smiles):
-                        invalid_smiles_list.append(str(smiles))
-                if invalid_smiles_list:
-                    st.error(
-                        f"Invalid SMILES found in column '{col}': {', '.join(invalid_smiles_list)}"
-                    )
-                    st.stop()
+            invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
+            if invalid_smiles:
+                for col, smiles in invalid_smiles.values():
+                    st.error(f"Invalid SMILES found in column '{col}': {', '.join(smiles)}")
+
+                st.stop()
 
             st.success("SMILES columns checked successfully.")
 
