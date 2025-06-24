@@ -2,8 +2,6 @@ from math import sqrt
 
 import numpy as np
 import pandas as pd
-import torch
-
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
@@ -16,16 +14,16 @@ from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import matthews_corrcoef as mcc
 from sklearn.model_selection import train_test_split
 import streamlit as st
+import torch
 from torch import load, save
+from torch_geometric.data import Dataset
+from torch_geometric.loader import DataLoader
 
 from polynet.app.options.data import DataOptions
+from polynet.app.options.file_paths import gnn_model_dir
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
 from polynet.utils.data_preprocessing import class_balancer
-from torch_geometric.loader import DataLoader
-from torch_geometric.data import Dataset
-
-from polynet.app.options.file_paths import gnn_model_dir
 
 
 def split_data(data, test_size=0.2, random_state=1, stratify=None):

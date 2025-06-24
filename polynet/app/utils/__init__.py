@@ -5,7 +5,6 @@ import pandas as pd
 from scipy.stats import mode
 
 from polynet.options.enums import IteratorTypes, ProblemTypes, Results, SplitTypes
-
 from polynet.utils.chem_utils import check_smiles
 
 

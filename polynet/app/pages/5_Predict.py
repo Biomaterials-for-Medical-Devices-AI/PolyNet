@@ -1,46 +1,48 @@
-import pandas as pd
-import streamlit as st
-from scipy.stats import mode
 import json
 from shutil import rmtree
+
+import pandas as pd
+from scipy.stats import mode
+import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.analyse_results import (
     confusion_matrix_plot_form,
     parity_plot_form,
 )
-from polynet.app.components.plots import display_model_results
+from polynet.app.components.plots import display_mean_std_model_metrics, display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     gnn_model_dir,
-    gnn_raw_data_predict_path,
+    gnn_predictions_file,
+    gnn_predictions_file_path,
+    gnn_predictions_metrics_file_path,
+    gnn_predictions_plots_directory,
     gnn_raw_data_predict_file,
+    gnn_raw_data_predict_path,
     ml_gnn_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
-    gnn_predictions_file_path,
-    gnn_predictions_file,
-    gnn_predictions_plots_directory,
-    gnn_predictions_metrics_file_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
+from polynet.app.options.state_keys import ViewExperimentKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
-from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
-from polynet.options.enums import ProblemTypes
-from polynet.app.utils import check_smiles_cols
-from polynet.app.services.model_training import load_models_from_experiment, predict_network
+from polynet.app.services.model_training import (
+    calculate_metrics,
+    load_models_from_experiment,
+    predict_network,
+)
+from polynet.app.utils import check_smiles_cols, create_directory
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.app.options.state_keys import ViewExperimentKeys
-from polynet.app.utils import create_directory
-from polynet.app.services.model_training import calculate_metrics
-from polynet.app.components.plots import display_mean_std_model_metrics
+from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
+from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
 
 
 def predict(

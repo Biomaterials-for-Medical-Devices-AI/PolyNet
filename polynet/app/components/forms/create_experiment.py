@@ -4,10 +4,10 @@ import streamlit as st
 from polynet.app.components.forms.plot_customiser import get_plotting_options
 from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
+from polynet.app.utils import check_smiles_cols
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
-from polynet.app.utils import check_smiles_cols
 
 
 def select_data_form():
