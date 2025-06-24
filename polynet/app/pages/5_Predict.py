@@ -1,6 +1,8 @@
 import pandas as pd
 import streamlit as st
 from scipy.stats import mode
+import json
+from shutil import rmtree
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.analyse_results import (
@@ -13,15 +15,16 @@ from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     gnn_model_dir,
-    gnn_raw_data_file,
-    gnn_raw_data_path,
     gnn_raw_data_predict_path,
     gnn_raw_data_predict_file,
-    data_file_path,
     ml_gnn_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
+    gnn_predictions_file_path,
+    gnn_predictions_file,
+    gnn_predictions_plots_directory,
+    gnn_predictions_metrics_file_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -37,6 +40,7 @@ from polynet.app.options.state_keys import ViewExperimentKeys
 from polynet.app.utils import create_directory
 from polynet.app.services.model_training import calculate_metrics
 from polynet.app.components.plots import display_mean_std_model_metrics
+from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 
 
 def predict(
@@ -53,15 +57,23 @@ def predict(
         experiment_path=experiment_path, file_name=dataset_name
     )
 
-    if not path_to_data.exists():
-        create_directory(path_to_data)
+    if path_to_data.exists():
+        rmtree(path_to_data)
+
+    create_directory(path_to_data)
 
     file_path = gnn_raw_data_predict_file(experiment_path=experiment_path, file_name=dataset_name)
+
+    predictions_dir = gnn_predictions_file_path(experiment_path=experiment_path)
+
+    if predictions_dir.exists():
+        rmtree(predictions_dir)
+    create_directory(predictions_dir)
 
     if data_options.id_col in df.columns:
         df = df.set_index(data_options.id_col, drop=True)
 
-    df.to_csv(file_path, index=False)
+    df.to_csv(file_path)
 
     dataset = CustomPolymerGraph(
         filename=dataset_name,
@@ -78,49 +90,68 @@ def predict(
 
     predictions = predict_network(models=models, dataset=dataset)
 
-    if data_options.problem_type == ProblemTypes.Classification:
+    if len(models) > 1:
 
-        majority_vote, _ = mode(predictions.values, axis=1, keepdims=False)
-        majority_vote = pd.Series(
-            majority_vote, index=predictions.index, name="Ensemble Prediction"
-        )
+        if data_options.problem_type == ProblemTypes.Classification:
 
-        predictions = predictions.merge(
-            majority_vote, left_index=True, right_index=True, how="left"
-        )
+            # Calculate majority vote for classification tasks
+            majority_vote, _ = mode(predictions.values, axis=1, keepdims=False)
+            majority_vote = pd.Series(
+                majority_vote, index=predictions.index, name="Ensemble Prediction"
+            )
+            predictions = predictions.merge(
+                majority_vote, left_index=True, right_index=True, how="left"
+            )
 
-    elif data_options.problem_type == ProblemTypes.Regression:
+        elif data_options.problem_type == ProblemTypes.Regression:
 
-        mean_prediction = predictions.mean(axis=1)
-        mean_prediction = pd.Series(
-            mean_prediction, index=predictions.index, name="Ensemble Prediction"
-        )
-
-        predictions = predictions.merge(
-            mean_prediction, left_index=True, right_index=True, how="left"
-        )
+            # Calculate mean prediction for regression tasks
+            mean_prediction = predictions.mean(axis=1)
+            mean_prediction = pd.Series(
+                mean_prediction, index=predictions.index, name="Ensemble Prediction"
+            )
+            predictions = predictions.merge(
+                mean_prediction, left_index=True, right_index=True, how="left"
+            )
 
     if st.session_state.get("compare_with_target", False):
 
         target_col = df[data_options.target_variable_col]
-        st.write(target_col)
+
         predictions = predictions.merge(target_col, left_index=True, right_index=True, how="left")
 
         metrics = {}
 
         for col in predictions.columns[:-1]:
-            model, number = col.split("_")
+
+            if "_" in col:
+                model, number = col.split("_")
+            else:
+                model = col
+                number = "1"
+
+            if number not in metrics:
+                metrics[number] = {}
+            if model not in metrics[number]:
+                metrics[number][model] = {}
 
             metrics[number][model]["Test"] = calculate_metrics(
                 y_true=predictions[data_options.target_variable_col],
                 y_pred=predictions[col],
+                y_probs=predictions[col],
                 problem_type=data_options.problem_type,
             )
+
+        metrics_path = gnn_predictions_metrics_file_path(experiment_path)
+
+        with open(metrics_path, "w") as f:
+            json.dump(metrics, f, indent=4)
 
         display_mean_std_model_metrics(metrics)
 
     st.write("Predictions:")
     st.dataframe(predictions)
+    predictions.to_csv(gnn_predictions_file(experiment_path=experiment_path))
 
 
 st.header("Predict with Trained GNN Models")
@@ -192,6 +223,15 @@ if experiment_name:
 
     if csv_file:
 
+        path_to_data = gnn_raw_data_predict_path(
+            experiment_path=experiment_path, file_name=csv_file.name
+        )
+
+        if path_to_data.exists():
+            st.warning(
+                "It seems that you have already uploaded this file. The previous prediction results will be overwritten."
+            )
+
         df = pd.read_csv(csv_file)
         st.write("Preview of the uploaded data:")
         st.write(df.head())
@@ -215,12 +255,57 @@ if experiment_name:
             st.success("SMILES columns checked successfully.")
 
         if data_options.target_variable_col in df.columns:
-            st.checkbox(
+            if st.checkbox(
                 "Would you like to compare the predictions with the target variable?",
                 key="compare_with_target",
                 value=True,
                 help="If checked, the predictions will be compared with the target variable in the uploaded data.",
-            )
+            ):
+                if data_options.problem_type == ProblemTypes.Classification:
+
+                    if pd.api.types.is_numeric_dtype(df[data_options.target_variable_col]):
+                        unique_vals_target = df[data_options.target_variable_col].nunique()
+                        if not unique_vals_target < 20:
+                            st.error(
+                                "The target variable seems to be a regression problem, but you have selected it for comparison. Please uncheck the comparison option or change the target variable."
+                            )
+                            st.stop()
+
+                    st.markdown("**Label Distribution**")
+                    st.pyplot(
+                        show_label_distribution(
+                            data=df,
+                            target_variable=data_options.target_variable_col,
+                            title=(
+                                f"Label Distribution for {data_options.target_variable_name}"
+                                if data_options.target_variable_name
+                                else "Label Distribution"
+                            ),
+                            class_names=data_options.class_names,
+                        )
+                    )
+
+                elif data_options.problem_type == ProblemTypes.Regression:
+
+                    if not pd.api.types.is_numeric_dtype(df[data_options.target_variable_col]):
+                        st.error(
+                            "The target variable seems to be a classification problem, but you have selected it for comparison. Please uncheck the comparison option or change the target variable."
+                        )
+                        st.stop()
+
+                    st.markdown("**Value Distribution**")
+                    st.pyplot(
+                        show_continuous_distribution(
+                            data=df,
+                            target_variable=data_options.target_variable_col,
+                            title=(
+                                f"Value Distribution for {data_options.target_variable_name}"
+                                if data_options.target_variable_name
+                                else "Value Distribution"
+                            ),
+                        )
+                    )
+                pass
 
         gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
@@ -240,7 +325,7 @@ if experiment_name:
                 predict(
                     experiment_path=experiment_path,
                     df=df,
-                    models=models,
+                    models=sorted(models),
                     data_options=data_options,
                     representation_options=representation_options,
                 )
