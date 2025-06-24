@@ -253,14 +253,56 @@ def gnn_model_metrics_file_path(experiment_path: Path) -> Path:
     return ml_gnn_results_directory(experiment_path) / "metrics.json"
 
 
-def results_plots_path(experiment_path: Path, file_name: str) -> Path:
+def prediction_results_parent_path(experiment_path: Path) -> Path:
     """
-    Return the path to the results plots directory in the experiment directory.
+    Return the path to the prediction results directory in the experiment directory.
     Args:
         experiment_path (Path): The path to the experiment directory.
     Returns:
     """
-    return experiment_path / "ml_model" / "plots" / file_name
+    return experiment_path / "ml_predictions"
+
+
+def gnn_predictions_file_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the machine learning GNN predictions file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+        file_name (str): The name of the predictions file.
+    Returns:
+    """
+    return prediction_results_parent_path(experiment_path) / "GNN"
+
+
+def gnn_predictions_file(experiment_path: Path) -> Path:
+    """
+    Return the path to the machine learning GNN predictions file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+        file_name (str): The name of the predictions file.
+    Returns:
+    """
+    return prediction_results_parent_path(experiment_path) / "predictions.csv"
+
+
+def gnn_predictions_plots_directory(experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN predictions plots directory in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return prediction_results_parent_path(experiment_path) / "plots"
+
+
+def gnn_predictions_metrics_file_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN predictions metrics file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return prediction_results_parent_path(experiment_path) / "metrics.json"
 
 
 def explanation_parent_directory(experiment_path: Path) -> Path:
