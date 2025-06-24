@@ -110,6 +110,7 @@ class EvaluationMetrics(StrEnum):
     AUROC = "AUROC"
     MCC = "MCC"
     Specificity = "Specificity"
+    GScore = "G-Score"
     RMSE = "RMSE"
     MAE = "MAE"
     R2 = "R2"
