@@ -79,7 +79,7 @@ def representation_parent_directory(experiment_path: Path) -> Path:
     return experiment_path / "representation"
 
 
-def gnn_raw_data_path(experiment_path: Path) -> Path:
+def gnn_data_path(experiment_path: Path) -> Path:
     """Return the path to the raw data for a GNN experiment.
     The path will be to a `csv` file called `raw_data.csv`
 
@@ -89,7 +89,19 @@ def gnn_raw_data_path(experiment_path: Path) -> Path:
     Returns:
         Path: The path to the raw data directory.
     """
-    return representation_parent_directory(experiment_path) / "GNN" / "raw"
+    return representation_parent_directory(experiment_path) / "GNN"
+
+
+def gnn_raw_data_path(experiment_path: Path) -> Path:
+    """Return the path to the raw data for a GNN experiment.
+    The path will be to a directory called `raw` inside the `training` directory.
+    Args:
+        experiment_path (Path): The path of the experiment.
+    Returns:
+        Path: The path to the raw data directory.
+    """
+
+    return gnn_data_path(experiment_path) / "training" / "raw"
 
 
 def gnn_raw_data_file(file_name: str, experiment_path: Path):
@@ -103,7 +115,40 @@ def gnn_raw_data_file(file_name: str, experiment_path: Path):
     Returns:
         Path: The path to the raw data file.
     """
-    return representation_parent_directory(experiment_path) / "GNN" / "raw" / file_name
+    return gnn_raw_data_path(experiment_path) / file_name
+
+
+def gnn_raw_data_predict_path(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the raw data file for a GNN experiment's prediction.
+    The path will be to a `csv` file called `raw_data.csv`
+
+    Args:
+        filen_name (str): The name of the raw data file.
+        experiment_path (Path): The path of the experiment.
+    Returns:
+        Path: The path to the raw data file for prediction.
+    """
+
+    file_name_no_ext = file_name.split(".")[0]
+
+    return gnn_data_path(experiment_path) / "predict" / file_name_no_ext / "raw"
+
+
+def gnn_raw_data_predict_file(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the raw data file for a GNN experiment's prediction.
+    The path will be to a `csv` file called `raw_data.csv`
+
+    Args:
+        file_name (str): The name of the raw data file.
+        experiment_path (Path): The path of the experiment.
+    Returns:
+     Path: The path to the raw data file for prediction.
+    """
+    return (
+        gnn_raw_data_predict_path(file_name=file_name, experiment_path=experiment_path) / file_name
+    )
 
 
 def representation_file_path(experiment_path: Path) -> Path:
