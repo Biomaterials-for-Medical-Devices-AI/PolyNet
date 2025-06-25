@@ -132,6 +132,17 @@ class ExplainModelStateKeys(StrEnum):
     NormalisationMethodSelector = "NormalisationMethodSelector"
 
 
+class ProjectionPlotStateKeys(StrEnum):
+    CreateProjectionPlot = "CreateProjectionPlot"
+    ModelForProjections = "ModelForProjections"
+    DimensionReductionMethod = "DimensionReductionMethod"
+    tSNEPerplexity = "tSNEPerplexity"
+    ColourProjectionBy = "ColourProjectionBy"
+    ProjectionColourMap = "ProjectionColourMap"
+    ProjectionDescriptorSelector = "ProjectionDescriptorSelector"
+    PlotProjection = "PlotProjection"
+
+
 class AnalyseResultsStateKeys(StrEnum):
     """
     Enum for the keys used in the state of the AnalyseResults component.
