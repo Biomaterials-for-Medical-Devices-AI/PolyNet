@@ -89,6 +89,7 @@ def analyse_graph_embeddings(
 
 def explain_model(
     model,
+    model_number: int,
     experiment_path: Path,
     dataset: CustomPolymerGraph,
     explain_mols: list,
@@ -166,12 +167,19 @@ def explain_model(
 
     # Calculate the node masks for the selected molecules
     node_masks = calculate_attributions(
-        mols=mols, attrs_mol=attrs_mol, explain_algorithm=explain_algorithm, explainer=explainer
+        mols=mols,
+        attrs_mol=attrs_mol,
+        explain_algorithm=explain_algorithm,
+        explainer=explainer,
+        model_name=model._name,
+        model_number=int(model_number),
     )
 
     # Save the node masks to a JSON file
     with open(explanation_file, "w") as f:
         json.dump(node_masks, f, indent=4)
+
+    node_masks = node_masks[model._name][model_number]
 
     # Check the selected feature for explanation
     if explain_feature != "All Features":
@@ -208,7 +216,9 @@ def explain_model(
                     f"New global max value found: {max_val:.3f} for molecule {mol.idx} with algorithm {explain_algorithm}"
                 )
 
-    frags_importances = get_fragment_importance(mols, node_masks, explain_algorithm)
+    frags_importances = get_fragment_importance(
+        mols=mols, node_masks=node_masks, explain_algorithm=explain_algorithm
+    )
 
     fig = plot_attribution_distribution(
         attribution_dict=frags_importances, neg_color=neg_color, pos_color=pos_color
@@ -218,23 +228,7 @@ def explain_model(
     plot_mols = filter_dataset_by_ids(dataset, plot_mols)
 
     for mol in plot_mols:
-        st.write(
-            model(
-                x=mol.x,
-                edge_index=mol.edge_index,
-                edge_attr=mol.edge_attr,
-                monomer_weight=mol.weight_monomer,
-            )
-        )
-        st.write(
-            explainer.get_prediction(
-                x=mol.x,
-                edge_index=mol.edge_index,
-                edge_attr=mol.edge_attr,
-                monomer_weight=mol.weight_monomer,
-                batch_index=None,
-            )
-        )
+
         container = st.container(border=True, key=f"mol_{mol.idx}_container")
         names = mol_names.get(mol.idx, None)
         masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
@@ -281,12 +275,16 @@ def explain_model(
 
 
 def calculate_attributions(
-    mols: list, attrs_mol: dict, explain_algorithm: ExplainAlgorithms, explainer: Explainer
+    mols: list,
+    attrs_mol: dict,
+    explain_algorithm: ExplainAlgorithms,
+    explainer: Explainer,
+    model_name: str,
+    model_number: int,
 ):
     node_masks = {}
 
     for mol in mols:
-
         mol_idx = mol.idx
 
         if (
@@ -309,9 +307,10 @@ def calculate_attributions(
                 .tolist()
             )
 
-        if mol_idx not in node_masks:
-            node_masks[mol_idx] = {}
-        node_masks[mol_idx][explain_algorithm] = node_mask
+        # Insert in nested structure
+        node_masks.setdefault(model_name, {}).setdefault(model_number, {}).setdefault(mol_idx, {})[
+            explain_algorithm
+        ] = node_mask
 
     return node_masks
 
