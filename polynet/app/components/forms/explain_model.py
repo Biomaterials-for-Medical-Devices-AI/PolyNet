@@ -349,6 +349,7 @@ def explain_predictions_form(
         if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
             explain_model(
                 model=gnn_model,
+                model_number=number,
                 experiment_path=experiment_path,
                 dataset=dataset,
                 explain_mols=explain_mol,
