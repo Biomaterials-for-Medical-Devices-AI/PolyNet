@@ -6,7 +6,7 @@ import streamlit as st
 from torch_geometric.data import Dataset
 
 from polynet.app.options.data import DataOptions
-from polynet.app.options.state_keys import ProjectionPlotStateKeys, ExplainModelStateKeys
+from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
 from polynet.app.services.descriptors import (
     calculate_rdkit_df_dict,
     get_unique_smiles,
@@ -20,12 +20,12 @@ from polynet.app.utils import (
     get_true_label_column_name,
 )
 from polynet.options.enums import (
-    DimensionalityReduction,
-    Results,
     DataSets,
+    DimensionalityReduction,
     ExplainAlgorithms,
     ImportanceNormalisationMethods,
     ProblemTypes,
+    Results,
 )
 
 

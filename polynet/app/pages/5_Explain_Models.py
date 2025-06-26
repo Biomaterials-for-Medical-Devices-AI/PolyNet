@@ -21,13 +21,10 @@ from polynet.app.options.file_paths import (
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.utils import get_iterator_name
-
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-
 
 st.header("Explain your models")
 st.markdown(
