@@ -141,6 +141,9 @@ class ProjectionPlotStateKeys(StrEnum):
     ProjectionColourMap = "ProjectionColourMap"
     ProjectionDescriptorSelector = "ProjectionDescriptorSelector"
     PlotProjection = "PlotProjection"
+    PlotProjectionSet = "PlotProjectionSet"
+    PlotProjectionMols = "PlotProjectionMols"
+    ProjectionData = "ProjectionData"
 
 
 class AnalyseResultsStateKeys(StrEnum):
