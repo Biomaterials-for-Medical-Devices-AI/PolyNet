@@ -29,6 +29,50 @@ from polynet.options.enums import (
 )
 
 
+def explain_mols_widget(
+    data: pd.DataFrame, SetStateKey: str, ManuallySelectStateKey: str, MolsStateKey: str
+):
+    """
+    Widget with logic to allow the user to explain just the selected molecules or set.
+    """
+
+    mols_to_explain = st.pills(
+        "Select a set to explain",
+        options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
+        key=SetStateKey,
+        default=["All"],
+    )
+
+    if mols_to_explain == DataSets.Training:
+        explain_mols = data.loc[data[Results.Set.value] == DataSets.Training].index
+    elif mols_to_explain == DataSets.Validation:
+        explain_mols = data.loc[data[Results.Set.value] == DataSets.Validation].index
+    elif mols_to_explain == DataSets.Test:
+        explain_mols = data.loc[data[Results.Set.value] == DataSets.Test].index
+    elif mols_to_explain == "All":
+        explain_mols = data.index
+    else:
+        explain_mols = None
+
+    if not mols_to_explain or st.checkbox(
+        "Manually select points to show in projection plot", key=ManuallySelectStateKey
+    ):
+        mols_to_plot = st.multiselect(
+            "Select the molecules you would like to see in the projection plot",
+            options=data.index,
+            default=explain_mols,
+            key=MolsStateKey,
+        )
+    else:
+        mols_to_plot = explain_mols.tolist()
+
+    if not bool(mols_to_plot):
+        st.error("Please select some datapoints to display on the plot.")
+        st.stop()
+
+    return mols_to_plot
+
+
 def embedding_projection(
     gnn_models: list,
     gnn_models_dir: Path,
@@ -128,45 +172,12 @@ def embedding_projection(
                 projection_data[descriptor] /= 100
                 colour_projection_by = descriptor
 
-        mols_for_projection = st.pills(
-            "Select a set to explain",
-            options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
-            key=ProjectionPlotStateKeys.PlotProjectionSet,
-            default=["All"],
+        mols_to_plot = explain_mols_widget(
+            data=projection_data,
+            SetStateKey=ProjectionPlotStateKeys.PlotProjectionSet,
+            ManuallySelectStateKey=ProjectionPlotStateKeys.ProjectionManualSelection,
+            MolsStateKey=ProjectionPlotStateKeys.PlotProjectionMols,
         )
-
-        if mols_for_projection == DataSets.Training:
-            explain_mols = projection_data.loc[
-                projection_data[Results.Set.value] == DataSets.Training
-            ].index
-        elif mols_for_projection == DataSets.Validation:
-            explain_mols = projection_data.loc[
-                projection_data[Results.Set.value] == DataSets.Validation
-            ].index
-        elif mols_for_projection == DataSets.Test:
-            explain_mols = projection_data.loc[
-                projection_data[Results.Set.value] == DataSets.Test
-            ].index
-        elif mols_for_projection == "All":
-            explain_mols = projection_data.index
-        else:
-            explain_mols = None
-
-        if not mols_for_projection or st.checkbox(
-            "Manually select points to show in projection plot"
-        ):
-            mols_to_plot = st.multiselect(
-                "Select the molecules you would like to see in the projection plot",
-                options=projection_data.index,
-                default=explain_mols,
-                key=ProjectionPlotStateKeys.PlotProjectionMols,
-            )
-        else:
-            mols_to_plot = explain_mols.tolist()
-
-        if not bool(mols_to_plot):
-            st.error("Please select some datapoints to display on the plot.")
-            st.stop()
 
         projection_data = projection_data.loc[mols_to_plot]
         labels = projection_data[colour_projection_by]
@@ -235,28 +246,11 @@ def explain_predictions_form(
             target_variable_name=data_options.target_variable_name
         )
 
-        set = st.pills(
-            "Select a set to explain",
-            options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
-            key=ExplainModelStateKeys.ExplainSet,
-        )
-
-        if set == DataSets.Training:
-            explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Training].index
-        elif set == DataSets.Validation:
-            explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Validation].index
-        elif set == DataSets.Test:
-            explain_mols = preds.loc[preds[Results.Set.value] == DataSets.Test].index
-        elif set == "All":
-            explain_mols = preds.index
-        else:
-            explain_mols = None
-
-        explain_mol = st.multiselect(
-            "Select Polymers ID to Calculate Explanation",
-            options=data.index,
-            key=ExplainModelStateKeys.ExplainIDSelector,
-            default=explain_mols,
+        explain_mol = explain_mols_widget(
+            data=preds,
+            SetStateKey=ExplainModelStateKeys.ExplainSet,
+            ManuallySelectStateKey=ExplainModelStateKeys.ExplainManuallySelector,
+            MolsStateKey=ExplainModelStateKeys.ExplainIDSelector,
         )
 
         plot_mols = st.multiselect(
