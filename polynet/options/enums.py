@@ -167,3 +167,9 @@ class ImportanceNormalisationMethods(StrEnum):
     Local = "Local"
     Global = "Global"
     NoNormalisation = "No Normalisation"
+
+
+class DimensionalityReduction(StrEnum):
+    tSNE = "t-SNE"
+    Perplexity = "perplexity"
+    PCA = "PCA"

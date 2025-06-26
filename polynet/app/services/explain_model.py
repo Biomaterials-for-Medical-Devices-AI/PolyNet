@@ -5,9 +5,14 @@ import captum
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 from rdkit import Chem
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 import streamlit as st
+import torch
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
+from torch_geometric.loader import DataLoader
 
 from polynet.app.options.file_paths import (
     explanation_json_file_path,
@@ -24,6 +29,7 @@ from polynet.explain.explain_mol import (
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     AtomBondDescriptorDictKeys,
+    DimensionalityReduction,
     ExplainAlgorithms,
     ImportanceNormalisationMethods,
     ProblemTypes,
@@ -51,8 +57,39 @@ def get_cmap(neg_color="#40bcde", pos_color="#e64747"):
     return custom_cmap
 
 
+def analyse_graph_embeddings(
+    model,
+    dataset: CustomPolymerGraph,
+    labels: pd.Series,
+    mols_to_plot: list,
+    reduction_method: str,
+    reduction_parameters: dict,
+    colormap: str,
+):
+
+    embeddings = get_graph_embeddings(dataset, model)
+
+    if reduction_method == DimensionalityReduction.tSNE:
+        tsne = TSNE(n_components=2, **reduction_parameters)
+        reduced = tsne.fit_transform(embeddings)
+
+    elif reduction_method == DimensionalityReduction.PCA:
+        pca = PCA(n_components=2, **reduction_parameters)
+        reduced = pca.fit_transform(embeddings)
+
+    reduced_embeddings = pd.DataFrame(reduced, index=embeddings.index, columns=["Dim1", "Dim2"])
+    reduced_embeddings = reduced_embeddings.loc[mols_to_plot]
+    reduced_embeddings = reduced_embeddings.to_numpy()
+
+    labels = labels.loc[mols_to_plot]
+
+    projection_fig = plot_projection_embeddings(reduced_embeddings, labels=labels, cmap=colormap)
+    st.pyplot(projection_fig, use_container_width=True)
+
+
 def explain_model(
     model,
+    model_number: int,
     experiment_path: Path,
     dataset: CustomPolymerGraph,
     explain_mols: list,
@@ -130,12 +167,19 @@ def explain_model(
 
     # Calculate the node masks for the selected molecules
     node_masks = calculate_attributions(
-        mols=mols, attrs_mol=attrs_mol, explain_algorithm=explain_algorithm, explainer=explainer
+        mols=mols,
+        attrs_mol=attrs_mol,
+        explain_algorithm=explain_algorithm,
+        explainer=explainer,
+        model_name=model._name,
+        model_number=int(model_number),
     )
 
     # Save the node masks to a JSON file
     with open(explanation_file, "w") as f:
         json.dump(node_masks, f, indent=4)
+
+    node_masks = node_masks[model._name][model_number]
 
     # Check the selected feature for explanation
     if explain_feature != "All Features":
@@ -172,7 +216,9 @@ def explain_model(
                     f"New global max value found: {max_val:.3f} for molecule {mol.idx} with algorithm {explain_algorithm}"
                 )
 
-    frags_importances = get_fragment_importance(mols, node_masks, explain_algorithm)
+    frags_importances = get_fragment_importance(
+        mols=mols, node_masks=node_masks, explain_algorithm=explain_algorithm
+    )
 
     fig = plot_attribution_distribution(
         attribution_dict=frags_importances, neg_color=neg_color, pos_color=pos_color
@@ -182,23 +228,7 @@ def explain_model(
     plot_mols = filter_dataset_by_ids(dataset, plot_mols)
 
     for mol in plot_mols:
-        st.write(
-            model(
-                x=mol.x,
-                edge_index=mol.edge_index,
-                edge_attr=mol.edge_attr,
-                monomer_weight=mol.weight_monomer,
-            )
-        )
-        st.write(
-            explainer.get_prediction(
-                x=mol.x,
-                edge_index=mol.edge_index,
-                edge_attr=mol.edge_attr,
-                monomer_weight=mol.weight_monomer,
-                batch_index=None,
-            )
-        )
+
         container = st.container(border=True, key=f"mol_{mol.idx}_container")
         names = mol_names.get(mol.idx, None)
         masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
@@ -245,12 +275,16 @@ def explain_model(
 
 
 def calculate_attributions(
-    mols: list, attrs_mol: dict, explain_algorithm: ExplainAlgorithms, explainer: Explainer
+    mols: list,
+    attrs_mol: dict,
+    explain_algorithm: ExplainAlgorithms,
+    explainer: Explainer,
+    model_name: str,
+    model_number: int,
 ):
     node_masks = {}
 
     for mol in mols:
-
         mol_idx = mol.idx
 
         if (
@@ -273,9 +307,10 @@ def calculate_attributions(
                 .tolist()
             )
 
-        if mol_idx not in node_masks:
-            node_masks[mol_idx] = {}
-        node_masks[mol_idx][explain_algorithm] = node_mask
+        # Insert in nested structure
+        node_masks.setdefault(model_name, {}).setdefault(model_number, {}).setdefault(mol_idx, {})[
+            explain_algorithm
+        ] = node_mask
 
     return node_masks
 
@@ -292,3 +327,62 @@ def get_node_feat_vector_size(node_features: dict) -> dict:
         wildcard_feat_size = int(value[AtomBondDescriptorDictKeys.Wildcard])
         lengths_dict[key] = allowed_features_size + wildcard_feat_size
     return lengths_dict
+
+
+def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> np.ndarray:
+    """
+    Get graph embeddings for the dataset using the provided model.
+
+    Args:
+        dataset (CustomPolymerGraph): The dataset containing graph data.
+        model: The model used to generate embeddings.
+
+    Returns:
+        np.ndarray: An array of graph embeddings.
+    """
+    loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
+    embeddings = []
+    idx = []
+
+    for batch in loader:
+        with torch.no_grad():
+            embedding = model.get_graph_embedding(
+                x=batch.x,
+                edge_index=batch.edge_index,
+                edge_attr=batch.edge_attr,
+                batch_index=batch.batch,
+                monomer_weight=batch.weight_monomer,
+            )
+            embeddings.append(embedding.cpu().numpy())
+            idx.append(batch.idx)
+
+    idx = np.array(idx).flatten().tolist()
+    embeddings = pd.DataFrame(np.concatenate(embeddings, axis=0), index=idx)
+
+    return embeddings
+
+
+def plot_projection_embeddings(
+    tsne_embeddings: np.ndarray, labels: list = None, cmap="blues"
+) -> plt.Figure:
+    """
+    Plot projection of embeddings of the dataset in 2 dimensional space.
+
+    Args:
+        embeddings (np.ndarray): The graph embeddings to plot.
+        labels (list, optional): Labels for coloring the points. Defaults to None.
+    """
+
+    fig = plt.figure(figsize=(10, 8), dpi=400)
+    if labels is not None:
+        scatter = plt.scatter(tsne_embeddings[:, 0], tsne_embeddings[:, 1], c=labels, cmap=cmap)
+        plt.colorbar(scatter)
+    else:
+        plt.scatter(tsne_embeddings[:, 0], tsne_embeddings[:, 1])
+
+    plt.title("Projection of Graph Embeddings")
+    plt.xlabel("Component 1")
+    plt.ylabel("Component 2")
+    plt.grid()
+
+    return fig

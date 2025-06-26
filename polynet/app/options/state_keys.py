@@ -119,9 +119,11 @@ class ExplainModelStateKeys(StrEnum):
     Enum for the keys used in the state of the ExplainModel component.
     """
 
+    ExplainModels = "ExplainModels"
     ExplainModel = "ExplainModel"
     ExplainSet = "ExplainSet"
     ExplainIDSelector = "ExplainIDSelector"
+    ExplainManuallySelector = "ExplainManuallySelector"
     PlotIDSelector = "PlotIDSelector"
     SetMolName = "SetMolName"
     ExplainAlgorithm = "ExplainAlgorithm"
@@ -130,6 +132,21 @@ class ExplainModelStateKeys(StrEnum):
     PosColorPlots = "PosColorPlots"
     CutoffSelector = "CutoffSelector"
     NormalisationMethodSelector = "NormalisationMethodSelector"
+
+
+class ProjectionPlotStateKeys(StrEnum):
+    CreateProjectionPlot = "CreateProjectionPlot"
+    ModelForProjections = "ModelForProjections"
+    DimensionReductionMethod = "DimensionReductionMethod"
+    tSNEPerplexity = "tSNEPerplexity"
+    ColourProjectionBy = "ColourProjectionBy"
+    ProjectionColourMap = "ProjectionColourMap"
+    ProjectionDescriptorSelector = "ProjectionDescriptorSelector"
+    PlotProjection = "PlotProjection"
+    PlotProjectionSet = "PlotProjectionSet"
+    PlotProjectionMols = "PlotProjectionMols"
+    ProjectionData = "ProjectionData"
+    ProjectionManualSelection = "ProjectionManualSelection"
 
 
 class AnalyseResultsStateKeys(StrEnum):
