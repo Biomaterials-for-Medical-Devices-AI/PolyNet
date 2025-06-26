@@ -119,6 +119,7 @@ class ExplainModelStateKeys(StrEnum):
     Enum for the keys used in the state of the ExplainModel component.
     """
 
+    ExplainModels = "ExplainModels"
     ExplainModel = "ExplainModel"
     ExplainSet = "ExplainSet"
     ExplainIDSelector = "ExplainIDSelector"
