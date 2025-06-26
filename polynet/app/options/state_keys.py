@@ -123,6 +123,7 @@ class ExplainModelStateKeys(StrEnum):
     ExplainModel = "ExplainModel"
     ExplainSet = "ExplainSet"
     ExplainIDSelector = "ExplainIDSelector"
+    ExplainManuallySelector = "ExplainManuallySelector"
     PlotIDSelector = "PlotIDSelector"
     SetMolName = "SetMolName"
     ExplainAlgorithm = "ExplainAlgorithm"
@@ -145,6 +146,7 @@ class ProjectionPlotStateKeys(StrEnum):
     PlotProjectionSet = "PlotProjectionSet"
     PlotProjectionMols = "PlotProjectionMols"
     ProjectionData = "ProjectionData"
+    ProjectionManualSelection = "ProjectionManualSelection"
 
 
 class AnalyseResultsStateKeys(StrEnum):
