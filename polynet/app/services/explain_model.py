@@ -60,24 +60,28 @@ def get_cmap(neg_color="#40bcde", pos_color="#e64747"):
 def analyse_graph_embeddings(
     model,
     dataset: CustomPolymerGraph,
-    data: pd.DataFrame,
+    labels: pd.Series,
+    mols_to_plot: list,
     reduction_method: str,
     reduction_parameters: dict,
     colormap: str,
-    colour_by: str,  # Default to 'y' for labels
 ):
 
     embeddings = get_graph_embeddings(dataset, model)
 
-    labels = data[colour_by]
-
     if reduction_method == DimensionalityReduction.tSNE:
         tsne = TSNE(n_components=2, **reduction_parameters)
-        reduced_embeddings = tsne.fit_transform(embeddings)
+        reduced = tsne.fit_transform(embeddings)
 
     elif reduction_method == DimensionalityReduction.PCA:
         pca = PCA(n_components=2, **reduction_parameters)
-        reduced_embeddings = pca.fit_transform(embeddings)
+        reduced = pca.fit_transform(embeddings)
+
+    reduced_embeddings = pd.DataFrame(reduced, index=embeddings.index, columns=["Dim1", "Dim2"])
+    reduced_embeddings = reduced_embeddings.loc[mols_to_plot]
+    reduced_embeddings = reduced_embeddings.to_numpy()
+
+    labels = labels.loc[mols_to_plot]
 
     projection_fig = plot_projection_embeddings(reduced_embeddings, labels=labels, cmap=colormap)
     st.pyplot(projection_fig, use_container_width=True)
@@ -353,7 +357,7 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> np.ndarray:
             embeddings.append(embedding.cpu().numpy())
             idx.append(batch.idx)
 
-    idx = np.array(idx)
+    idx = np.array(idx).flatten().tolist()
     embeddings = pd.DataFrame(np.concatenate(embeddings, axis=0), index=idx)
 
     return embeddings
