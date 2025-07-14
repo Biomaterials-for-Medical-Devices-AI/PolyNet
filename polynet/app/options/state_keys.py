@@ -135,6 +135,9 @@ class ExplainModelStateKeys(StrEnum):
 
 
 class PredictPageStateKeys(StrEnum):
+    PredictData = "PredictData"
+    CompareTarget = "CompareTarget"
+    SelectAllModels = "SelectAllModels"
     SelectModel = "SelectModel"
 
 
