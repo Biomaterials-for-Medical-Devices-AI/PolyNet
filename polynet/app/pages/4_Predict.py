@@ -43,6 +43,7 @@ from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.app.options.state_keys import PredictPageStateKeys
 
 
 def predict(
@@ -53,7 +54,7 @@ def predict(
     representation_options: RepresentationOptions,
 ):
 
-    dataset_name = st.session_state["prediction_data"].name
+    dataset_name = st.session_state[PredictPageStateKeys.PredictData].name
 
     path_to_data = gnn_raw_data_predict_path(
         experiment_path=experiment_path, file_name=dataset_name
@@ -116,7 +117,7 @@ def predict(
                 mean_prediction, left_index=True, right_index=True, how="left"
             )
 
-    if st.session_state.get("compare_with_target", False):
+    if st.session_state.get(PredictPageStateKeys.CompareTarget, False):
 
         target_col = df[data_options.target_variable_col]
 
@@ -219,7 +220,7 @@ if experiment_name:
     csv_file = st.file_uploader(
         "Upload a CSV file with SMILES strings for prediction",
         type="csv",
-        key="prediction_data",
+        key=PredictPageStateKeys.PredictData,
         help="Upload a CSV file containing SMILES strings for which you want to make predictions.",
     )
 
@@ -259,7 +260,7 @@ if experiment_name:
         if data_options.target_variable_col in df.columns:
             if st.checkbox(
                 "Would you like to compare the predictions with the target variable?",
-                key="compare_with_target",
+                key=PredictPageStateKeys.CompareTarget,
                 value=True,
                 help="If checked, the predictions will be compared with the target variable in the uploaded data.",
             ):
@@ -307,7 +308,6 @@ if experiment_name:
                             ),
                         )
                     )
-                pass
 
         gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
@@ -317,8 +317,16 @@ if experiment_name:
             if model.is_file() and model.suffix == ".pt"
         ]
 
+        if st.toggle("Select all models", key=PredictPageStateKeys.SelectAllModels):
+            default_models = gnn_models
+        else:
+            default_models = None
+
         models = st.multiselect(
-            "Select a GNN Model to predict with", options=sorted(gnn_models), key="model"
+            "Select a GNN Model to predict with",
+            options=sorted(gnn_models),
+            key="model",
+            default=default_models,
         )
 
         if models:
