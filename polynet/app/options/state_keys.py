@@ -134,6 +134,10 @@ class ExplainModelStateKeys(StrEnum):
     NormalisationMethodSelector = "NormalisationMethodSelector"
 
 
+class PredictPageStateKeys(StrEnum):
+    SelectModel = "SelectModel"
+
+
 class ProjectionPlotStateKeys(StrEnum):
     CreateProjectionPlot = "CreateProjectionPlot"
     ModelForProjections = "ModelForProjections"
