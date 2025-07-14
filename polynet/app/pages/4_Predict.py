@@ -43,6 +43,7 @@ from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.app.options.state_keys import PredictPageStateKeys
 
 
 def predict(
@@ -307,7 +308,6 @@ if experiment_name:
                             ),
                         )
                     )
-                pass
 
         gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
@@ -317,8 +317,16 @@ if experiment_name:
             if model.is_file() and model.suffix == ".pt"
         ]
 
+        if st.toggle("Select all models"):
+            default_models = gnn_models
+        else:
+            default_models = None
+
         models = st.multiselect(
-            "Select a GNN Model to predict with", options=sorted(gnn_models), key="model"
+            "Select a GNN Model to predict with",
+            options=sorted(gnn_models),
+            key="model",
+            default=default_models,
         )
 
         if models:
