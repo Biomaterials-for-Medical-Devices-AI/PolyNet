@@ -23,10 +23,8 @@ def train_TML_models():
         pass
 
 
-def train_GNN_models_form(representation_opts: RepresentationOptions):
-    # if st.checkbox(
-    #     "Train Graph Neural Networks (GNNs)", value=True, key=TrainGNNStateKeys.TrainGNN
-    # ):
+def train_GNN_models_form(representation_opts: RepresentationOptions, problem_type: ProblemTypes):
+
     st.write(
         "Graph Neural Networks (GNNs) are a type of neural network that operates on graph-structured data. They are particularly well-suited for tasks involving molecular structures, such as predicting properties of polymers based on their chemical structure."
     )
@@ -172,6 +170,11 @@ def train_GNN_models_form(representation_opts: RepresentationOptions):
         )
     else:
         st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = ApplyWeightingToGraph.NoWeighting
+
+    if problem_type == ProblemTypes.Classification:
+        st.checkbox(
+            "Apply asymmetric loss function", value=True, key=TrainGNNStateKeys.AsymmetricLoss
+        )
 
     return gnn_conv_params
 
