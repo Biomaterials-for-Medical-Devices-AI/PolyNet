@@ -34,6 +34,7 @@ from polynet.options.enums import (
     Schedulers,
     SplitMethods,
     SplitTypes,
+    ProblemTypes,
 )
 from polynet.utils.model_training import predict_network, train_model
 
@@ -121,8 +122,10 @@ def train_network(
                 Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
             )
 
-            if model.problem_type == "classification" and train_gnn_options.AsymmetricLoss:
-                print(data[data_options.target_variable_col].to_numpy())
+            if (
+                model.problem_type == ProblemTypes.Classification
+                and train_gnn_options.AsymmetricLoss
+            ):
                 weights = compute_class_weights(
                     labels=data[data_options.target_variable_col].to_numpy(),
                     num_classes=int(data_options.num_classes),
