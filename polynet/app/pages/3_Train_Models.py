@@ -75,6 +75,7 @@ def train_models(
         GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
         ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
         AsymmetricLoss=st.session_state.get(TrainGNNStateKeys.AsymmetricLoss, False),
+        ImbalanceStrength=st.session_state.get(TrainGNNStateKeys.ImbalanceStrength, 0.0),
     )
 
     general_experiment_options = GeneralConfigOptions(
