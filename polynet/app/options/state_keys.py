@@ -79,6 +79,7 @@ class TrainGNNStateKeys(StrEnum):
     GNNLearningRate = "GNNLearningRate"
     GNNBatchSize = "GNNBatchSize"
     GNNMonomerWeighting = "GNNMonomerWeighting"
+    AsymmetricLoss = "AsymmetricLoss"
 
     # Specific GNN Hyperparameters
 
