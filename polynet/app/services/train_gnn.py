@@ -19,7 +19,13 @@ from polynet.app.utils import (
     get_score_column_name,
     get_true_label_column_name,
 )
-from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
+from polynet.call_methods import (
+    create_network,
+    make_loss,
+    make_optimizer,
+    make_scheduler,
+    compute_class_weights,
+)
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     DataSets,
@@ -114,7 +120,17 @@ def train_network(
             scheduler = make_scheduler(
                 Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
             )
-            loss_fn = make_loss(model.problem_type)
+
+            if model.problem_type == "classification" and train_gnn_options.AsymmetricLoss:
+                print(data[data_options.target_variable_col].to_numpy())
+                weights = compute_class_weights(
+                    labels=data[data_options.target_variable_col].to_numpy(),
+                    num_classes=int(data_options.num_classes),
+                )
+            else:
+                weights = None
+
+            loss_fn = make_loss(model.problem_type, asymmetric_loss_weights=weights)
 
             model = train_model(
                 model=model,
