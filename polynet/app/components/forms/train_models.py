@@ -172,9 +172,19 @@ def train_GNN_models_form(representation_opts: RepresentationOptions, problem_ty
         st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = ApplyWeightingToGraph.NoWeighting
 
     if problem_type == ProblemTypes.Classification:
-        st.checkbox(
+        if st.checkbox(
             "Apply asymmetric loss function", value=True, key=TrainGNNStateKeys.AsymmetricLoss
-        )
+        ):
+            st.slider(
+                "Set the imbalance strength",
+                min_value=0,
+                max_value=1,
+                value=0.5,
+                step=0.1,
+                format=float,
+                key=TrainGNNStateKeys.ImbalanceStrength,
+                help="Controls how much strength to apply to the asymmetric loss function. A value of 1 means that weighting will be given by the inverse of the total count of each label, while a value of 0 means that each class will be weighted equally.",
+            )
 
     return gnn_conv_params
 
