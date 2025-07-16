@@ -29,7 +29,7 @@ from polynet.app.options.file_paths import (
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.state_keys import ViewExperimentKeys
+from polynet.app.options.state_keys import PredictPageStateKeys, ViewExperimentKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
@@ -43,7 +43,6 @@ from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
-from polynet.app.options.state_keys import PredictPageStateKeys
 
 
 def predict(

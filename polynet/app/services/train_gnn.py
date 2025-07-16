@@ -20,21 +20,21 @@ from polynet.app.utils import (
     get_true_label_column_name,
 )
 from polynet.call_methods import (
+    compute_class_weights,
     create_network,
     make_loss,
     make_optimizer,
     make_scheduler,
-    compute_class_weights,
 )
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     DataSets,
     Optimizers,
+    ProblemTypes,
     Results,
     Schedulers,
     SplitMethods,
     SplitTypes,
-    ProblemTypes,
 )
 from polynet.utils.model_training import predict_network, train_model
 
