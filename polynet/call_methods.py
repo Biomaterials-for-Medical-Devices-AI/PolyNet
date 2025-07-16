@@ -1,3 +1,5 @@
+import numpy as np
+import torch
 import torch.nn as nn
 from torch.optim import SGD, Adam, RMSprop
 from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlateau, StepLR
@@ -88,10 +90,30 @@ def make_scheduler(scheduler, optimizer, step_size, gamma, min_lr):
     return scheduler
 
 
-def make_loss(problem_type, mae=None):
-    if problem_type == "classification":
-        loss = nn.CrossEntropyLoss()
-    elif problem_type == "regression" and mae is None:
+def compute_class_weights(
+    labels: list,
+    num_classes: int,
+    imbalance_strength: float = 1.0,  # 0 = no correction, 1 = full correction
+) -> torch.Tensor:
+    counts = np.bincount(labels, minlength=num_classes).astype(float)
+
+    # Uniform weights (no correction)
+    uniform_weights = np.ones(num_classes) / num_classes
+
+    # Inverse frequency weights (full correction)
+    inverse_weights = 1.0 / (counts + 1e-8)
+    inverse_weights /= inverse_weights.sum()
+
+    # Interpolate between uniform and inverse weights
+    weights = (1 - imbalance_strength) * uniform_weights + imbalance_strength * inverse_weights
+
+    return torch.tensor(weights, dtype=torch.float32)
+
+
+def make_loss(problem_type, asymmetric_loss_weights=None):
+    if problem_type == ProblemTypes.Classification:
+        loss = nn.CrossEntropyLoss(asymmetric_loss_weights)
+    elif problem_type == ProblemTypes.Regression:
         loss = nn.MSELoss()
     else:
         raise ValueError(f"Problem type {problem_type} not supported")

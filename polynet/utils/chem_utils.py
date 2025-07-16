@@ -1,5 +1,7 @@
+from collections import defaultdict
 from typing import Optional
 
+import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
 
@@ -85,3 +87,54 @@ def fragment_and_match(smiles):
             matches[frag_smiles] = [list(match) for match in substruct_matches]
 
     return matches
+
+
+def count_atom_types(df: pd.DataFrame, col_name: str) -> dict:
+    """
+    Count how many molecules contain at least one atom of each type in a SMILES column.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing SMILES strings.
+        col_name (str): Name of the column containing SMILES.
+
+    Returns:
+        dict: Mapping from atom type (str) to count of molecules containing it.
+    """
+    atom_counts = defaultdict(int)
+
+    for smiles in df[col_name]:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue  # skip invalid SMILES
+
+        atom_symbols = {atom.GetSymbol() for atom in mol.GetAtoms()}
+        for symbol in atom_symbols:
+            atom_counts[symbol] += 1
+
+    return dict(atom_counts)
+
+
+def filter_by_atom_type(df: pd.DataFrame, col_name: str, atom_symbol: str) -> pd.DataFrame:
+    """
+    Return rows where the SMILES contains at least one atom of the specified type.
+
+    Args:
+        df (pd.DataFrame): DataFrame with SMILES strings.
+        col_name (str): Name of the column with SMILES.
+        atom_symbol (str): Atom symbol to search for (e.g., 'P', 'N', 'O').
+
+    Returns:
+        pd.DataFrame: Filtered DataFrame with matching rows.
+    """
+    mask = []
+
+    for smiles in df[col_name]:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            mask.append(False)
+            continue
+
+        symbols = {atom.GetSymbol() for atom in mol.GetAtoms()}
+        mask.append(atom_symbol in symbols)
+
+    return df[mask].copy()

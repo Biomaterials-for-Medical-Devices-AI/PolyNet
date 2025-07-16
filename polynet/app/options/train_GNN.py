@@ -15,3 +15,5 @@ class TrainGNNOptions:
     GNNLearningRate: float
     GNNBatchSize: int
     ApplyMonomerWeighting: ApplyWeightingToGraph
+    AsymmetricLoss: bool = False
+    ImbalanceStrength: float = 0.0

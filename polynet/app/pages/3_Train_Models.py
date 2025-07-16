@@ -74,6 +74,8 @@ def train_models(
         GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
         GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
         ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
+        AsymmetricLoss=st.session_state.get(TrainGNNStateKeys.AsymmetricLoss, False),
+        ImbalanceStrength=st.session_state.get(TrainGNNStateKeys.ImbalanceStrength, 0.0),
     )
 
     general_experiment_options = GeneralConfigOptions(
@@ -329,7 +331,9 @@ if experiment_name:
 
     if gnn_raw_data_path(experiment_path=experiment_path).exists():
 
-        gnn_conv_params = train_GNN_models_form(representation_opts=representation_opts)
+        gnn_conv_params = train_GNN_models_form(
+            representation_opts=representation_opts, problem_type=data_opts.problem_type
+        )
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."
