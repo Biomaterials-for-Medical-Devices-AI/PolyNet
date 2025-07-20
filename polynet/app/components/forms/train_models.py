@@ -14,13 +14,60 @@ from polynet.options.enums import (
     ProblemTypes,
     SplitMethods,
     SplitTypes,
+    TransformDescriptors,
 )
 
 
-def train_TML_models():
+def train_TML_models(problem_type: ProblemTypes):
 
-    if st.checkbox("Train traditional machine learning models", value=True, key=TrainTMLStateKeys):
-        pass
+    st.write(
+        "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
+    )
+
+    st.markdown(
+        """
+        ### Select the machine learning algorithms you want to train
+        """
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if problem_type == ProblemTypes.Regression:
+
+            if st.checkbox(
+                "Linear Regression", value=True, key=TrainTMLStateKeys.TrainLinearRegression
+            ):
+                pass
+
+        elif problem_type == ProblemTypes.Classification:
+
+            if st.checkbox(
+                "Logistic Regression", value=True, key=TrainTMLStateKeys.TrainLogisticRegression
+            ):
+                pass
+
+        if st.checkbox("Random Forest", value=True, key=TrainTMLStateKeys.TrainRandomForest):
+            pass
+
+    with col2:
+        if st.checkbox(
+            "Support Vector Machine", value=True, key=TrainTMLStateKeys.TrainSupportVectorMachine
+        ):
+            pass
+        if st.checkbox("XGBoost", value=True, key=TrainTMLStateKeys.TrainXGBoost):
+            pass
+
+    st.selectbox(
+        "Apply transformation to the independent variables",
+        options=[
+            TransformDescriptors.NoTransformation,
+            TransformDescriptors.StandardScaler,
+            TransformDescriptors.MinMaxScaler,
+        ],
+        default=None,
+        key=TrainTMLStateKeys.TrasformFeatures,
+    )
 
 
 def train_GNN_models_form(representation_opts: RepresentationOptions, problem_type: ProblemTypes):
