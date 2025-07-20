@@ -37,7 +37,7 @@ def calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_descriptors)
 
 def merge_weighted(rdkit_df_dict, data, weights_col, data_index):
     weighted = {
-        col: df.multiply(data[weights_col[col]], axis=0) for col, df in rdkit_df_dict.items()
+        col: df.multiply(data[weights_col[col]], axis=0) / 100 for col, df in rdkit_df_dict.items()
     }
     combined = sum(weighted.values())
     return pd.concat([data_index, combined], axis=1)
