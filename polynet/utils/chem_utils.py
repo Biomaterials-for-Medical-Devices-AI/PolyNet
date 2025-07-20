@@ -4,6 +4,7 @@ from typing import Optional
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
+
 from polynet.options.enums import AtomFeatures, BondFeatures
 
 
