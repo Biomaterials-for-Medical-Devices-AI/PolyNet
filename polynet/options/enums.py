@@ -173,3 +173,23 @@ class DimensionalityReduction(StrEnum):
     tSNE = "t-SNE"
     Perplexity = "perplexity"
     PCA = "PCA"
+
+
+class TradtionalMLModels(StrEnum):
+    LinearRegression = "Linear Regression"
+    LogisticRegression = "Logistic Regression"
+    RandomForest = "Random Forest"
+    XGBoost = "XGBoost"
+    SupportVectorMachine = "Support Vector Machine"
+    KNeighborsClassifier = "K-Neighbors Classifier"
+    DecisionTreeClassifier = "Decision Tree Classifier"
+
+
+class TransformDescriptors(StrEnum):
+    NoTransformation = "No Transformation"
+    StandardScaler = "Standard Scaler"
+    MinMaxScaler = "Min-Max Scaler"
+    RobustScaler = "Robust Scaler"
+    PowerTransformer = "Power Transformer"
+    QuantileTransformer = "Quantile Transformer"
+    Normalizer = "Normalizer"
