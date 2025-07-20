@@ -64,6 +64,14 @@ class PlotOptionsStateKeys(StrEnum):
 class TrainTMLStateKeys(StrEnum):
     TrainTML = "TrainTML"
 
+    TrainLinearRegression = "LinearRegression"
+    TrainLogisticRegression = "LogisticRegression"
+    TrainRandomForest = "RandomForest"
+    TrainXGBoost = "XGBoost"
+    TrainSupportVectorMachine = "SupportVectorMachine"
+
+    TrasformFeatures = "TrasformFeatures"
+
 
 class TrainGNNStateKeys(StrEnum):
     """
