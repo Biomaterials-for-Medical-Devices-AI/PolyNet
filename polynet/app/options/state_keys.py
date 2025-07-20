@@ -40,6 +40,7 @@ class DescriptorCalculationStateKeys(StrEnum):
     IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
     AtomProperties = "AtomProperties"
     BondProperties = "BondProperties"
+    ShowFrequency = "ShowFrequency"
 
 
 class PlotOptionsStateKeys(StrEnum):
