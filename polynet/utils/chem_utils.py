@@ -5,6 +5,8 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
 
+from polynet.options.enums import AtomFeatures, BondFeatures
+
 
 def check_smiles(smiles: str) -> bool:
     """
@@ -89,29 +91,76 @@ def fragment_and_match(smiles):
     return matches
 
 
-def count_atom_types(df: pd.DataFrame, col_name: str) -> dict:
+def count_atom_property_frequency(
+    df: pd.DataFrame, col_name: str, property: AtomFeatures
+) -> pd.DataFrame:
     """
-    Count how many molecules contain at least one atom of each type in a SMILES column.
+    Count how many molecules contain at least one atom with each unique property value.
 
     Args:
         df (pd.DataFrame): DataFrame containing SMILES strings.
-        col_name (str): Name of the column containing SMILES.
+        col_name (str): Column name with SMILES.
+        property (AtomFeatures): Atom-level property to analyze.
 
     Returns:
-        dict: Mapping from atom type (str) to count of molecules containing it.
+        pd.DataFrame: Frequency of molecules containing atoms with each unique property value.
     """
-    atom_counts = defaultdict(int)
+    if not hasattr(Chem.Atom, property):
+        raise ValueError(f"{property} is not a valid Atom property method in RDKit")
+
+    counts = defaultdict(int)
 
     for smiles in df[col_name]:
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
-            continue  # skip invalid SMILES
+            continue
 
-        atom_symbols = {atom.GetSymbol() for atom in mol.GetAtoms()}
-        for symbol in atom_symbols:
-            atom_counts[symbol] += 1
+        # Collect all unique values of the property in this molecule
+        values = set()
+        for atom in mol.GetAtoms():
+            val = getattr(atom, property)()
+            values.add(val)
 
-    return dict(atom_counts)
+        # Count each unique value once per molecule
+        for val in values:
+            counts[val] += 1
+
+    return counts
+
+
+def count_bond_property_frequency(df: pd.DataFrame, col_name: str, property: BondFeatures) -> dict:
+    """
+    Count how many molecules contain at least one bond with each unique property value.
+
+    Args:
+        df (pd.DataFrame): DataFrame containing SMILES strings.
+        col_name (str): Column name with SMILES.
+        property (BondFeatures): Bond-level property to analyze.
+
+    Returns:
+        dict: Mapping from property value to count of molecules containing it.
+    """
+    if not hasattr(Chem.Bond, property):
+        raise ValueError(f"{property} is not a valid Bond property method in RDKit")
+
+    counts = defaultdict(int)
+
+    for smiles in df[col_name]:
+        mol = Chem.MolFromSmiles(smiles)
+        if mol is None:
+            continue
+
+        # Collect all unique values of the bond property in this molecule
+        values = set()
+        for bond in mol.GetBonds():
+            val = getattr(bond, property)()
+            values.add(val)
+
+        # Count each unique value once per molecule
+        for val in values:
+            counts[val] += 1
+
+    return counts
 
 
 def filter_by_atom_type(df: pd.DataFrame, col_name: str, atom_symbol: str) -> pd.DataFrame:

@@ -96,16 +96,17 @@ def compute_class_weights(
     imbalance_strength: float = 1.0,  # 0 = no correction, 1 = full correction
 ) -> torch.Tensor:
     counts = np.bincount(labels, minlength=num_classes).astype(float)
+    total = counts.sum()
 
-    # Uniform weights (no correction)
-    uniform_weights = np.ones(num_classes) / num_classes
+    # Baseline: match PyTorch's default behavior (sample-averaged)
+    freq_weights = counts / total  # proportion of each class in dataset
 
-    # Inverse frequency weights (full correction)
+    # Full correction: inverse frequency
     inverse_weights = 1.0 / (counts + 1e-8)
     inverse_weights /= inverse_weights.sum()
 
-    # Interpolate between uniform and inverse weights
-    weights = (1 - imbalance_strength) * uniform_weights + imbalance_strength * inverse_weights
+    # Interpolation
+    weights = (1 - imbalance_strength) * freq_weights + imbalance_strength * inverse_weights
 
     return torch.tensor(weights, dtype=torch.float32)
 

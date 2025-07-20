@@ -236,7 +236,7 @@ if experiment_name:
 
         df = pd.read_csv(csv_file)
         st.write("Preview of the uploaded data:")
-        st.write(df.head())
+        st.write(df)
 
         for smiles_col in smiles_cols:
             if smiles_col not in df.columns:

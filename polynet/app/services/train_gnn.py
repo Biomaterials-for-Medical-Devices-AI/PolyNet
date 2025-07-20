@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import streamlit as st
 import torch
 from torch_geometric.loader import DataLoader
 
@@ -129,6 +130,7 @@ def train_network(
                 weights = compute_class_weights(
                     labels=data[data_options.target_variable_col].to_numpy(),
                     num_classes=int(data_options.num_classes),
+                    imbalance_strength=train_gnn_options.ImbalanceStrength,
                 )
             else:
                 weights = None

@@ -1,13 +1,12 @@
 import pandas as pd
 import streamlit as st
 
-from polynet.app.components.forms.plot_customiser import get_plotting_options
-from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
+from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.app.utils import check_smiles_cols
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.utils.chem_utils import canonicalise_smiles
 
 
 def select_data_form():
@@ -157,21 +156,21 @@ def select_data_form():
                         key=f"{CreateExperimentStateKeys.ClassNames}_{vals}",
                         help="This name will be used to create the plots and log information.",
                     )
-                    class_names[int(vals)] = class_name
+                    class_names[str(vals)] = class_name
 
                 st.markdown("**Label Distribution**")
-                st.pyplot(
-                    show_label_distribution(
-                        data=df,
-                        target_variable=target_col,
-                        title=(
-                            f"Label Distribution for {target_name}"
-                            if target_name
-                            else "Label Distribution"
-                        ),
-                        class_names=class_names,
-                    )
+
+                fig = show_label_distribution(
+                    data=df,
+                    target_variable=target_col,
+                    title=(
+                        f"Label Distribution for {target_name}"
+                        if target_name
+                        else "Label Distribution"
+                    ),
+                    class_names=class_names,
                 )
+                st.pyplot(fig)
 
                 return class_names
 

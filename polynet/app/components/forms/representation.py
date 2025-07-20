@@ -12,6 +12,7 @@ from polynet.options.enums import (
     BondFeatures,
     DescriptorMergingMethods,
 )
+from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):
@@ -243,16 +244,40 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
         if selected_atomic_properties:
             total_num_node_feats = 0
             for prop in selected_atomic_properties:
+
+                st.markdown(f"#### `{prop}` settings")
+
+                if st.checkbox(
+                    f"Show frequencies of `{prop}` in the database",
+                    key=f"{DescriptorCalculationStateKeys.ShowFrequency}_{prop}",
+                ):
+                    st.write(f"### Distribution of `{prop}`")
+                    cols = st.columns(2)
+                    for i, smiles_col in enumerate(data_opts.smiles_cols):
+
+                        residue = int(i % 2)
+
+                        with cols[residue]:
+
+                            prop_counts = count_atom_property_frequency(df, smiles_col, prop)
+                            st.write(f"### Column `{smiles_col}`")
+                            df_plot = pd.DataFrame.from_dict(
+                                prop_counts, orient="index", columns=["Frequency"]
+                            )
+                            df_plot.index.name = str(prop)
+                            df_plot = df_plot.sort_index()
+                            st.bar_chart(df_plot, color="#ff3c00")
+
                 node_feats_config[prop] = {}
                 if atom_properties[prop]:
 
                     selected_allowed_atom_properties = st.segmented_control(
-                        label=f"Select allowable values for the property {prop}",
+                        label=f"Select allowable values for the property `{prop}`",
                         options=atom_properties[prop][AtomBondDescriptorDictKeys.Options],
                         default=atom_properties[prop].get(AtomBondDescriptorDictKeys.Default, []),
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.AtomProperties}_{prop}",
-                        help=f"Choose whether to include the {prop} property in the graph representation.",
+                        help=f"Choose whether to include the `{prop}` property in the graph representation.",
                     )
 
                     node_feats_config[prop][
@@ -262,18 +287,21 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     total_num_node_feats += len(selected_allowed_atom_properties)
 
                     node_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard] = st.toggle(
-                        label=f"Include wildcard placeholders for {prop}",
+                        label=f"Include wildcard placeholders for `{prop}`",
                         key=f"{DescriptorCalculationStateKeys.AtomProperties}_wildcard_{prop}",
-                        help=f"Toggle to include wildcard placeholders for the {prop} property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
+                        help=f"Toggle to include wildcard placeholders for the `{prop}` property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
                     )
                     if node_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard]:
                         total_num_node_feats += 1
                 else:
+                    st.write(
+                        f"The possible values for the property `{prop}` are either `0` or `1` and cannot be changed. If you think this is an error, please raise an issue."
+                    )
                     total_num_node_feats += (
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"Total number of node features selected: {total_num_node_feats}")
+            st.markdown(f"**Total number of node features selected:** {total_num_node_feats}")
 
         st.markdown("#### Bond Properties")
 
@@ -300,16 +328,40 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
         if selected_bond_properties:
             total_num_edge_feats = 0
             for prop in selected_bond_properties:
+
+                st.markdown(f"#### `{prop}` settings")
+
+                if st.checkbox(
+                    f"Show frequencies of `{prop}` in the database",
+                    key=f"{DescriptorCalculationStateKeys.ShowFrequency}_{prop}_bond",
+                ):
+                    st.write(f"### Distribution of `{prop}`")
+                    cols = st.columns(2)
+                    for i, smiles_col in enumerate(data_opts.smiles_cols):
+
+                        residue = int(i % 2)
+
+                        with cols[residue]:
+
+                            prop_counts = count_bond_property_frequency(df, smiles_col, prop)
+                            st.write(f"### Column `{smiles_col}`")
+                            df_plot = pd.DataFrame.from_dict(
+                                prop_counts, orient="index", columns=["Frequency"]
+                            )
+                            df_plot.index.name = str(prop)
+                            df_plot = df_plot.sort_index()
+                            st.bar_chart(df_plot, color="#ff3c00")
+
                 edge_feats_config[prop] = {}
                 if bond_features[prop]:
 
                     selected_allowed_bond_properties = st.segmented_control(
-                        label=f"Select allowable values for the property {prop}",
+                        label=f"Select allowable values for the property `{prop}`",
                         options=bond_features[prop][AtomBondDescriptorDictKeys.Options],
                         default=bond_features[prop].get(AtomBondDescriptorDictKeys.Default, []),
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.BondProperties}_{prop}",
-                        help=f"Choose whether to include the {prop} property in the graph representation.",
+                        help=f"Choose whether to include the `{prop}` property in the graph representation.",
                     )
 
                     edge_feats_config[prop][
@@ -319,20 +371,23 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     total_num_edge_feats += len(selected_allowed_bond_properties)
 
                     edge_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard] = st.toggle(
-                        label="Include wildcard placeholders for this property",
+                        label=f"Include wildcard placeholders for `{prop}`",
                         key=f"{DescriptorCalculationStateKeys.BondProperties}_wildcard_{prop}",
-                        help=f"Toggle to include wildcard placeholders for the {prop} property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
+                        help=f"Toggle to include wildcard placeholders for the `{prop}` property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
                     )
 
                     if edge_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard]:
                         total_num_edge_feats += 1
 
                 else:
+                    st.write(
+                        f"The possible values for the property `{prop}` are either `0` or `1` and cannot be changed. If you think this is an error, please raise an issue."
+                    )
                     total_num_edge_feats += (
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"Total number of edge features selected: {total_num_edge_feats}")
+            st.markdown(f"**Total number of edge features selected:** {total_num_edge_feats}")
 
         if not selected_atomic_properties and not selected_bond_properties:
             st.warning(
