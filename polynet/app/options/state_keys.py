@@ -63,6 +63,7 @@ class PlotOptionsStateKeys(StrEnum):
 
 class TrainTMLStateKeys(StrEnum):
     TrainTML = "TrainTML"
+    PerformHyperparameterTuning = "PerformHyperparameterTuning"
 
     TrainLinearRegression = "LinearRegression"
     TrainLogisticRegression = "LogisticRegression"
