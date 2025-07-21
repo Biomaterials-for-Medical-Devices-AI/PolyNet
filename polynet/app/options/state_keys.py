@@ -67,9 +67,24 @@ class TrainTMLStateKeys(StrEnum):
 
     TrainLinearRegression = "LinearRegression"
     TrainLogisticRegression = "LogisticRegression"
+    LinearRegressionFitIntercept = "LinearRegressionFitIntercept"
+
     TrainRandomForest = "RandomForest"
+    RFNumberEstimators = "RFNumberEstimators"
+    RFMinSamplesSplit = "RFMinSamplesSplit"
+    RFMinSamplesLeaf = "RFMinSamplesLeaf"
+    RFMaxDepth = "RFMaxDepth"
+
     TrainXGBoost = "XGBoost"
+    XGBNumberEstimators = "XGBNumberEstimators"
+    XGBLearningRate = "XGBLearningRate"
+    XGBSubsampleSize = "XGBSubsampleSize"
+    XGBMaxDepth = "XGBMaxDepth"
+
     TrainSupportVectorMachine = "SupportVectorMachine"
+    SVMKernel = "SVMKernel"
+    SVMDegree = "SVMDegree"
+    SVMC = "SVMC"
 
     TrasformFeatures = "TrasformFeatures"
 
