@@ -62,6 +62,7 @@ from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_par
 
 def train_models(
     experiment_name: str,
+    tml_models: dict,
     gnn_conv_params: dict,
     representation_options: RepresentationOptions,
     data_options: DataOptions,
@@ -73,6 +74,7 @@ def train_models(
 
     train_tml_options = TrainTMLOptions(
         TransformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
+        HyperparameterOptimization=st.session_state[TrainTMLStateKeys.PerformHyperparameterTuning],
         TrainLinearRegression=st.session_state.get(TrainTMLStateKeys.TrainLinearRegression, False),
         TrainLogisticRegression=st.session_state.get(
             TrainTMLStateKeys.TrainLogisticRegression, False
@@ -140,6 +142,7 @@ def train_models(
 
     tml_models = train_tml_model(
         train_tml_options=train_tml_options,
+        tml_models=tml_models,
         general_experiment_options=general_experiment_options,
         representation_options=representation_options,
         data_options=data_options,
@@ -147,14 +150,14 @@ def train_models(
         train_val_test_idxs=train_val_test_idxs,
     )
 
-    # gnn_models = train_network(
-    #     train_gnn_options=train_gnn_options,
-    #     general_experiment_options=general_experiment_options,
-    #     experiment_name=experiment_name,
-    #     data_options=data_options,
-    #     representation_options=representation_options,
-    #     train_val_test_idxs=train_val_test_idxs,
-    # )
+    gnn_models = train_network(
+        train_gnn_options=train_gnn_options,
+        general_experiment_options=general_experiment_options,
+        experiment_name=experiment_name,
+        data_options=data_options,
+        representation_options=representation_options,
+        train_val_test_idxs=train_val_test_idxs,
+    )
 
     gnn_models = {}
 
@@ -384,6 +387,7 @@ if experiment_name:
 
         train_models(
             experiment_name=experiment_name,
+            tml_models=tml_models,
             gnn_conv_params=gnn_conv_params,
             representation_options=representation_opts,
             data_options=data_opts,
