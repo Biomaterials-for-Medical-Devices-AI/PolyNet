@@ -65,7 +65,7 @@ def train_TML_models(problem_type: ProblemTypes):
             TransformDescriptors.StandardScaler,
             TransformDescriptors.MinMaxScaler,
         ],
-        default=None,
+        index=0,
         key=TrainTMLStateKeys.TrasformFeatures,
     )
 
