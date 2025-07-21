@@ -113,12 +113,7 @@ def display_model_results(experiment_path, expanded):
         )
 
         if predictions_path.exists():
-            predictions = pd.read_csv(
-                ml_gnn_results_file_path(
-                    experiment_path=experiment_path, file_name="predictions.csv"
-                ),
-                index_col=0,
-            )
+            predictions = pd.read_csv(predictions_path, index_col=0)
             display_predictions(predictions)
 
         metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
