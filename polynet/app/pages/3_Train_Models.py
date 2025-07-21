@@ -46,6 +46,7 @@ from polynet.app.services.model_training import (
     save_plot,
 )
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
+from polynet.app.services.train_tml import train_tml_model
 from polynet.app.utils import (
     ensemble_predictions,
     get_iterator_name,
@@ -71,9 +72,11 @@ def train_models(
     """
 
     train_tml_options = TrainTMLOptions(
-        TrasformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
-        TrainLinearRegression=st.session_state[TrainTMLStateKeys.TrainLinearRegression],
-        TrainLogisticRegression=st.session_state[TrainTMLStateKeys.TrainLogisticRegression],
+        TransformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
+        TrainLinearRegression=st.session_state.get(TrainTMLStateKeys.TrainLinearRegression, False),
+        TrainLogisticRegression=st.session_state.get(
+            TrainTMLStateKeys.TrainLogisticRegression, False
+        ),
         TrainRandomForest=st.session_state[TrainTMLStateKeys.TrainRandomForest],
         TrainSupportVectorMachine=st.session_state[TrainTMLStateKeys.TrainSupportVectorMachine],
         TrainXGBoost=st.session_state[TrainTMLStateKeys.TrainXGBoost],
@@ -135,14 +138,25 @@ def train_models(
         data=data, data_options=data_options, general_experiment_options=general_experiment_options
     )
 
-    gnn_models = train_network(
-        train_gnn_options=train_gnn_options,
+    tml_models = train_tml_model(
+        train_tml_options=train_tml_options,
         general_experiment_options=general_experiment_options,
-        experiment_name=experiment_name,
-        data_options=data_options,
         representation_options=representation_options,
+        data_options=data_options,
+        experiment_path=experiment_path,
         train_val_test_idxs=train_val_test_idxs,
     )
+
+    # gnn_models = train_network(
+    #     train_gnn_options=train_gnn_options,
+    #     general_experiment_options=general_experiment_options,
+    #     experiment_name=experiment_name,
+    #     data_options=data_options,
+    #     representation_options=representation_options,
+    #     train_val_test_idxs=train_val_test_idxs,
+    # )
+
+    gnn_models = {}
 
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
     gnn_models_dir.mkdir(parents=True, exist_ok=True)
@@ -342,7 +356,7 @@ if experiment_name:
 
     if representation_file_path(experiment_path=experiment_path).exists():
 
-        train_TML_models(problem_type=data_opts.problem_type)
+        tml_models = train_TML_models(problem_type=data_opts.problem_type)
 
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
