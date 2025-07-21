@@ -25,12 +25,18 @@ from polynet.app.options.file_paths import (
     polynet_experiments_base_dir,
     representation_file_path,
     representation_options_path,
+    train_tml_model_options_path,
     train_gnn_model_options_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.state_keys import GeneralConfigStateKeys, TrainGNNStateKeys
+from polynet.app.options.state_keys import (
+    GeneralConfigStateKeys,
+    TrainGNNStateKeys,
+    TrainTMLStateKeys,
+)
 from polynet.app.options.train_GNN import TrainGNNOptions
+from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import (
@@ -64,6 +70,15 @@ def train_models(
     This function is a placeholder for future implementation.
     """
 
+    train_tml_options = TrainTMLOptions(
+        TrasformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
+        TrainLinearRegression=st.session_state[TrainTMLStateKeys.TrainLinearRegression],
+        TrainLogisticRegression=st.session_state[TrainTMLStateKeys.TrainLogisticRegression],
+        TrainRandomForest=st.session_state[TrainTMLStateKeys.TrainRandomForest],
+        TrainSupportVectorMachine=st.session_state[TrainTMLStateKeys.TrainSupportVectorMachine],
+        TrainXGBoost=st.session_state[TrainTMLStateKeys.TrainXGBoost],
+    )
+
     train_gnn_options = TrainGNNOptions(
         GNNConvolutionalLayers=gnn_conv_params,
         GNNNumberOfLayers=st.session_state[TrainGNNStateKeys.GNNNumberOfLayers],
@@ -92,10 +107,14 @@ def train_models(
 
     experiment_path = polynet_experiments_base_dir() / experiment_name
 
+    tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
+
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     gen_options_path = general_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
 
+    if tml_training_opts_path.exists():
+        tml_training_opts_path.unlink()
     if gnn_training_opts_path.exists():
         gnn_training_opts_path.unlink()
     if gen_options_path.exists():
@@ -103,6 +122,7 @@ def train_models(
     if ml_results_dir.exists():
         rmtree(ml_results_dir)
 
+    save_options(path=tml_training_opts_path, options=train_tml_options)
     save_options(path=gnn_training_opts_path, options=train_gnn_options)
     save_options(path=gen_options_path, options=general_experiment_options)
 
@@ -115,7 +135,7 @@ def train_models(
         data=data, data_options=data_options, general_experiment_options=general_experiment_options
     )
 
-    model = train_network(
+    gnn_models = train_network(
         train_gnn_options=train_gnn_options,
         general_experiment_options=general_experiment_options,
         experiment_name=experiment_name,
@@ -136,7 +156,7 @@ def train_models(
 
     iterator = get_iterator_name(general_experiment_options.split_type)
 
-    for iteration, model_params in model.items():
+    for iteration, model_params in gnn_models.items():
 
         loader = model_params[Results.Loaders.value]
         models = model_params[Results.Model.value]
