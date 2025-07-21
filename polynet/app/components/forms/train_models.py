@@ -15,13 +15,22 @@ from polynet.options.enums import (
     SplitMethods,
     SplitTypes,
     TransformDescriptors,
+    TradtionalMLModels,
 )
 
 
 def train_TML_models(problem_type: ProblemTypes):
 
+    models = {}
+
     st.write(
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
+    )
+
+    hyperparameter_tunning = st.toggle(
+        "Perform hyperparameter tuning",
+        key=TrainTMLStateKeys.PerformHyperparameterTuning,
+        help="If enabled, the hyperparameters of the models will be tuned using a grid search. This may take a long time depending on the number of models and hyperparameters selected.",
     )
 
     st.markdown(
@@ -30,33 +39,176 @@ def train_TML_models(problem_type: ProblemTypes):
         """
     )
 
-    col1, col2 = st.columns(2)
+    st.divider()
 
-    with col1:
-        if problem_type == ProblemTypes.Regression:
+    if problem_type == ProblemTypes.Regression:
 
-            if st.checkbox(
-                "Linear Regression", value=True, key=TrainTMLStateKeys.TrainLinearRegression
-            ):
-                pass
+        if st.toggle("Linear Regression", value=True, key=TrainTMLStateKeys.TrainLinearRegression):
 
-        elif problem_type == ProblemTypes.Classification:
+            models[TradtionalMLModels.LinearRegression] = {}
 
-            if st.checkbox(
-                "Logistic Regression", value=True, key=TrainTMLStateKeys.TrainLogisticRegression
-            ):
-                pass
+            if not hyperparameter_tunning:
+                intercept = st.checkbox(
+                    "Fit intercept",
+                    value=True,
+                    key=TrainTMLStateKeys.LinearRegressionFitIntercept,
+                    help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+                )
 
-        if st.checkbox("Random Forest", value=True, key=TrainTMLStateKeys.TrainRandomForest):
-            pass
+                models[TradtionalMLModels.LinearRegression] = {"fit_intercept": intercept}
 
-    with col2:
-        if st.checkbox(
-            "Support Vector Machine", value=True, key=TrainTMLStateKeys.TrainSupportVectorMachine
+    elif problem_type == ProblemTypes.Classification:
+
+        if st.toggle(
+            "Logistic Regression", value=True, key=TrainTMLStateKeys.TrainLogisticRegression
         ):
-            pass
-        if st.checkbox("XGBoost", value=True, key=TrainTMLStateKeys.TrainXGBoost):
-            pass
+
+            models[TradtionalMLModels.LogisticRegression] = {}
+
+            if not hyperparameter_tunning:
+
+                intercept = st.checkbox(
+                    "Fit intercept",
+                    value=True,
+                    key=TrainTMLStateKeys.LinearRegressionFitIntercept,
+                    help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+                )
+
+    st.divider()
+
+    if st.toggle("Random Forest", value=True, key=TrainTMLStateKeys.TrainRandomForest):
+        models[TradtionalMLModels.RandomForest] = {}
+
+        if not hyperparameter_tunning:
+
+            n_estimators = st.slider(
+                "Select the number of trees in the forest",
+                min_value=10,
+                max_value=1000,
+                value=100,
+                step=10,
+                key=TrainTMLStateKeys.RFNumberEstimators,
+            )
+            models[TradtionalMLModels.RandomForest]["n_estimators"] = n_estimators
+
+            min_samples_split = st.slider(
+                "Select the minimum number of samples required to split an internal node",
+                min_value=2,
+                max_value=20,
+                value=2,
+                step=1,
+                key=TrainTMLStateKeys.RFMinSamplesSplit,
+            )
+            models[TradtionalMLModels.RandomForest]["min_samples_split"] = min_samples_split
+
+            min_samples_leaf = st.slider(
+                "Select the minimum number of samples required to be at a leaf node",
+                min_value=1,
+                max_value=20,
+                value=1,
+                step=1,
+                key=TrainTMLStateKeys.RFMinSamplesLeaf,
+            )
+            models[TradtionalMLModels.RandomForest]["min_samples_leaf"] = min_samples_leaf
+
+            if st.checkbox("Set max depth"):
+                max_depth = st.slider(
+                    "Select the maximum depth of the tree",
+                    min_value=1,
+                    max_value=20,
+                    value=0,
+                    step=1,
+                    key=TrainTMLStateKeys.RFMaxDepth,
+                )
+            else:
+                max_depth = None
+            models[TradtionalMLModels.RandomForest]["max_depth"] = max_depth
+
+    st.divider()
+
+    if st.toggle(
+        "Support Vector Machine", value=True, key=TrainTMLStateKeys.TrainSupportVectorMachine
+    ):
+        models[TradtionalMLModels.SupportVectorMachine] = {}
+
+        if not hyperparameter_tunning:
+
+            kernel = st.selectbox(
+                "Select the kernel type",
+                options=["linear", "poly", "rbf", "sigmoid"],
+                index=2,
+                key=TrainTMLStateKeys.SVMKernel,
+            )
+            models[TradtionalMLModels.SupportVectorMachine]["kernel"] = kernel
+
+            degree = st.slider(
+                "Select the degree of the polynomial kernel function",
+                min_value=2,
+                max_value=5,
+                value=3,
+                step=1,
+                key=TrainTMLStateKeys.SVMDegree,
+            )
+            models[TradtionalMLModels.SupportVectorMachine]["degree"] = degree
+
+            c = st.slider(
+                "Select the regularization parameter C",
+                min_value=0.01,
+                max_value=10.0,
+                value=1.0,
+                step=0.01,
+                key=TrainTMLStateKeys.SVMC,
+            )
+            models[TradtionalMLModels.SupportVectorMachine]["C"] = c
+
+    st.divider()
+
+    if st.toggle("XGBoost", value=True, key=TrainTMLStateKeys.TrainXGBoost):
+        models[TradtionalMLModels.XGBoost] = {}
+
+        if not hyperparameter_tunning:
+
+            num_estimators = st.slider(
+                "Select the number of trees in the forest",
+                min_value=10,
+                max_value=1000,
+                value=100,
+                step=10,
+                key=TrainTMLStateKeys.XGBNumberEstimators,
+            )
+            models[TradtionalMLModels.XGBoost]["n_estimators"] = num_estimators
+
+            learning_rate = st.slider(
+                "Select the learning rate",
+                min_value=0.001,
+                max_value=0.1,
+                value=0.01,
+                step=0.001,
+                key=TrainTMLStateKeys.XGBLearningRate,
+            )
+            models[TradtionalMLModels.XGBoost]["learning_rate"] = learning_rate
+
+            subsample_size = st.slider(
+                "Select the subsample size",
+                min_value=0.1,
+                max_value=1.0,
+                value=0.8,
+                step=0.01,
+                key=TrainTMLStateKeys.XGBSubsampleSize,
+            )
+            models[TradtionalMLModels.XGBoost]["subsample"] = subsample_size
+
+            max_depth = st.slider(
+                "Select the maximum depth of the tree",
+                min_value=0,
+                max_value=20,
+                value=0,
+                step=1,
+                key=TrainTMLStateKeys.XGBMaxDepth,
+            )
+            models[TradtionalMLModels.XGBoost]["max_depth"] = max_depth
+
+    st.divider()
 
     st.selectbox(
         "Apply transformation to the independent variables",
@@ -68,6 +220,8 @@ def train_TML_models(problem_type: ProblemTypes):
         index=0,
         key=TrainTMLStateKeys.TrasformFeatures,
     )
+
+    return models
 
 
 def train_GNN_models_form(representation_opts: RepresentationOptions, problem_type: ProblemTypes):
