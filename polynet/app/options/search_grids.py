@@ -24,10 +24,22 @@ SVM_GRID = {
 }
 
 
-models_grid_search = {
-    TradtionalMLModels.LinearRegression: LINEAR_MODEL_GRID,
-    TradtionalMLModels.LogisticRegression: LINEAR_MODEL_GRID,
-    TradtionalMLModels.RandomForest: RANDOM_FOREST_GRID,
-    TradtionalMLModels.XGBoost: XGB_GRID,
-    TradtionalMLModels.SupportVectorMachine: SVM_GRID,
-}
+def get_grid_search(model_name: TradtionalMLModels, random_seed: int):
+    """Get the grid search parameters for the specified model."""
+    if model_name == TradtionalMLModels.LinearRegression:
+        return LINEAR_MODEL_GRID
+
+    if model_name == TradtionalMLModels.LogisticRegression:
+        LINEAR_MODEL_GRID["random_state"] = [random_seed]
+        return LINEAR_MODEL_GRID
+    elif model_name == TradtionalMLModels.RandomForest:
+        RANDOM_FOREST_GRID["random_state"] = [random_seed]
+        return RANDOM_FOREST_GRID
+    elif model_name == TradtionalMLModels.XGBoost:
+        XGB_GRID["random_state"] = [random_seed]
+        return XGB_GRID
+    elif model_name == TradtionalMLModels.SupportVectorMachine:
+        SVM_GRID["random_state"] = [random_seed]
+        return SVM_GRID
+    else:
+        raise ValueError(f"Unknown model type: {model_name}")
