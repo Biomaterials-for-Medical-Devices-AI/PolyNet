@@ -8,6 +8,7 @@ class TrainTMLOptions:
     """
 
     TransformFeatures: str = "NoTransformation"
+    HyperparameterOptimization: bool = False
     TrainLinearRegression: bool = True
     TrainLogisticRegression: bool = True
     TrainRandomForest: bool = True
