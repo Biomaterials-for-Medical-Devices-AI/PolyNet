@@ -11,6 +11,7 @@ from polynet.options.enums import (
     AtomFeatures,
     BondFeatures,
     DescriptorMergingMethods,
+    StringRepresentation,
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
@@ -61,6 +62,21 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             default=default_descriptors,  # Preselect common ones
             key=DescriptorCalculationStateKeys.DescriptorsRDKit,
             help="Choose which RDKit descriptors to compute for the molecules.",
+        )
+
+        if data_options.string_representation == StringRepresentation.Smiles:
+            disabled = True
+        elif data_options.string_representation == StringRepresentation.PSmiles:
+            disabled = False
+
+        st.markdown("### polyBERT fingerprint")
+
+        st.checkbox(
+            "Calculate polyBERT fingerprint",
+            value=False,
+            key=DescriptorCalculationStateKeys.polyBERTfp,
+            disabled=disabled,
+            help="polyBERT can only be calculated if PSMiles were provided.",
         )
 
         st.markdown("### Descriptors from DataFrame")
