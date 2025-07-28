@@ -18,6 +18,7 @@ class CreateExperimentStateKeys(StrEnum):
     TargetVariableName = "TargetVariableName"
     TargetVariableUnits = "TargetVariableUnits"
     EditPlot = "EditPlot"
+    StringRepresentation = "StringRepresentation"
 
 
 class ViewExperimentKeys(StrEnum):
