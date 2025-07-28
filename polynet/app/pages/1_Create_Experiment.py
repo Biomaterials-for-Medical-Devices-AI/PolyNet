@@ -55,8 +55,8 @@ st.write(
 
 class_names = select_data_form()
 
-if class_names is not False:
-    if st.button("Save Experiment"):
-        save_experiment(class_names)
-        st.success("Experiment saved successfully!")
-        st.balloons()
+
+if st.button("Save Experiment", disabled=not class_names):
+    save_experiment(class_names)
+    st.success("Experiment saved successfully!")
+    st.balloons()
