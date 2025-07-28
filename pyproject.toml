@@ -26,6 +26,7 @@ plotly = "^6.1.1"
 black = "^25.1.0"
 imbalanced-learn = "^0.13.0"
 xgboost = "^3.0.2"
+psmiles = {git = "https://github.com/Ramprasad-Group/psmiles.git", extras = ["polyBERT", "mordred"]}
 
 
 [build-system]
