@@ -64,6 +64,7 @@ def parse_representation_options(
         node_feats=node_feats,
         edge_feats=edge_feats,
         weights_col=weights_col,
+        polybert_fp=st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False),
     )
 
     experiment_path = polynet_experiments_base_dir() / experiment_name
