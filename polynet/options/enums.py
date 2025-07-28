@@ -6,6 +6,11 @@ class ProblemTypes(StrEnum):
     Regression = "regression"
 
 
+class StringRepresentation(StrEnum):
+    Smiles = "SMILES"
+    PSmiles = "Psmiles"
+
+
 class Networks(StrEnum):
     GCN = "GCN"
     TransformerGNN = "TransformerConvGNN"
