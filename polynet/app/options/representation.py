@@ -13,7 +13,7 @@ class RepresentationOptions:
     df_descriptors_independent: bool
     mix_rdkit_df_descriptors: bool
     smiles_merge_approach: list
-
     node_feats: dict
     edge_feats: dict
     weights_col: dict[str, str] | None
+    polybert_fp: bool = False
