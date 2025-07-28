@@ -13,10 +13,10 @@ class DataOptions:
     data_path: str
     smiles_cols: list[str]
     canonicalise_smiles: bool
-    string_representation: StringRepresentation = StringRepresentation.Smiles
-    id_col: str | None = None
     target_variable_col: str
     problem_type: ProblemTypes
+    string_representation: StringRepresentation = StringRepresentation.Smiles
+    id_col: str | None = None
     num_classes: int | None = None
     target_variable_name: str | None = None
     class_names: dict[str, str] | None = None
