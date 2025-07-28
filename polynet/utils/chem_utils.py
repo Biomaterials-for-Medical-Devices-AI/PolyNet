@@ -46,6 +46,21 @@ def canonicalise_smiles(smiles: str) -> Optional[str]:
         return None
 
 
+def check_smiles_cols(col_names, df):
+
+    invalid_smiles = {}
+    for col in col_names:
+        invalid_smiles[col] = []
+        for smiles in df[col]:
+            if not check_smiles(smiles):
+                invalid_smiles[col].append(str(smiles))
+
+    # Remove empty lists
+    invalid_smiles = {k: v for k, v in invalid_smiles.items() if v}
+
+    return invalid_smiles
+
+
 def sanitize_fragment(frag):
     """Remove dummy atoms from a BRICS fragment to make it matchable."""
     editable = Chem.EditableMol(frag)
