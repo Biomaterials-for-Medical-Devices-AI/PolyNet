@@ -71,6 +71,7 @@ def select_data_form():
             str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
             st.write(f"The `{str_representation}` representation has been identified.")
             st.success(f"`{str_representation}` columns checked successfully.")
+            st.session_state[CreateExperimentStateKeys.StringRepresentation] = str_representation
 
         if st.checkbox(
             f"Canonicalise `{str_representation}`",
