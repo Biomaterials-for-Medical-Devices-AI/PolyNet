@@ -21,11 +21,48 @@ def display_predictions(predictions_df: pd.DataFrame):
     st.write(predictions_df)
 
 
+import re
+from collections import defaultdict
+
+
 def display_plots(plots_path):
+    """
+    Organize and display plots from a directory with the following hierarchy:
+    - Model name
+      - Iteration (e.g., fold or bootstrap)
+        - Plot type (confusion matrix, AUROC, parity plot)
+    """
+    plot_groups = defaultdict(lambda: defaultdict(list))
 
     for plot_file in plots_path.glob("*.png"):
-        # Display each plot file in the directory
-        st.image(plot_file, use_container_width=True)
+        name = plot_file.stem  # filename without extension
+
+        # Try to match all types
+        if match := re.match(r"(.+?)_(\d+)_confusion_matrix", name):
+            model, iteration = match.groups()
+            plot_type = "Confusion Matrix"
+
+        elif match := re.match(r"(.+?)_(\d+)_class_(\d+)_roc_curve", name):
+            model, iteration, class_num = match.groups()
+            plot_type = f"AUROC (Class {class_num})"
+
+        elif match := re.match(r"(.+?)_(\d+)_parity_plot", name):
+            model, iteration = match.groups()
+            plot_type = "Parity Plot"
+
+        else:
+            continue  # Unrecognized format
+
+        plot_groups[model][int(iteration)].append((plot_type, plot_file))
+
+    # Sort and display
+    for model in sorted(plot_groups):
+        st.markdown(f"### Model: `{model}`")
+        for iteration in sorted(plot_groups[model]):
+            st.markdown(f"**Iteration {iteration}**")
+            for plot_type, plot_path in sorted(plot_groups[model][iteration]):
+                st.markdown(f"*{plot_type}*")
+                st.image(plot_path, use_container_width=True)
 
 
 def display_model_metrics(metrics_dict):
