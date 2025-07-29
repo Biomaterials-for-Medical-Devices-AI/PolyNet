@@ -71,7 +71,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
 
         st.markdown("### polyBERT fingerprint")
 
-        st.checkbox(
+        polybert_fps = st.checkbox(
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
@@ -141,6 +141,15 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 help="If checked, the selected descriptors will be merged with the RDKit molecular descriptors for a comprehensive representation of the molecules.",
             )
 
+        if polybert_fps:
+            st.checkbox(
+                "Use polyBERT fps as an independent representation",
+                value=True,
+                key=DescriptorCalculationStateKeys.polyBERTindependent,
+                disabled=True,
+                help="Currently, polyBERT fingerprints cannot be combained with any other representation.",
+            )
+
         if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
 
             st.markdown("### Merging Method for Multiple SMILES Columns")
@@ -161,7 +170,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             merging_methods = st.segmented_control(
                 label="Select merging approach of descriptors for multiple SMILES columns",
                 options=[
-                    DescriptorMergingMethods.Average,
+                    # DescriptorMergingMethods.Average,
                     DescriptorMergingMethods.WeightedAverage,
                     DescriptorMergingMethods.Concatenate,
                 ],
