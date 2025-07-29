@@ -45,6 +45,8 @@ def parse_representation_options(
     This function is a placeholder for future implementation.
     """
 
+    calculate_polybert_fps = st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False)
+
     representation_options = RepresentationOptions(
         rdkit_descriptors=rdkit_descriptors,
         df_descriptors=df_descriptors,
@@ -64,7 +66,7 @@ def parse_representation_options(
         node_feats=node_feats,
         edge_feats=edge_feats,
         weights_col=weights_col,
-        polybert_fp=st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False),
+        polybert_fp=calculate_polybert_fps,
     )
 
     experiment_path = polynet_experiments_base_dir() / experiment_name
@@ -80,7 +82,7 @@ def parse_representation_options(
 
     save_options(path=representation_opts_path, options=representation_options)
 
-    if rdkit_descriptors or df_descriptors:
+    if rdkit_descriptors or df_descriptors or calculate_polybert_fps:
 
         descriptor_dfs = build_vector_representation(
             representation_opts=representation_options, data_options=data_options, data=data
