@@ -161,6 +161,9 @@ def train_TML_models(problem_type: ProblemTypes):
             )
             models[TradtionalMLModels.SupportVectorMachine]["C"] = c
 
+            if problem_type == ProblemTypes.Classification:
+                models[TradtionalMLModels.SupportVectorMachine]["probability"] = True
+
     st.divider()
 
     if st.toggle("XGBoost", value=True, key=TrainTMLStateKeys.TrainXGBoost):
