@@ -37,6 +37,7 @@ class DescriptorCalculationStateKeys(StrEnum):
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
     polyBERTfp = "polyBERTfp"
+    polyBERTindependent = "polyBERTindependent"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
     IndependentDFDescriptors = "IndependentDFDescriptors"
     IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
