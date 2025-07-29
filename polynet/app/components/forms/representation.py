@@ -268,23 +268,33 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
         if selected_atomic_properties:
             total_num_node_feats = 0
+
             for prop in selected_atomic_properties:
+
+                prop_defaults = set()
 
                 st.markdown(f"#### `{prop}` settings")
 
-                if st.checkbox(
+                show = st.checkbox(
                     f"Show frequencies of `{prop}` in the database",
                     key=f"{DescriptorCalculationStateKeys.ShowFrequency}_{prop}",
-                ):
+                )
+
+                if show:
                     st.write(f"### Distribution of `{prop}`")
-                    cols = st.columns(2)
-                    for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                        residue = int(i % 2)
+                cols = st.columns(2)
 
-                        with cols[residue]:
+                for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                            prop_counts = count_atom_property_frequency(df, smiles_col, prop)
+                    prop_counts = count_atom_property_frequency(df, smiles_col, prop)
+                    prop_defaults.update(prop_counts.keys())
+
+                    residue = int(i % 2)
+
+                    with cols[residue]:
+
+                        if show:
                             st.write(f"### Column `{smiles_col}`")
                             df_plot = pd.DataFrame.from_dict(
                                 prop_counts, orient="index", columns=["Frequency"]
@@ -296,10 +306,16 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                 node_feats_config[prop] = {}
                 if atom_properties[prop]:
 
+                    prop_defaults = [
+                        val
+                        for val in prop_defaults
+                        if val in atom_properties[prop][AtomBondDescriptorDictKeys.Options]
+                    ]
+
                     selected_allowed_atom_properties = st.segmented_control(
                         label=f"Select allowable values for the property `{prop}`",
                         options=atom_properties[prop][AtomBondDescriptorDictKeys.Options],
-                        default=atom_properties[prop].get(AtomBondDescriptorDictKeys.Default, []),
+                        default=prop_defaults,
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.AtomProperties}_{prop}",
                         help=f"Choose whether to include the `{prop}` property in the graph representation.",
@@ -352,23 +368,33 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
         if selected_bond_properties:
             total_num_edge_feats = 0
+
             for prop in selected_bond_properties:
+
+                prop_defaults = set()
 
                 st.markdown(f"#### `{prop}` settings")
 
-                if st.checkbox(
+                show = st.checkbox(
                     f"Show frequencies of `{prop}` in the database",
                     key=f"{DescriptorCalculationStateKeys.ShowFrequency}_{prop}_bond",
-                ):
+                )
+
+                if show:
                     st.write(f"### Distribution of `{prop}`")
-                    cols = st.columns(2)
-                    for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                        residue = int(i % 2)
+                cols = st.columns(2)
 
-                        with cols[residue]:
+                for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                            prop_counts = count_bond_property_frequency(df, smiles_col, prop)
+                    prop_counts = count_bond_property_frequency(df, smiles_col, prop)
+                    prop_defaults.update(prop_counts.keys())
+
+                    residue = int(i % 2)
+
+                    with cols[residue]:
+
+                        if show:
                             st.write(f"### Column `{smiles_col}`")
                             df_plot = pd.DataFrame.from_dict(
                                 prop_counts, orient="index", columns=["Frequency"]
@@ -380,10 +406,16 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                 edge_feats_config[prop] = {}
                 if bond_features[prop]:
 
+                    prop_defaults = [
+                        val
+                        for val in prop_defaults
+                        if val in bond_features[prop][AtomBondDescriptorDictKeys.Options]
+                    ]
+
                     selected_allowed_bond_properties = st.segmented_control(
                         label=f"Select allowable values for the property `{prop}`",
                         options=bond_features[prop][AtomBondDescriptorDictKeys.Options],
-                        default=bond_features[prop].get(AtomBondDescriptorDictKeys.Default, []),
+                        default=prop_defaults,
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.BondProperties}_{prop}",
                         help=f"Choose whether to include the `{prop}` property in the graph representation.",
