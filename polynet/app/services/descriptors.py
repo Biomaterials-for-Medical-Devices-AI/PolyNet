@@ -6,6 +6,7 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.featurizer.descriptor_calculation import calculate_descriptors
 from polynet.options.enums import DescriptorMergingMethods
+from polynet.utils.chem_utils import PS
 
 
 def get_data_index(
@@ -62,9 +63,34 @@ def single_smiles(rdkit_df_dict, data_index):
     return pd.concat([data_index] + list(rdkit_df_dict.values()), axis=1)
 
 
+def get_polyBERT_fps(psmiles: list):
+
+    pb_fps = {}
+
+    for psmile in psmiles:
+        fingerprint = PS(psmile).fingerprint("polyBERT")
+        pb_fps[psmile] = fingerprint
+
+    return pb_fps
+
+
+def calculate_polybert_df_dict(polyBERT_fps: dict, data: pd.DataFrame, smiles_cols: list):
+    # Create a single DataFrame for all polyBERT fingerprints
+    columns = [f"polyBERT_{i}" for i in range(len(next(iter(polyBERT_fps.values()))))]
+    polybert_df = pd.DataFrame.from_dict(polyBERT_fps, orient="index", columns=columns)
+
+    polybert_df_dict = {}
+    for col in smiles_cols:
+        joined = data.join(polybert_df, how="left", on=col)
+        polybert_df_dict[col] = joined.drop(columns=data.columns)
+
+    return polybert_df_dict
+
+
 def build_vector_representation(
     representation_opts: RepresentationOptions, data_options: DataOptions, data: pd.DataFrame
 ) -> pd.DataFrame:
+
     smiles_cols = data_options.smiles_cols
     id_col = data_options.id_col
     target_col = data_options.target_variable_col
@@ -125,5 +151,31 @@ def build_vector_representation(
     if not representation_opts.rdkit_independent:
         rdkit_descriptors = None
 
+    polyBERT_df_dict = {}
+    polyBERT_descriptors = None
+    if representation_opts.polybert_fp:
+        polyBERT_fps = get_polyBERT_fps(psmiles=unique_smiles)
+        polyBERT_df_dict = calculate_polybert_df_dict(polyBERT_fps, data, smiles_cols)
+
+        if (
+            DescriptorMergingMethods.WeightedAverage == representation_opts.smiles_merge_approach
+            and weights_col
+        ):
+            polyBERT_descriptors = merge_weighted(polyBERT_df_dict, data, weights_col, data_index)
+
+        elif DescriptorMergingMethods.Average == representation_opts.smiles_merge_approach:
+            polyBERT_descriptors = merge_average(polyBERT_df_dict, data_index)
+
+        elif DescriptorMergingMethods.Concatenate == representation_opts.smiles_merge_approach:
+            polyBERT_descriptors = merge_concatenate(polyBERT_df_dict, data_index)
+
+        elif DescriptorMergingMethods.NoMerging == representation_opts.smiles_merge_approach:
+            polyBERT_descriptors = single_smiles(polyBERT_df_dict, data_index)
+
     # Return dictionary or selected final df depending on use-case
-    return {"RDKit": rdkit_descriptors, "DF": df_descriptors_df, "RDKit_DF": rdkit_df_descriptors}
+    return {
+        "RDKit": rdkit_descriptors,
+        "DF": df_descriptors_df,
+        "RDKit_DF": rdkit_df_descriptors,
+        "polyBERT": polyBERT_descriptors,
+    }
