@@ -67,12 +67,40 @@ def train_TML_models(problem_type: ProblemTypes):
 
             if not hyperparameter_tunning:
 
+                penalty = st.selectbox(
+                    "Select the norm of the penalty",
+                    ["l1", "l2"],
+                    index=0,
+                    key=TrainTMLStateKeys.LogisticRegressionPenalty,
+                )
+
+                C = st.selectbox(
+                    "Select the inverse of regularization strength",
+                    [0.1, 1, 10, 100],
+                    index=1,
+                    key=TrainTMLStateKeys.LogisticRegressionC,
+                )
+
                 intercept = st.checkbox(
                     "Fit intercept",
                     value=True,
                     key=TrainTMLStateKeys.LinearRegressionFitIntercept,
                     help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
                 )
+
+                solver = st.selectbox(
+                    "Select the solver",
+                    ["lbfgs", "liblinear"],
+                    index=1,
+                    key=TrainTMLStateKeys.LogisticRegressionSolver,
+                )
+
+                models[TradtionalMLModels.LogisticRegression] = {
+                    "penalty": penalty,
+                    "C": C,
+                    "fit_intercept": intercept,
+                    "solver": solver,
+                }
 
     st.divider()
 
