@@ -1,7 +1,15 @@
-from polynet.options.enums import TradtionalMLModels
+from polynet.options.enums import TradtionalMLModels, ProblemTypes
 
 
 LINEAR_MODEL_GRID = {"fit_intercept": [True, False]}
+
+LOGISTIC_MODEL_GRID = {
+    "penalty": ["l1", "l2"],
+    "C": [0.1, 1, 10, 100],
+    "fit_intercept": [True, False],
+    "solver": ["lbfgs", "liblinear"],
+}
+
 
 RANDOM_FOREST_GRID = {
     "n_estimators": [100, 300, 500],
@@ -24,10 +32,15 @@ SVM_GRID = {
 }
 
 
-def get_grid_search(model_name: TradtionalMLModels, random_seed: int):
+def get_grid_search(
+    model_name: TradtionalMLModels, problem_type: ProblemTypes.Classification, random_seed: int
+):
     """Get the grid search parameters for the specified model."""
     if model_name == TradtionalMLModels.LinearRegression:
-        return LINEAR_MODEL_GRID
+        if problem_type == ProblemTypes.Regression:
+            return LINEAR_MODEL_GRID
+        elif problem_type == ProblemTypes.Classification:
+            return LOGISTIC_MODEL_GRID
 
     if model_name == TradtionalMLModels.LogisticRegression:
         LINEAR_MODEL_GRID["random_state"] = [random_seed]
@@ -40,6 +53,8 @@ def get_grid_search(model_name: TradtionalMLModels, random_seed: int):
         return XGB_GRID
     elif model_name == TradtionalMLModels.SupportVectorMachine:
         SVM_GRID["random_state"] = [random_seed]
+        if problem_type == ProblemTypes.Classification:
+            SVM_GRID["probability"] = [True]
         return SVM_GRID
     else:
         raise ValueError(f"Unknown model type: {model_name}")
