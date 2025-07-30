@@ -72,6 +72,10 @@ class TrainTMLStateKeys(StrEnum):
     TrainLogisticRegression = "LogisticRegression"
     LinearRegressionFitIntercept = "LinearRegressionFitIntercept"
 
+    LogisticRegressionPenalty = "LogissticRegressionPenalty"
+    LogisticRegressionC = "LogisticRegressionC"
+    LogisticRegressionSolver = "LogisticRegressionSolver"
+
     TrainRandomForest = "RandomForest"
     RFNumberEstimators = "RFNumberEstimators"
     RFMinSamplesSplit = "RFMinSamplesSplit"
