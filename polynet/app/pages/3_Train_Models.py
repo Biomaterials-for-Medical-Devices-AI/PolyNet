@@ -16,11 +16,15 @@ from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     gnn_model_dir,
+    tml_model_dir,
     gnn_model_metrics_file_path,
+    tml_model_metrics_file_path,
     gnn_plots_directory,
+    tml_plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
     ml_gnn_results_file_path,
+    ml_tml_results_file_path,
     ml_results_parent_directory,
     polynet_experiments_base_dir,
     representation_file_path,
@@ -58,6 +62,7 @@ from polynet.app.utils import (
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
+from polynet.app.services.predict_model import get_predictions_df_tml, get_metrics, plot_results
 
 
 def train_models(
@@ -140,7 +145,7 @@ def train_models(
         data=data, data_options=data_options, general_experiment_options=general_experiment_options
     )
 
-    tml_models = train_tml_model(
+    tml_models, dataframes = train_tml_model(
         train_tml_options=train_tml_options,
         tml_models=tml_models,
         general_experiment_options=general_experiment_options,
@@ -148,6 +153,46 @@ def train_models(
         data_options=data_options,
         experiment_path=experiment_path,
         train_val_test_idxs=train_val_test_idxs,
+    )
+
+    tml_predictions_df = get_predictions_df_tml(
+        experiment_path=experiment_path,
+        models=tml_models,
+        dataframes=dataframes,
+        split_type=general_experiment_options.split_type,
+        representation_options=representation_options,
+        data_options=data_options,
+    )
+
+    tml_models_dir = tml_model_dir(experiment_path=experiment_path)
+    tml_models_dir.mkdir(parents=True)
+
+    save_data(
+        data=tml_predictions_df,
+        data_path=ml_tml_results_file_path(
+            experiment_path=experiment_path, file_name="predictions.csv"
+        ),
+    )
+
+    metrics_tml = get_metrics(
+        predictions=tml_predictions_df,
+        split_type=general_experiment_options.split_type,
+        target_variable_name=data_options.target_variable_name,
+        ml_algorithms=tml_models.keys(),
+        problem_type=data_options.problem_type,
+    )
+
+    plots_dir = gnn_plots_directory(experiment_path=experiment_path)
+    plots_dir.mkdir(parents=True)
+
+    plot_results(
+        predictions=tml_predictions_df,
+        split_type=general_experiment_options.split_type,
+        target_variable_name=data_options.target_variable_name,
+        ml_algorithms=tml_models.keys(),
+        problem_type=data_options.problem_type,
+        data_options=data_options,
+        save_path=plots_dir,
     )
 
     gnn_models = train_network(
@@ -158,8 +203,6 @@ def train_models(
         representation_options=representation_options,
         train_val_test_idxs=train_val_test_idxs,
     )
-
-    gnn_models = {}
 
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
     gnn_models_dir.mkdir(parents=True, exist_ok=True)
@@ -306,6 +349,10 @@ def train_models(
     )
 
     metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+
+    for i, dictionary in metrics_tml.items():
+        iteration = int(i)
+        metrics[iteration] = {**metrics[iteration], **dictionary}
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=4)
