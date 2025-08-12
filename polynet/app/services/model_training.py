@@ -28,7 +28,7 @@ from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods,
 from polynet.utils.data_preprocessing import class_balancer
 
 
-def split_data(data, test_size=0.2, random_state=1, stratify=None):
+def split_data(data, test_size, random_state, stratify=None):
     """
     Splits the data into training and testing sets.
 
