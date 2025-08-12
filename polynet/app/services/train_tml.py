@@ -37,10 +37,12 @@ def train_tml_model(
     train_ids, val_ids, test_ids = train_val_test_idxs
 
     trained_models = {}
+    training_data = {}
 
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
 
         iteration = i + 1
+        train_idxs += val_idxs
 
         for df_name, df in dataframes.items():
 
@@ -73,6 +75,8 @@ def train_tml_model(
                 )
                 test_df.iloc[:, :-1] = test_features
 
+            training_data[f"{iteration}_{df_name}"] = (train_df, val_df, test_df)
+
             models = generate_models(train_tml_options, data_options.problem_type)
 
             for model_name, model in models.items():
@@ -88,6 +92,7 @@ def train_tml_model(
                     param_grid = get_grid_search(
                         model_name=model_name,
                         random_seed=general_experiment_options.random_seed + i,
+                        problem_type=data_options.problem_type,
                     )
 
                     if data_options.problem_type == ProblemTypes.Classification:
@@ -115,7 +120,7 @@ def train_tml_model(
                 model_log_name = f"{iteration}_{df_name}_{model_name}"
                 trained_models[model_log_name] = model
 
-    return trained_models
+    return trained_models, training_data
 
 
 def get_model(model_type: type, model_params: dict = None, random_state: int = None):
@@ -244,6 +249,18 @@ def load_dataframes(
 
         dataframe_dict["RDKit_DF"] = mix_df
 
+    if representation_options.polybert_fp:
+        polybert_file_path = representation_file(
+            experiment_path=experiment_path, file_name="polyBERT.csv"
+        )
+        polybert_df = pd.read_csv(polybert_file_path, index_col=0)
+        polybert_df = sanitise_df(
+            df=polybert_df,
+            descriptors=[f"polyBERT_{i}" for i in range(600)],
+            target_variable_col=target_variable_col,
+        )
+        dataframe_dict["polyBERT"] = polybert_df
+
     return dataframe_dict
 
 
@@ -251,6 +268,6 @@ def sanitise_df(df: pd.DataFrame, descriptors: list, target_variable_col: str):
 
     clean_df = df.copy()
 
-    clean_df = clean_df[descriptors + [target_variable_col]].dropna()
+    clean_df = clean_df[descriptors + [target_variable_col]].dropna(axis=1)
 
     return clean_df
