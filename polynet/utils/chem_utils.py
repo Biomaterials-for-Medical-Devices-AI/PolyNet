@@ -1,14 +1,13 @@
 from collections import defaultdict
 from typing import Optional
 
+from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
 import pandas as pd
+from psmiles import PolymerSmiles
 from rdkit import Chem
 from rdkit.Chem import BRICS
-from psmiles import PolymerSmiles
 
-from polynet.options.enums import AtomFeatures, BondFeatures
-from polynet.options.enums import StringRepresentation
-from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
+from polynet.options.enums import AtomFeatures, BondFeatures, StringRepresentation
 
 
 class PS(PolymerSmiles):

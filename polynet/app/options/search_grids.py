@@ -1,5 +1,4 @@
-from polynet.options.enums import TradtionalMLModels, ProblemTypes
-
+from polynet.options.enums import ProblemTypes, TradtionalMLModels
 
 LINEAR_MODEL_GRID = {"fit_intercept": [True, False]}
 

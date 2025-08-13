@@ -14,8 +14,8 @@ from polynet.options.enums import (
     ProblemTypes,
     SplitMethods,
     SplitTypes,
-    TransformDescriptors,
     TradtionalMLModels,
+    TransformDescriptors,
 )
 
 

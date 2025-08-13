@@ -16,21 +16,21 @@ from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     gnn_model_dir,
-    tml_model_dir,
     gnn_model_metrics_file_path,
-    tml_model_metrics_file_path,
     gnn_plots_directory,
-    tml_plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
     ml_gnn_results_file_path,
-    ml_tml_results_file_path,
     ml_results_parent_directory,
+    ml_tml_results_file_path,
     polynet_experiments_base_dir,
     representation_file_path,
     representation_options_path,
-    train_tml_model_options_path,
+    tml_model_dir,
+    tml_model_metrics_file_path,
+    tml_plots_directory,
     train_gnn_model_options_path,
+    train_tml_model_options_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -49,6 +49,12 @@ from polynet.app.services.model_training import (
     save_gnn_model,
     save_plot,
 )
+from polynet.app.services.predict_model import (
+    get_metrics,
+    get_predictions_df_gnn,
+    get_predictions_df_tml,
+    plot_results,
+)
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.services.train_tml import train_tml_model
 from polynet.app.utils import (
@@ -62,12 +68,6 @@ from polynet.app.utils import (
 )
 from polynet.options.enums import Results
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
-from polynet.app.services.predict_model import (
-    get_predictions_df_tml,
-    get_metrics,
-    plot_results,
-    get_predictions_df_gnn,
-)
 
 
 def train_models(

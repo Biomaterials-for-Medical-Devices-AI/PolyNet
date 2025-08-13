@@ -1,21 +1,20 @@
 from pathlib import Path
+
 import pandas as pd
-from sklearn.model_selection import GridSearchCV
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.ensemble import RandomForestRegressor, RandomForestClassifier
-from sklearn.svm import SVR, SVC
-from xgboost import XGBRegressor, XGBClassifier
-from sklearn.model_selection import StratifiedKFold
+from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+from sklearn.svm import SVC, SVR
+from xgboost import XGBClassifier, XGBRegressor
 
-from polynet.app.options.file_paths import representation_file_path, representation_file
-
-from polynet.app.options.train_TML import TrainTMLOptions
+from polynet.app.options.data import DataOptions
+from polynet.app.options.file_paths import representation_file, representation_file_path
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.data import DataOptions
-from polynet.options.enums import ProblemTypes, TradtionalMLModels, TransformDescriptors, Results
 from polynet.app.options.search_grids import get_grid_search
+from polynet.app.options.train_TML import TrainTMLOptions
+from polynet.options.enums import ProblemTypes, Results, TradtionalMLModels, TransformDescriptors
 
 
 def train_tml_model(

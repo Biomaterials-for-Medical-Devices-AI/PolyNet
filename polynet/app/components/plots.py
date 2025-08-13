@@ -21,8 +21,8 @@ def display_predictions(predictions_df: pd.DataFrame):
     st.write(predictions_df)
 
 
-import re
 from collections import defaultdict
+import re
 
 
 def display_plots(plots_path):

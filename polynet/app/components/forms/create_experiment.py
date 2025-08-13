@@ -3,15 +3,14 @@ import streamlit as st
 
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
-from polynet.utils.chem_utils import check_smiles_cols
-from polynet.options.enums import ProblemTypes
+from polynet.options.enums import ProblemTypes, StringRepresentation
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import (
-    canonicalise_smiles,
     canonicalise_psmiles,
+    canonicalise_smiles,
+    check_smiles_cols,
     determine_string_representation,
 )
-from polynet.options.enums import StringRepresentation
 
 
 def select_data_form():

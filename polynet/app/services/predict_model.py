@@ -1,33 +1,25 @@
-import streamlit as st
-
 from pathlib import Path
-import pandas as pd
+
 import numpy as np
-from torch_geometric.loader import DataLoader
+import pandas as pd
+import streamlit as st
 import torch
 from torch.nn import Module
-from polynet.app.services.train_tml import load_dataframes, transform_dependent_variables
-from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
-from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.data import DataOptions
-from polynet.app.options.train_TML import TrainTMLOptions
-from polynet.options.enums import (
-    ProblemTypes,
-    SplitTypes,
-    TransformDescriptors,
-    Results,
-    DataSets,
-    SplitTypes,
-)
+from torch_geometric.loader import DataLoader
 
+from polynet.app.options.data import DataOptions
+from polynet.app.options.representation import RepresentationOptions
+from polynet.app.options.train_TML import TrainTMLOptions
+from polynet.app.services.model_training import calculate_metrics, save_plot
+from polynet.app.services.train_gnn import prepare_probs_df
+from polynet.app.services.train_tml import load_dataframes, transform_dependent_variables
 from polynet.app.utils import (
-    get_true_label_column_name,
     get_iterator_name,
     get_predicted_label_column_name,
+    get_true_label_column_name,
 )
-from polynet.app.services.train_gnn import prepare_probs_df
-
-from polynet.app.services.model_training import calculate_metrics, save_plot
+from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes, TransformDescriptors
+from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
 
 
 def get_predictions_df_tml(
