@@ -27,230 +27,236 @@ def train_TML_models(problem_type: ProblemTypes):
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
     )
 
-    hyperparameter_tunning = st.toggle(
-        "Perform hyperparameter tuning",
-        key=TrainTMLStateKeys.PerformHyperparameterTuning,
-        help="If enabled, the hyperparameters of the models will be tuned using a grid search. This may take a long time depending on the number of models and hyperparameters selected.",
-    )
+    if st.toggle("Train TML models", key=TrainTMLStateKeys.TrainTML):
 
-    st.markdown(
-        """
-        ### Select the machine learning algorithms you want to train
-        """
-    )
+        st.divider()
 
-    st.divider()
+        hyperparameter_tunning = st.checkbox(
+            "Perform hyperparameter tuning",
+            key=TrainTMLStateKeys.PerformHyperparameterTuning,
+            help="If enabled, the hyperparameters of the models will be tuned using a grid search. This may take a long time depending on the number of models and hyperparameters selected.",
+        )
 
-    if problem_type == ProblemTypes.Regression:
+        st.markdown(
+            """
+            ### Select the machine learning algorithms you want to train
+            """
+        )
 
-        if st.toggle("Linear Regression", value=True, key=TrainTMLStateKeys.TrainLinearRegression):
+        st.divider()
 
-            models[TradtionalMLModels.LinearRegression] = {}
+        if problem_type == ProblemTypes.Regression:
+
+            if st.toggle(
+                "Linear Regression", value=False, key=TrainTMLStateKeys.TrainLinearRegression
+            ):
+
+                models[TradtionalMLModels.LinearRegression] = {}
+
+                if not hyperparameter_tunning:
+                    intercept = st.checkbox(
+                        "Fit intercept",
+                        value=True,
+                        key=TrainTMLStateKeys.LinearRegressionFitIntercept,
+                        help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+                    )
+
+                    models[TradtionalMLModels.LinearRegression] = {"fit_intercept": intercept}
+
+        elif problem_type == ProblemTypes.Classification:
+
+            if st.toggle(
+                "Logistic Regression", value=False, key=TrainTMLStateKeys.TrainLogisticRegression
+            ):
+
+                models[TradtionalMLModels.LogisticRegression] = {}
+
+                if not hyperparameter_tunning:
+
+                    penalty = st.selectbox(
+                        "Select the norm of the penalty",
+                        ["l1", "l2"],
+                        index=0,
+                        key=TrainTMLStateKeys.LogisticRegressionPenalty,
+                    )
+
+                    C = st.selectbox(
+                        "Select the inverse of regularization strength",
+                        [0.1, 1, 10, 100],
+                        index=1,
+                        key=TrainTMLStateKeys.LogisticRegressionC,
+                    )
+
+                    intercept = st.checkbox(
+                        "Fit intercept",
+                        value=True,
+                        key=TrainTMLStateKeys.LinearRegressionFitIntercept,
+                        help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+                    )
+
+                    solver = st.selectbox(
+                        "Select the solver",
+                        ["lbfgs", "liblinear"],
+                        index=1,
+                        key=TrainTMLStateKeys.LogisticRegressionSolver,
+                    )
+
+                    models[TradtionalMLModels.LogisticRegression] = {
+                        "penalty": penalty,
+                        "C": C,
+                        "fit_intercept": intercept,
+                        "solver": solver,
+                    }
+
+        st.divider()
+
+        if st.toggle("Random Forest", value=False, key=TrainTMLStateKeys.TrainRandomForest):
+            models[TradtionalMLModels.RandomForest] = {}
 
             if not hyperparameter_tunning:
-                intercept = st.checkbox(
-                    "Fit intercept",
-                    value=True,
-                    key=TrainTMLStateKeys.LinearRegressionFitIntercept,
-                    help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+
+                n_estimators = st.slider(
+                    "Select the number of trees in the forest",
+                    min_value=10,
+                    max_value=1000,
+                    value=100,
+                    step=10,
+                    key=TrainTMLStateKeys.RFNumberEstimators,
                 )
+                models[TradtionalMLModels.RandomForest]["n_estimators"] = n_estimators
 
-                models[TradtionalMLModels.LinearRegression] = {"fit_intercept": intercept}
+                min_samples_split = st.slider(
+                    "Select the minimum number of samples required to split an internal node",
+                    min_value=2,
+                    max_value=20,
+                    value=2,
+                    step=1,
+                    key=TrainTMLStateKeys.RFMinSamplesSplit,
+                )
+                models[TradtionalMLModels.RandomForest]["min_samples_split"] = min_samples_split
 
-    elif problem_type == ProblemTypes.Classification:
+                min_samples_leaf = st.slider(
+                    "Select the minimum number of samples required to be at a leaf node",
+                    min_value=1,
+                    max_value=20,
+                    value=1,
+                    step=1,
+                    key=TrainTMLStateKeys.RFMinSamplesLeaf,
+                )
+                models[TradtionalMLModels.RandomForest]["min_samples_leaf"] = min_samples_leaf
+
+                if st.checkbox("Set max depth"):
+                    max_depth = st.slider(
+                        "Select the maximum depth of the tree",
+                        min_value=1,
+                        max_value=20,
+                        value=0,
+                        step=1,
+                        key=TrainTMLStateKeys.RFMaxDepth,
+                    )
+                else:
+                    max_depth = None
+                models[TradtionalMLModels.RandomForest]["max_depth"] = max_depth
+
+        st.divider()
 
         if st.toggle(
-            "Logistic Regression", value=True, key=TrainTMLStateKeys.TrainLogisticRegression
+            "Support Vector Machine", value=False, key=TrainTMLStateKeys.TrainSupportVectorMachine
         ):
-
-            models[TradtionalMLModels.LogisticRegression] = {}
+            models[TradtionalMLModels.SupportVectorMachine] = {}
 
             if not hyperparameter_tunning:
 
-                penalty = st.selectbox(
-                    "Select the norm of the penalty",
-                    ["l1", "l2"],
-                    index=0,
-                    key=TrainTMLStateKeys.LogisticRegressionPenalty,
+                kernel = st.selectbox(
+                    "Select the kernel type",
+                    options=["linear", "poly", "rbf", "sigmoid"],
+                    index=2,
+                    key=TrainTMLStateKeys.SVMKernel,
                 )
+                models[TradtionalMLModels.SupportVectorMachine]["kernel"] = kernel
 
-                C = st.selectbox(
-                    "Select the inverse of regularization strength",
-                    [0.1, 1, 10, 100],
-                    index=1,
-                    key=TrainTMLStateKeys.LogisticRegressionC,
+                degree = st.slider(
+                    "Select the degree of the polynomial kernel function",
+                    min_value=2,
+                    max_value=5,
+                    value=3,
+                    step=1,
+                    key=TrainTMLStateKeys.SVMDegree,
                 )
+                models[TradtionalMLModels.SupportVectorMachine]["degree"] = degree
 
-                intercept = st.checkbox(
-                    "Fit intercept",
-                    value=True,
-                    key=TrainTMLStateKeys.LinearRegressionFitIntercept,
-                    help="If enabled, the model will fit an intercept term. If disabled, the model will not fit an intercept term.",
+                c = st.slider(
+                    "Select the regularization parameter C",
+                    min_value=0.01,
+                    max_value=10.0,
+                    value=1.0,
+                    step=0.01,
+                    key=TrainTMLStateKeys.SVMC,
                 )
+                models[TradtionalMLModels.SupportVectorMachine]["C"] = c
 
-                solver = st.selectbox(
-                    "Select the solver",
-                    ["lbfgs", "liblinear"],
-                    index=1,
-                    key=TrainTMLStateKeys.LogisticRegressionSolver,
+                if problem_type == ProblemTypes.Classification:
+                    models[TradtionalMLModels.SupportVectorMachine]["probability"] = True
+
+        st.divider()
+
+        if st.toggle("XGBoost", value=False, key=TrainTMLStateKeys.TrainXGBoost):
+            models[TradtionalMLModels.XGBoost] = {}
+
+            if not hyperparameter_tunning:
+
+                num_estimators = st.slider(
+                    "Select the number of trees in the forest",
+                    min_value=10,
+                    max_value=1000,
+                    value=100,
+                    step=10,
+                    key=TrainTMLStateKeys.XGBNumberEstimators,
                 )
+                models[TradtionalMLModels.XGBoost]["n_estimators"] = num_estimators
 
-                models[TradtionalMLModels.LogisticRegression] = {
-                    "penalty": penalty,
-                    "C": C,
-                    "fit_intercept": intercept,
-                    "solver": solver,
-                }
+                learning_rate = st.slider(
+                    "Select the learning rate",
+                    min_value=0.001,
+                    max_value=0.1,
+                    value=0.01,
+                    step=0.001,
+                    key=TrainTMLStateKeys.XGBLearningRate,
+                )
+                models[TradtionalMLModels.XGBoost]["learning_rate"] = learning_rate
 
-    st.divider()
+                subsample_size = st.slider(
+                    "Select the subsample size",
+                    min_value=0.1,
+                    max_value=1.0,
+                    value=0.8,
+                    step=0.01,
+                    key=TrainTMLStateKeys.XGBSubsampleSize,
+                )
+                models[TradtionalMLModels.XGBoost]["subsample"] = subsample_size
 
-    if st.toggle("Random Forest", value=True, key=TrainTMLStateKeys.TrainRandomForest):
-        models[TradtionalMLModels.RandomForest] = {}
-
-        if not hyperparameter_tunning:
-
-            n_estimators = st.slider(
-                "Select the number of trees in the forest",
-                min_value=10,
-                max_value=1000,
-                value=100,
-                step=10,
-                key=TrainTMLStateKeys.RFNumberEstimators,
-            )
-            models[TradtionalMLModels.RandomForest]["n_estimators"] = n_estimators
-
-            min_samples_split = st.slider(
-                "Select the minimum number of samples required to split an internal node",
-                min_value=2,
-                max_value=20,
-                value=2,
-                step=1,
-                key=TrainTMLStateKeys.RFMinSamplesSplit,
-            )
-            models[TradtionalMLModels.RandomForest]["min_samples_split"] = min_samples_split
-
-            min_samples_leaf = st.slider(
-                "Select the minimum number of samples required to be at a leaf node",
-                min_value=1,
-                max_value=20,
-                value=1,
-                step=1,
-                key=TrainTMLStateKeys.RFMinSamplesLeaf,
-            )
-            models[TradtionalMLModels.RandomForest]["min_samples_leaf"] = min_samples_leaf
-
-            if st.checkbox("Set max depth"):
                 max_depth = st.slider(
                     "Select the maximum depth of the tree",
-                    min_value=1,
+                    min_value=0,
                     max_value=20,
                     value=0,
                     step=1,
-                    key=TrainTMLStateKeys.RFMaxDepth,
+                    key=TrainTMLStateKeys.XGBMaxDepth,
                 )
-            else:
-                max_depth = None
-            models[TradtionalMLModels.RandomForest]["max_depth"] = max_depth
+                models[TradtionalMLModels.XGBoost]["max_depth"] = max_depth
 
-    st.divider()
+        st.divider()
 
-    if st.toggle(
-        "Support Vector Machine", value=True, key=TrainTMLStateKeys.TrainSupportVectorMachine
-    ):
-        models[TradtionalMLModels.SupportVectorMachine] = {}
-
-        if not hyperparameter_tunning:
-
-            kernel = st.selectbox(
-                "Select the kernel type",
-                options=["linear", "poly", "rbf", "sigmoid"],
-                index=2,
-                key=TrainTMLStateKeys.SVMKernel,
-            )
-            models[TradtionalMLModels.SupportVectorMachine]["kernel"] = kernel
-
-            degree = st.slider(
-                "Select the degree of the polynomial kernel function",
-                min_value=2,
-                max_value=5,
-                value=3,
-                step=1,
-                key=TrainTMLStateKeys.SVMDegree,
-            )
-            models[TradtionalMLModels.SupportVectorMachine]["degree"] = degree
-
-            c = st.slider(
-                "Select the regularization parameter C",
-                min_value=0.01,
-                max_value=10.0,
-                value=1.0,
-                step=0.01,
-                key=TrainTMLStateKeys.SVMC,
-            )
-            models[TradtionalMLModels.SupportVectorMachine]["C"] = c
-
-            if problem_type == ProblemTypes.Classification:
-                models[TradtionalMLModels.SupportVectorMachine]["probability"] = True
-
-    st.divider()
-
-    if st.toggle("XGBoost", value=True, key=TrainTMLStateKeys.TrainXGBoost):
-        models[TradtionalMLModels.XGBoost] = {}
-
-        if not hyperparameter_tunning:
-
-            num_estimators = st.slider(
-                "Select the number of trees in the forest",
-                min_value=10,
-                max_value=1000,
-                value=100,
-                step=10,
-                key=TrainTMLStateKeys.XGBNumberEstimators,
-            )
-            models[TradtionalMLModels.XGBoost]["n_estimators"] = num_estimators
-
-            learning_rate = st.slider(
-                "Select the learning rate",
-                min_value=0.001,
-                max_value=0.1,
-                value=0.01,
-                step=0.001,
-                key=TrainTMLStateKeys.XGBLearningRate,
-            )
-            models[TradtionalMLModels.XGBoost]["learning_rate"] = learning_rate
-
-            subsample_size = st.slider(
-                "Select the subsample size",
-                min_value=0.1,
-                max_value=1.0,
-                value=0.8,
-                step=0.01,
-                key=TrainTMLStateKeys.XGBSubsampleSize,
-            )
-            models[TradtionalMLModels.XGBoost]["subsample"] = subsample_size
-
-            max_depth = st.slider(
-                "Select the maximum depth of the tree",
-                min_value=0,
-                max_value=20,
-                value=0,
-                step=1,
-                key=TrainTMLStateKeys.XGBMaxDepth,
-            )
-            models[TradtionalMLModels.XGBoost]["max_depth"] = max_depth
-
-    st.divider()
-
-    st.selectbox(
-        "Apply transformation to the independent variables",
-        options=[
-            TransformDescriptors.NoTransformation,
-            TransformDescriptors.StandardScaler,
-            TransformDescriptors.MinMaxScaler,
-        ],
-        index=0,
-        key=TrainTMLStateKeys.TrasformFeatures,
-    )
+        st.selectbox(
+            "Apply transformation to the independent variables",
+            options=[
+                TransformDescriptors.NoTransformation,
+                TransformDescriptors.StandardScaler,
+                TransformDescriptors.MinMaxScaler,
+            ],
+            index=0,
+            key=TrainTMLStateKeys.TrasformFeatures,
+        )
 
     return models
 
@@ -263,159 +269,165 @@ def train_GNN_models_form(representation_opts: RepresentationOptions, problem_ty
 
     gnn_conv_params = {}
 
-    conv_layers = st.multiselect(
-        "Select a GNN convolutional layer to train",
-        options=[
-            Networks.GCN,
-            Networks.GraphSAGE,
-            Networks.TransformerGNN,
-            Networks.GAT,
-            Networks.MPNN,
-            Networks.CGGNN,
-        ],
-        default=[Networks.GCN],
-        key=TrainGNNStateKeys.GNNConvolutionalLayers,
-    )
+    if st.toggle("Train GNN models", key=TrainGNNStateKeys.TrainGNN):
 
-    if not conv_layers:
-        st.error("Please select at least one GNN convolutional layer to train.")
-        st.stop()
-
-    if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### GCN Hyperparameters")
-
-        st.warning("Beaware that GCN does not support edge features. ")
-        # Add GCN specific hyperparameters here
-        improved = st.selectbox(
-            "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
+        conv_layers = st.multiselect(
+            "Select a GNN convolutional layer to train",
+            options=[
+                Networks.GCN,
+                Networks.GraphSAGE,
+                Networks.TransformerGNN,
+                Networks.GAT,
+                Networks.MPNN,
+                Networks.CGGNN,
+            ],
+            default=[Networks.GCN],
+            key=TrainGNNStateKeys.GNNConvolutionalLayers,
         )
-        gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
 
-    if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### GraphSAGE Hyperparameters")
+        if not conv_layers:
+            st.error("Please select at least one GNN convolutional layer to train.")
+            st.stop()
 
-        st.warning("Beaware that GCN does not support edge features. ")
-        # Add GraphSAGE specific hyperparameters here
-        bias = st.selectbox("Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0)
-        gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
+        if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### GCN Hyperparameters")
 
-    if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### Transformer GNN Hyperparameters")
-        # Add Transformer GNN specific hyperparameters here
-        num_heads = st.slider(
-            "Select the number of attention heads",
-            min_value=1,
-            max_value=8,
-            value=4,
-            key=TrainGNNStateKeys.NumHeads,
-        )
-        gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
-
-    if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### GAT Hyperparameters")
-        # Add GAT specific hyperparameters here
-        num_heads = st.slider(
-            "Select the number of attention heads",
-            min_value=1,
-            max_value=8,
-            value=4,
-            key=TrainGNNStateKeys.NHeads,
-        )
-        gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
-
-    if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### MPNN Hyperparameters")
-        # Add MPNN specific hyperparameters here
-
-        gnn_conv_params[Networks.MPNN] = {}
-
-    if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-        st.write("#### CGCGNN Hyperparameters")
-        # Add MPNN specific hyperparameters here
-
-        gnn_conv_params[Networks.CGGNN] = {}
-
-    st.write(" ### General GNN Hyperparameters")
-
-    st.select_slider(
-        "Select the number of convolutional GNN layers",
-        options=list(range(1, 6)),
-        value=2,
-        key=TrainGNNStateKeys.GNNNumberOfLayers,
-    )
-
-    st.select_slider(
-        "Select the embedding dimension",
-        options=list(range(16, 257, 16)),
-        value=128,
-        key=TrainGNNStateKeys.GNNEmbeddingDimension,
-    )
-
-    st.selectbox(
-        "Select the pooling method",
-        options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
-        key=TrainGNNStateKeys.GNNPoolingMethod,
-        index=2,
-    )
-
-    st.slider(
-        "Select the number of readout layers",
-        min_value=1,
-        max_value=5,
-        value=2,
-        key=TrainGNNStateKeys.GNNReadoutLayers,
-    )
-
-    st.slider(
-        "Select the dropout rate",
-        min_value=0.0,
-        max_value=0.5,
-        value=0.01,
-        step=0.01,
-        key=TrainGNNStateKeys.GNNDropoutRate,
-    )
-
-    st.slider(
-        "Select the learning rate",
-        min_value=0.0001,
-        max_value=0.1,
-        value=0.01,
-        step=0.001,
-        key=TrainGNNStateKeys.GNNLearningRate,
-    )
-
-    st.slider(
-        "Select the batch size",
-        min_value=16,
-        max_value=128,
-        value=32,
-        step=16,
-        key=TrainGNNStateKeys.GNNBatchSize,
-    )
-
-    if representation_opts.weights_col:
-        st.selectbox(
-            "Select when you would like to apply the weighting to the graph",
-            options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
-            index=0,
-            key=TrainGNNStateKeys.GNNMonomerWeighting,
-        )
-    else:
-        st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = ApplyWeightingToGraph.NoWeighting
-
-    if problem_type == ProblemTypes.Classification:
-        if st.checkbox(
-            "Apply asymmetric loss function", value=True, key=TrainGNNStateKeys.AsymmetricLoss
-        ):
-            st.slider(
-                "Set the imbalance strength",
-                min_value=0.0,
-                max_value=1.0,
-                value=0.5,
-                step=0.1,
-                key=TrainGNNStateKeys.ImbalanceStrength,
-                help="Controls how much strength to apply to the asymmetric loss function. A value of 1 means that weighting will be given by the inverse of the total count of each label, while a value of 0 means that each class will be weighted equally.",
+            st.warning("Beaware that GCN does not support edge features. ")
+            # Add GCN specific hyperparameters here
+            improved = st.selectbox(
+                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
             )
+            gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
+
+        if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### GraphSAGE Hyperparameters")
+
+            st.warning("Beaware that GCN does not support edge features. ")
+            # Add GraphSAGE specific hyperparameters here
+            bias = st.selectbox(
+                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0
+            )
+            gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
+
+        if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### Transformer GNN Hyperparameters")
+            # Add Transformer GNN specific hyperparameters here
+            num_heads = st.slider(
+                "Select the number of attention heads",
+                min_value=1,
+                max_value=8,
+                value=4,
+                key=TrainGNNStateKeys.NumHeads,
+            )
+            gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
+
+        if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### GAT Hyperparameters")
+            # Add GAT specific hyperparameters here
+            num_heads = st.slider(
+                "Select the number of attention heads",
+                min_value=1,
+                max_value=8,
+                value=4,
+                key=TrainGNNStateKeys.NHeads,
+            )
+            gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
+
+        if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### MPNN Hyperparameters")
+            # Add MPNN specific hyperparameters here
+
+            gnn_conv_params[Networks.MPNN] = {}
+
+        if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
+            st.write("#### CGCGNN Hyperparameters")
+            # Add MPNN specific hyperparameters here
+
+            gnn_conv_params[Networks.CGGNN] = {}
+
+        st.write(" ### General GNN Hyperparameters")
+
+        st.select_slider(
+            "Select the number of convolutional GNN layers",
+            options=list(range(1, 6)),
+            value=2,
+            key=TrainGNNStateKeys.GNNNumberOfLayers,
+        )
+
+        st.select_slider(
+            "Select the embedding dimension",
+            options=list(range(16, 257, 16)),
+            value=128,
+            key=TrainGNNStateKeys.GNNEmbeddingDimension,
+        )
+
+        st.selectbox(
+            "Select the pooling method",
+            options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
+            key=TrainGNNStateKeys.GNNPoolingMethod,
+            index=2,
+        )
+
+        st.slider(
+            "Select the number of readout layers",
+            min_value=1,
+            max_value=5,
+            value=2,
+            key=TrainGNNStateKeys.GNNReadoutLayers,
+        )
+
+        st.slider(
+            "Select the dropout rate",
+            min_value=0.0,
+            max_value=0.5,
+            value=0.01,
+            step=0.01,
+            key=TrainGNNStateKeys.GNNDropoutRate,
+        )
+
+        st.slider(
+            "Select the learning rate",
+            min_value=0.0001,
+            max_value=0.1,
+            value=0.01,
+            step=0.001,
+            key=TrainGNNStateKeys.GNNLearningRate,
+        )
+
+        st.slider(
+            "Select the batch size",
+            min_value=16,
+            max_value=128,
+            value=32,
+            step=16,
+            key=TrainGNNStateKeys.GNNBatchSize,
+        )
+
+        if representation_opts.weights_col:
+            st.selectbox(
+                "Select when you would like to apply the weighting to the graph",
+                options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
+                index=0,
+                key=TrainGNNStateKeys.GNNMonomerWeighting,
+            )
+        else:
+            st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = (
+                ApplyWeightingToGraph.NoWeighting
+            )
+
+        if problem_type == ProblemTypes.Classification:
+            if st.checkbox(
+                "Apply asymmetric loss function", value=True, key=TrainGNNStateKeys.AsymmetricLoss
+            ):
+                st.slider(
+                    "Set the imbalance strength",
+                    min_value=0.0,
+                    max_value=1.0,
+                    value=0.5,
+                    step=0.1,
+                    key=TrainGNNStateKeys.ImbalanceStrength,
+                    help="Controls how much strength to apply to the asymmetric loss function. A value of 1 means that weighting will be given by the inverse of the total count of each label, while a value of 0 means that each class will be weighted equally.",
+                )
 
     return gnn_conv_params
 
