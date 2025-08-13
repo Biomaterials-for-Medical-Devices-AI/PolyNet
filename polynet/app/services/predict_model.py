@@ -13,7 +13,7 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.options.enums import (
     ProblemTypes,
-    TradtionalMLModels,
+    SplitTypes,
     TransformDescriptors,
     Results,
     DataSets,
@@ -31,12 +31,7 @@ from polynet.app.services.model_training import calculate_metrics, save_plot
 
 
 def get_predictions_df_tml(
-    experiment_path: Path,
-    models: dict,
-    dataframes: dict,
-    split_type: str,
-    representation_options: RepresentationOptions,
-    data_options: DataOptions,
+    models: dict, dataframes: dict, split_type: SplitTypes, data_options: DataOptions
 ) -> pd.DataFrame:
 
     label_col_name = get_true_label_column_name(
@@ -289,11 +284,103 @@ def predict_tml_model(
     return predictions_df
 
 
-def predict_gnn_model(models: dict, loader: DataLoader):
+def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type):
 
-    pass
+    label_col_name = get_true_label_column_name(
+        target_variable_name=data_options.target_variable_name
+    )
+    iterator = get_iterator_name(split_type)
 
-    return
+    all_dfs = []
+    predictions_all = pd.DataFrame()
+    last_iteration = None
+
+    for model_name, model in models.items():
+        iteration, gnn_arch = model_name.split("_")
+
+        predicted_col_name = get_predicted_label_column_name(
+            target_variable_name=data_options.target_variable_name, model_name=gnn_arch
+        )
+
+        train_loader, val_loader, test_loader = loaders[iteration]
+
+        idx, preds, y_vals, train_scores = model.predict_loader(train_loader)
+
+        train_df = pd.DataFrame(
+            {
+                Results.Index.value: idx,
+                Results.Set.value: DataSets.Training.value,
+                label_col_name: y_vals,
+                predicted_col_name: preds,
+            }
+        )
+
+        idx, preds, y_vals, val_scores = model.predict_loader(val_loader)
+
+        val_df = pd.DataFrame(
+            {
+                Results.Index.value: idx,
+                Results.Set.value: DataSets.Training.value,
+                label_col_name: y_vals,
+                predicted_col_name: preds,
+            }
+        )
+
+        idx, preds, y_vals, test_scores = model.predict_loader(test_loader)
+
+        test_df = pd.DataFrame(
+            {
+                Results.Index.value: idx,
+                Results.Set.value: DataSets.Training.value,
+                label_col_name: y_vals,
+                predicted_col_name: preds,
+            }
+        )
+
+        if data_options.problem_type == ProblemTypes.Classification:
+            probs_train = prepare_probs_df(
+                probs=train_scores,
+                target_variable_name=data_options.target_variable_name,
+                model_name=gnn_arch,
+            )
+            train_df[probs_train.columns] = probs_train.to_numpy()
+
+            probs_val = prepare_probs_df(
+                probs=val_scores,
+                target_variable_name=data_options.target_variable_name,
+                model_name=gnn_arch,
+            )
+            val_df[probs_val.columns] = probs_val.to_numpy()
+
+            probs_test = prepare_probs_df(
+                probs=test_scores,
+                target_variable_name=data_options.target_variable_name,
+                model_name=gnn_arch,
+            )
+            test_df[probs_test.columns] = probs_test.to_numpy()
+
+        predictions_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
+        predictions_df[iterator] = iteration
+
+        if last_iteration is None:
+            predictions_all = predictions_df.copy()
+            last_iteration = iteration
+        elif iteration == last_iteration:
+            new_cols = [col for col in predictions_df.columns if col not in predictions_all.columns]
+            predictions_df = predictions_df[new_cols]
+            predictions_all = pd.concat([predictions_all, predictions_df], axis=1)
+        else:
+            all_dfs.append(predictions_all.copy())
+            predictions_all = predictions_df.copy()
+            last_iteration = iteration
+
+    all_dfs.append(predictions_all)
+    predictions = pd.concat(all_dfs)
+
+    cols = [Results.Index.value, Results.Set.value, iterator, label_col_name]
+    cols += [col for col in predictions if col not in cols]
+
+    return predictions[cols]
 
 
 def get_gnn_model_predictions(model: Module, loader: DataLoader, prediction_col_name="Predictions"):
