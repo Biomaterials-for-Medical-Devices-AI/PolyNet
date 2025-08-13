@@ -45,12 +45,13 @@ def get_predictions_df_tml(
 
     for model_name, model in models.items():
 
-        iteration, df_name, ml_algorithm = model_name.split("_")
+        iteration, ml_model = model_name.split("_")
+        strs = ml_model.split(" ")
+        ml_algorithm, df_name = strs[:-1], strs[-1]
 
         predicted_col_name = get_predicted_label_column_name(
-            target_variable_name=data_options.target_variable_name, model_name=ml_algorithm
+            target_variable_name=data_options.target_variable_name, model_name=ml_model
         )
-        predicted_col_name = predicted_col_name + " " + df_name
 
         train_data, val_data, test_data = dataframes[f"{iteration}_{df_name}"]
 
@@ -89,8 +90,8 @@ def get_predictions_df_tml(
             probs_train = model.predict_proba(train_data.iloc[:, :-1])
             probs_train = prepare_probs_df(
                 probs=probs_train,
-                target_variable_name=data_options.target_variable_name + " " + df_name,
-                model_name=ml_algorithm,
+                target_variable_name=data_options.target_variable_name,
+                model_name=ml_model,
             )
 
             train_df[probs_train.columns] = probs_train.to_numpy()
@@ -98,16 +99,16 @@ def get_predictions_df_tml(
             probs_val = model.predict_proba(val_data.iloc[:, :-1])
             probs_val = prepare_probs_df(
                 probs=probs_val,
-                target_variable_name=data_options.target_variable_name + " " + df_name,
-                model_name=ml_algorithm,
+                target_variable_name=data_options.target_variable_name,
+                model_name=ml_model,
             )
             val_df[probs_val.columns] = probs_val.to_numpy()
 
             probs_test = model.predict_proba(test_data.iloc[:, :-1])
             probs_test = prepare_probs_df(
                 probs=probs_test,
-                target_variable_name=data_options.target_variable_name + " " + df_name,
-                model_name=ml_algorithm,
+                target_variable_name=data_options.target_variable_name,
+                model_name=ml_model,
             )
 
             test_df[probs_test.columns] = probs_test.to_numpy()
@@ -141,7 +142,7 @@ def get_metrics(
     predictions: pd.DataFrame,
     split_type: SplitTypes,
     target_variable_name: str,
-    ml_algorithms: list,
+    trained_models: list,
     problem_type: ProblemTypes,
 ):
     iterator = get_iterator_name(split_type)
@@ -150,27 +151,25 @@ def get_metrics(
 
     metrics = {}
 
-    for model in ml_algorithms:
+    for model in trained_models:
 
-        iteration, df, ml_algorithm = model.split("_")
+        iteration, ml_algorithm = model.split("_")
 
         if not iteration in metrics:
             metrics[iteration] = {}
 
         iteration_df = predictions.loc[predictions[iterator] == iteration]
 
-        result_cols = [col for col in iteration_df.columns if df in col and ml_algorithm in col]
+        result_cols = [col for col in iteration_df.columns if ml_algorithm in col]
         predicted_col = result_cols.pop(0)
 
-        model_name = df + " " + ml_algorithm
-
-        metrics[iteration][model_name] = {}
+        metrics[iteration][ml_algorithm] = {}
 
         for set in iteration_df[Results.Set.value].unique():
 
             set_df = iteration_df.loc[iteration_df[Results.Set.value] == set]
 
-            metrics[iteration][model_name][set] = calculate_metrics(
+            metrics[iteration][ml_algorithm][set] = calculate_metrics(
                 y_true=set_df[label_col_name],
                 y_pred=set_df[predicted_col],
                 y_probs=(
@@ -197,17 +196,15 @@ def plot_results(
 
     for model in ml_algorithms:
 
-        iteration, df, ml_algorithm = model.split("_")
+        iteration, ml_algorithm = model.split("_")
 
         results_df = predictions.loc[
             (predictions[iterator] == iteration)
             & (predictions[Results.Set.value] == DataSets.Test.value)
         ]
 
-        result_cols = [col for col in results_df.columns if df in col and ml_algorithm in col]
+        result_cols = [col for col in results_df.columns if ml_algorithm in col]
         predicted_col = result_cols.pop(0)
-
-        model_name = df + " " + ml_algorithm
 
         if problem_type == ProblemTypes.Classification:
 
@@ -217,9 +214,9 @@ def plot_results(
                 display_labels=(
                     list(data_options.class_names.values()) if data_options.class_names else None
                 ),
-                title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name} - {iteration}",
+                title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {ml_algorithm} - {iteration}",
             )
-            save_plot_path = save_path / f"{model_name}_{iteration}_confusion_matrix.png"
+            save_plot_path = save_path / f"{ml_algorithm}_{iteration}_confusion_matrix.png"
             save_plot(fig=fig, path=save_plot_path)
 
             for class_num, probs_col in enumerate(result_cols):
@@ -230,10 +227,10 @@ def plot_results(
                 fig = plot_auroc(
                     y_true=results_df[label_col_name],
                     y_scores=results_df[probs_col],
-                    title=f"{data_options.target_variable_name}\nROC Curve for\n {model_name} Class {class_num} - {iteration}",
+                    title=f"{data_options.target_variable_name}\nROC Curve for\n {ml_algorithm} Class {class_num} - {iteration}",
                 )
                 save_plot_path = (
-                    save_path / f"{model_name}_{iteration}_class_{class_num}_roc_curve.png"
+                    save_path / f"{ml_algorithm}_{iteration}_class_{class_num}_roc_curve.png"
                 )
                 save_plot(fig=fig, path=save_plot_path)
 
@@ -241,9 +238,9 @@ def plot_results(
             fig = plot_parity(
                 y_true=results_df[label_col_name],
                 y_pred=results_df[predicted_col],
-                title=f"{data_options.target_variable_name}\nParity Plot for\n {model_name} - {iteration}",
+                title=f"{data_options.target_variable_name}\nParity Plot for\n {ml_algorithm} - {iteration}",
             )
-            save_plot_path = save_path / f"{model_name}_{iteration}_parity_plot.png"
+            save_plot_path = save_path / f"{ml_algorithm}_{iteration}_parity_plot.png"
             save_plot(fig=fig, path=save_plot_path)
 
     return
@@ -303,6 +300,7 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
         )
 
         train_loader, val_loader, test_loader = loaders[iteration]
+        train_loader = DataLoader(train_loader.dataset, batch_size=1, shuffle=False)
 
         idx, preds, y_vals, train_scores = model.predict_loader(train_loader)
 
@@ -320,7 +318,7 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
         val_df = pd.DataFrame(
             {
                 Results.Index.value: idx,
-                Results.Set.value: DataSets.Training.value,
+                Results.Set.value: DataSets.Validation.value,
                 label_col_name: y_vals,
                 predicted_col_name: preds,
             }
@@ -331,7 +329,7 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
         test_df = pd.DataFrame(
             {
                 Results.Index.value: idx,
-                Results.Set.value: DataSets.Training.value,
+                Results.Set.value: DataSets.Test.value,
                 label_col_name: y_vals,
                 predicted_col_name: preds,
             }
