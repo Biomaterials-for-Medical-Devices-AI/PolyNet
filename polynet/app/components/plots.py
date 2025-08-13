@@ -131,9 +131,9 @@ def display_mean_std_model_metrics(metrics_dict):
             std = group_stats[(metric, "std")]
             count = group_stats[(metric, "count")]
             if count > 1:
-                row[metric] = f"{mean:.3f} ± {std:.3f}"
+                row[metric] = f"{mean:.2f} ± {std:.2f}"
             else:
-                row[metric] = f"{mean:.3f}"
+                row[metric] = f"{mean:.2f}"
         final_data.append(row)
 
     final_df = pd.DataFrame(final_data)
