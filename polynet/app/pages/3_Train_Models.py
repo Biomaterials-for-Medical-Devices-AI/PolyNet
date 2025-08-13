@@ -60,9 +60,14 @@ from polynet.app.utils import (
     merge_model_predictions,
     save_data,
 )
-from polynet.options.enums import DataSets, ProblemTypes, Results
+from polynet.options.enums import Results
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
-from polynet.app.services.predict_model import get_predictions_df_tml, get_metrics, plot_results
+from polynet.app.services.predict_model import (
+    get_predictions_df_tml,
+    get_metrics,
+    plot_results,
+    get_predictions_df_gnn,
+)
 
 
 def train_models(
@@ -72,37 +77,25 @@ def train_models(
     representation_options: RepresentationOptions,
     data_options: DataOptions,
 ):
-    """
-    Placeholder function for training models.
-    This function is a placeholder for future implementation.
-    """
 
-    train_tml_options = TrainTMLOptions(
-        TransformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
-        HyperparameterOptimization=st.session_state[TrainTMLStateKeys.PerformHyperparameterTuning],
-        TrainLinearRegression=st.session_state.get(TrainTMLStateKeys.TrainLinearRegression, False),
-        TrainLogisticRegression=st.session_state.get(
-            TrainTMLStateKeys.TrainLogisticRegression, False
-        ),
-        TrainRandomForest=st.session_state[TrainTMLStateKeys.TrainRandomForest],
-        TrainSupportVectorMachine=st.session_state[TrainTMLStateKeys.TrainSupportVectorMachine],
-        TrainXGBoost=st.session_state[TrainTMLStateKeys.TrainXGBoost],
-    )
+    # paths for options and experiments
+    experiment_path = polynet_experiments_base_dir() / experiment_name
+    tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
+    gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
+    ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
 
-    train_gnn_options = TrainGNNOptions(
-        GNNConvolutionalLayers=gnn_conv_params,
-        GNNNumberOfLayers=st.session_state[TrainGNNStateKeys.GNNNumberOfLayers],
-        GNNEmbeddingDimension=st.session_state[TrainGNNStateKeys.GNNEmbeddingDimension],
-        GNNPoolingMethod=st.session_state[TrainGNNStateKeys.GNNPoolingMethod],
-        GNNReadoutLayers=st.session_state[TrainGNNStateKeys.GNNReadoutLayers],
-        GNNDropoutRate=st.session_state[TrainGNNStateKeys.GNNDropoutRate],
-        GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
-        GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
-        ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
-        AsymmetricLoss=st.session_state.get(TrainGNNStateKeys.AsymmetricLoss, False),
-        ImbalanceStrength=st.session_state.get(TrainGNNStateKeys.ImbalanceStrength, 0.0),
-    )
+    # delete old options if it exists
+    if tml_training_opts_path.exists():
+        tml_training_opts_path.unlink()
+    if gnn_training_opts_path.exists():
+        gnn_training_opts_path.unlink()
+    if ml_results_dir.exists():
+        rmtree(ml_results_dir)
+    gen_options_path = general_options_path(experiment_path=experiment_path)
+    if gen_options_path.exists():
+        gen_options_path.unlink()
 
+    # Get general experiment options
     general_experiment_options = GeneralConfigOptions(
         split_type=st.session_state[GeneralConfigStateKeys.SplitType],
         split_method=st.session_state[GeneralConfigStateKeys.SplitMethod],
@@ -114,245 +107,171 @@ def train_models(
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed],
     )
-
-    experiment_path = polynet_experiments_base_dir() / experiment_name
-
-    tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
-
-    gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
-    gen_options_path = general_options_path(experiment_path=experiment_path)
-    ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
-
-    if tml_training_opts_path.exists():
-        tml_training_opts_path.unlink()
-    if gnn_training_opts_path.exists():
-        gnn_training_opts_path.unlink()
-    if gen_options_path.exists():
-        gen_options_path.unlink()
-    if ml_results_dir.exists():
-        rmtree(ml_results_dir)
-
-    save_options(path=tml_training_opts_path, options=train_tml_options)
-    save_options(path=gnn_training_opts_path, options=train_gnn_options)
+    # save new options
     save_options(path=gen_options_path, options=general_experiment_options)
 
+    # read the data
     data = pd.read_csv(
         gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
         index_col=0,
     )
-
+    # generate indices to split data
     train_val_test_idxs = get_data_split_indices(
         data=data, data_options=data_options, general_experiment_options=general_experiment_options
     )
 
-    tml_models, dataframes = train_tml_model(
-        train_tml_options=train_tml_options,
-        tml_models=tml_models,
-        general_experiment_options=general_experiment_options,
-        representation_options=representation_options,
-        data_options=data_options,
-        experiment_path=experiment_path,
-        train_val_test_idxs=train_val_test_idxs,
-    )
-
-    tml_predictions_df = get_predictions_df_tml(
-        experiment_path=experiment_path,
-        models=tml_models,
-        dataframes=dataframes,
-        split_type=general_experiment_options.split_type,
-        representation_options=representation_options,
-        data_options=data_options,
-    )
-
-    tml_models_dir = tml_model_dir(experiment_path=experiment_path)
-    tml_models_dir.mkdir(parents=True)
-
-    save_data(
-        data=tml_predictions_df,
-        data_path=ml_tml_results_file_path(
-            experiment_path=experiment_path, file_name="predictions.csv"
-        ),
-    )
-
-    metrics_tml = get_metrics(
-        predictions=tml_predictions_df,
-        split_type=general_experiment_options.split_type,
-        target_variable_name=data_options.target_variable_name,
-        ml_algorithms=tml_models.keys(),
-        problem_type=data_options.problem_type,
-    )
-
+    # Create directory to save plots
     plots_dir = gnn_plots_directory(experiment_path=experiment_path)
     plots_dir.mkdir(parents=True)
-
-    plot_results(
-        predictions=tml_predictions_df,
-        split_type=general_experiment_options.split_type,
-        target_variable_name=data_options.target_variable_name,
-        ml_algorithms=tml_models.keys(),
-        problem_type=data_options.problem_type,
-        data_options=data_options,
-        save_path=plots_dir,
-    )
-
-    gnn_models = train_network(
-        train_gnn_options=train_gnn_options,
-        general_experiment_options=general_experiment_options,
-        experiment_name=experiment_name,
-        data_options=data_options,
-        representation_options=representation_options,
-        train_val_test_idxs=train_val_test_idxs,
-    )
-
+    # directory for models
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
     gnn_models_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
 
-    gnn_plots_dir = gnn_plots_directory(experiment_path=experiment_path)
-    gnn_plots_dir.mkdir(parents=True, exist_ok=True)
-
-    metrics = {}
-
-    predictions_iterations = pd.DataFrame()
-
-    iterator = get_iterator_name(general_experiment_options.split_type)
-
-    for iteration, model_params in gnn_models.items():
-
-        loader = model_params[Results.Loaders.value]
-        models = model_params[Results.Model.value]
-
-        predictions_models = []
-        ensemple_models = []
-        metrics[iteration] = {}
-
-        for model_name, model in models.items():
-
-            save_path = gnn_models_dir / f"{model_name}_{iteration}.pt"
-            save_gnn_model(model=model, path=save_path)
-
-            label_col_name = get_true_label_column_name(
-                target_variable_name=data_options.target_variable_name
-            )
-            predicted_col_name = get_predicted_label_column_name(
-                target_variable_name=data_options.target_variable_name, model_name=model._name
-            )
-
-            predictions = predict_gnn_model(
-                model=model, loaders=loader, target_variable_name=data_options.target_variable_name
-            )
-
-            predictions_train = predictions.loc[predictions[Results.Set.value] == DataSets.Training]
-            predictions_val = predictions.loc[predictions[Results.Set.value] == DataSets.Validation]
-            predictions_test = predictions.loc[predictions[Results.Set.value] == DataSets.Test]
-
-            metrics[iteration][model_name] = {}
-
-            if data_options.problem_type == ProblemTypes.Classification:
-
-                fig = plot_confusion_matrix(
-                    y_true=predictions_test[label_col_name],
-                    y_pred=predictions_test[predicted_col_name],
-                    display_labels=(
-                        list(data_options.class_names.values())
-                        if data_options.class_names
-                        else None
-                    ),
-                    title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {model_name} - {iteration}",
-                )
-                save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_confusion_matrix.png"
-                save_plot(fig=fig, path=save_plot_path)
-
-                for class_num in range(int(data_options.num_classes)):
-
-                    if class_num == 0 and int(data_options.num_classes) == 2:
-                        continue  # Skip class 0 if binary classification
-
-                    probs_col_name = get_score_column_name(
-                        target_variable_name=data_options.target_variable_name,
-                        model_name=model._name,
-                        class_num=class_num,
-                    )
-
-                    fig = plot_auroc(
-                        y_true=predictions_test[label_col_name],
-                        y_scores=predictions_test[probs_col_name],
-                        title=f"{data_options.target_variable_name}\nROC Curve for\n {model_name} Class {class_num} - {iteration}",
-                    )
-
-                    save_plot_path = (
-                        gnn_plots_dir / f"{model_name}_{iteration}_class_{class_num}_roc_curve.png"
-                    )
-                    save_plot(fig=fig, path=save_plot_path)
-
-            else:
-                fig = plot_parity(
-                    y_true=predictions_test[label_col_name],
-                    y_pred=predictions_test[predicted_col_name],
-                    title=f"{data_options.target_variable_name}\nParity Plot for\n {model_name} - {iteration}",
-                )
-
-                save_plot_path = gnn_plots_dir / f"{model_name}_{iteration}_parity_plot.png"
-                save_plot(fig=fig, path=save_plot_path)
-
-            metrics[iteration][model_name][DataSets.Training.value] = calculate_metrics(
-                y_true=predictions_train[label_col_name],
-                y_pred=predictions_train[predicted_col_name],
-                y_probs=(
-                    predictions_train[probs_col_name]
-                    if data_options.problem_type == ProblemTypes.Classification
-                    else None
-                ),
-                problem_type=data_options.problem_type,
-            )
-            metrics[iteration][model_name][DataSets.Validation.value] = calculate_metrics(
-                y_true=predictions_val[label_col_name],
-                y_pred=predictions_val[predicted_col_name],
-                y_probs=(
-                    predictions_val[probs_col_name]
-                    if data_options.problem_type == ProblemTypes.Classification
-                    else None
-                ),
-                problem_type=data_options.problem_type,
-            )
-            metrics[iteration][model_name][DataSets.Test.value] = calculate_metrics(
-                y_true=predictions_test[label_col_name],
-                y_pred=predictions_test[predicted_col_name],
-                y_probs=(
-                    predictions_test[probs_col_name]
-                    if data_options.problem_type == ProblemTypes.Classification
-                    else None
-                ),
-                problem_type=data_options.problem_type,
-            )
-
-            predictions_models.append(predictions)
-            ensemple_models.append(predictions[[Results.Index.value, predicted_col_name]])
-
-        predictions_models = merge_model_predictions(dfs=predictions_models)
-        ensemble_preds = ensemble_predictions(
-            pred_dfs=ensemple_models, problem_type=data_options.problem_type
+    # check if user selected tml models to train
+    if tml_models:
+        # get and save options
+        train_tml_options = TrainTMLOptions(
+            TrainTMLModels=st.session_state[TrainTMLStateKeys.TrainTML],
+            TransformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
+            HyperparameterOptimization=st.session_state[
+                TrainTMLStateKeys.PerformHyperparameterTuning
+            ],
+            TrainLinearRegression=st.session_state.get(
+                TrainTMLStateKeys.TrainLinearRegression, False
+            ),
+            TrainLogisticRegression=st.session_state.get(
+                TrainTMLStateKeys.TrainLogisticRegression, False
+            ),
+            TrainRandomForest=st.session_state[TrainTMLStateKeys.TrainRandomForest],
+            TrainSupportVectorMachine=st.session_state[TrainTMLStateKeys.TrainSupportVectorMachine],
+            TrainXGBoost=st.session_state[TrainTMLStateKeys.TrainXGBoost],
         )
-        predictions_models = predictions_models.merge(
-            ensemble_preds, on=Results.Index.value, how="left"
-        )
-        predictions_models[iterator] = iteration
+        save_options(path=tml_training_opts_path, options=train_tml_options)
 
-        predictions_iterations = pd.concat(
-            [predictions_iterations, predictions_models], axis=0, ignore_index=True
+        # train the models
+        tml_models, dataframes = train_tml_model(
+            train_tml_options=train_tml_options,
+            tml_models=tml_models,
+            general_experiment_options=general_experiment_options,
+            representation_options=representation_options,
+            data_options=data_options,
+            experiment_path=experiment_path,
+            train_val_test_idxs=train_val_test_idxs,
         )
+
+        # generate predictions df
+        tml_predictions_df = get_predictions_df_tml(
+            models=tml_models,
+            dataframes=dataframes,
+            split_type=general_experiment_options.split_type,
+            data_options=data_options,
+        )
+
+        tml_models_dir = tml_model_dir(experiment_path=experiment_path)
+        tml_models_dir.mkdir(parents=True)
+
+        metrics_tml = get_metrics(
+            predictions=tml_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            trained_models=tml_models.keys(),
+            problem_type=data_options.problem_type,
+        )
+
+        plot_results(
+            predictions=tml_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            ml_algorithms=tml_models.keys(),
+            problem_type=data_options.problem_type,
+            data_options=data_options,
+            save_path=plots_dir,
+        )
+
+    if gnn_conv_params:
+        train_gnn_options = TrainGNNOptions(
+            TrainGNNModel=st.session_state[TrainGNNStateKeys.TrainGNN],
+            GNNConvolutionalLayers=gnn_conv_params,
+            GNNNumberOfLayers=st.session_state[TrainGNNStateKeys.GNNNumberOfLayers],
+            GNNEmbeddingDimension=st.session_state[TrainGNNStateKeys.GNNEmbeddingDimension],
+            GNNPoolingMethod=st.session_state[TrainGNNStateKeys.GNNPoolingMethod],
+            GNNReadoutLayers=st.session_state[TrainGNNStateKeys.GNNReadoutLayers],
+            GNNDropoutRate=st.session_state[TrainGNNStateKeys.GNNDropoutRate],
+            GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
+            GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
+            ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
+            AsymmetricLoss=st.session_state.get(TrainGNNStateKeys.AsymmetricLoss, False),
+            ImbalanceStrength=st.session_state.get(TrainGNNStateKeys.ImbalanceStrength, 0.0),
+        )
+        save_options(path=gnn_training_opts_path, options=train_gnn_options)
+
+        gnn_models, loaders = train_network(
+            train_gnn_options=train_gnn_options,
+            general_experiment_options=general_experiment_options,
+            experiment_name=experiment_name,
+            data_options=data_options,
+            representation_options=representation_options,
+            train_val_test_idxs=train_val_test_idxs,
+        )
+
+        gnn_predictions_df = get_predictions_df_gnn(
+            models=gnn_models,
+            loaders=loaders,
+            data_options=data_options,
+            split_type=general_experiment_options.split_type,
+        )
+
+        metrics_gnn = get_metrics(
+            predictions=gnn_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            trained_models=gnn_models.keys(),
+            problem_type=data_options.problem_type,
+        )
+
+        plot_results(
+            predictions=gnn_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            ml_algorithms=gnn_models.keys(),
+            problem_type=data_options.problem_type,
+            data_options=data_options,
+            save_path=plots_dir,
+        )
+
+    if tml_models and gnn_conv_params:
+
+        iterator = get_iterator_name(general_experiment_options.split_type)
+        label_col_name = get_true_label_column_name(
+            target_variable_name=data_options.target_variable_name
+        )
+
+        predictions = pd.merge(
+            left=tml_predictions_df,
+            right=gnn_predictions_df,
+            on=[Results.Index, Results.Set, iterator, label_col_name],
+        )
+
+        metrics = {}
+
+        for i in range(general_experiment_options.n_bootstrap_iterations):
+            iteration = str(i + 1)
+            metrics[iteration] = {**metrics_gnn[iteration], **metrics_tml[iteration]}
+
+    elif gnn_conv_params:
+        predictions = gnn_predictions_df.copy()
+        metrics = metrics_gnn
+    elif tml_models:
+        predictions = tml_predictions_df.copy()
+        metrics = metrics_tml
 
     save_data(
-        data=predictions_iterations,
+        data=predictions,
         data_path=ml_gnn_results_file_path(
             experiment_path=experiment_path, file_name="predictions.csv"
         ),
     )
-
-    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
-
-    for i, dictionary in metrics_tml.items():
-        iteration = int(i)
-        metrics[iteration] = {**metrics[iteration], **dictionary}
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=4)
@@ -424,12 +343,15 @@ if experiment_name:
         )
         gnn_conv_params = {}
 
-    if gnn_conv_params:
+    st.markdown("## Data Splitting Options")
+    split_data_form(problem_type=data_opts.problem_type)
 
-        st.markdown("### Data Splitting Options")
-        split_data_form(problem_type=data_opts.problem_type)
+    if gnn_conv_params or tml_models:
+        disabled = False
+    else:
+        disabled = True
 
-    if st.button("Run Training"):
+    if st.button("Run Training", disabled=disabled):
         st.write("Training models...")
 
         train_models(
