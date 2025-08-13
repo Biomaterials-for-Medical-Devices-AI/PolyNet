@@ -256,6 +256,37 @@ class BaseNetwork(nn.Module):
 
         return preds
 
+    def predict_loader(self, loader):
+
+        device = torch.device("cpu")
+        self.to(device)
+        self.eval()
+
+        y_pred, y_true, idx = [], [], []
+
+        with torch.no_grad():
+            for batch in loader:
+                batch = batch.to(device)
+
+                out = self.forward(
+                    x=batch.x,
+                    edge_index=batch.edge_index,
+                    batch_index=batch.batch,
+                    edge_attr=batch.edge_attr,
+                    monomer_weight=batch.weight_monomer,
+                )
+
+                out = out.cpu().detach().numpy().flatten()
+                y_pred.append(out)
+                y_true.append(batch.y.cpu().detach().numpy().flatten())
+                idx.append(batch.idx)
+
+        y_pred = np.concatenate(y_pred, axis=0)
+        y_true = np.concatenate(y_true, axis=0)
+        idx = np.concatenate(idx, axis=0)
+
+        return idx, y_pred, y_true, None
+
 
 class BaseNetworkClassifier(BaseNetwork):
     def __init__(
@@ -351,3 +382,39 @@ class BaseNetworkClassifier(BaseNetwork):
         probs = torch.softmax(out, dim=1).detach().numpy()
 
         return probs
+
+    def predict_loader(self, loader):
+
+        device = torch.device("cpu")
+        self.to(device)
+        self.eval()
+
+        y_pred, y_true, idx, y_score = [], [], [], []
+
+        with torch.no_grad():
+            for batch in loader:
+                batch = batch.to(device)
+
+                out = self.forward(
+                    x=batch.x,
+                    edge_index=batch.edge_index,
+                    batch_index=batch.batch,
+                    edge_attr=batch.edge_attr,
+                    monomer_weight=batch.weight_monomer,
+                )
+
+                out = out.cpu().detach()
+                probs = torch.softmax(out, dim=1)
+                preds = torch.argmax(probs, dim=1)
+                y_score.append(probs.numpy())
+                y_pred.append(preds.numpy().flatten())
+
+                y_true.append(batch.y.cpu().detach().numpy().flatten())
+                idx.append(batch.idx)
+
+        y_pred = np.concatenate(y_pred, axis=0)
+        y_true = np.concatenate(y_true, axis=0)
+        idx = np.concatenate(idx, axis=0)
+        y_score = np.concatenate(y_score, axis=0)
+
+        return idx, y_pred, y_true, y_score
