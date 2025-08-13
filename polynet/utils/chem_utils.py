@@ -1,11 +1,30 @@
 from collections import defaultdict
 from typing import Optional
 
+from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
 import pandas as pd
+from psmiles import PolymerSmiles
 from rdkit import Chem
 from rdkit.Chem import BRICS
 
-from polynet.options.enums import AtomFeatures, BondFeatures
+from polynet.options.enums import AtomFeatures, BondFeatures, StringRepresentation
+
+
+class PS(PolymerSmiles):
+    def __init__(self, psmiles, deactivate_warnings=True):
+        super().__init__(psmiles, deactivate_warnings)
+        self.deactivate_warnings = deactivate_warnings
+
+    @property
+    def canonicalize(self) -> PolymerSmiles:
+        """Canonicalize the PSMILES string
+
+        Returns:
+            PolymerSmiles: canonicalized PSMILES string
+        """
+        return PolymerSmiles(
+            ext_canonicalize(self.psmiles), deactivate_warnings=self.deactivate_warnings
+        )
 
 
 def check_smiles(smiles: str) -> bool:
@@ -44,6 +63,41 @@ def canonicalise_smiles(smiles: str) -> Optional[str]:
     except Exception as e:
         print(f"Error converting SMILES to canonical form: '{smiles}'. Exception: {e}")
         return None
+
+
+def identify_psmiles(smiles: str):
+    return smiles.count("*") >= 2
+
+
+def determine_string_representation(df, smiles_cols):
+    for col in smiles_cols:
+        if not df[col].apply(identify_psmiles).all():
+            return StringRepresentation.Smiles
+    return StringRepresentation.PSmiles
+
+
+def canonicalise_psmiles(psmiles: str) -> Optional[str]:
+    try:
+        psmiles = PS(psmiles=psmiles, deactivate_warnings=True).canonicalize
+        return psmiles.psmiles
+    except Exception as e:
+        print(f"Error converting SMILES to canonical form: '{psmiles}'. Exception: {e}")
+        return None
+
+
+def check_smiles_cols(col_names, df):
+
+    invalid_smiles = {}
+    for col in col_names:
+        invalid_smiles[col] = []
+        for smiles in df[col]:
+            if not check_smiles(smiles):
+                invalid_smiles[col].append(str(smiles))
+
+    # Remove empty lists
+    invalid_smiles = {k: v for k, v in invalid_smiles.items() if v}
+
+    return invalid_smiles
 
 
 def sanitize_fragment(frag):

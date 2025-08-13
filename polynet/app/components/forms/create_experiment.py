@@ -3,10 +3,14 @@ import streamlit as st
 
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
-from polynet.app.utils import check_smiles_cols
-from polynet.options.enums import ProblemTypes
+from polynet.options.enums import ProblemTypes, StringRepresentation
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.utils.chem_utils import canonicalise_smiles
+from polynet.utils.chem_utils import (
+    canonicalise_psmiles,
+    canonicalise_smiles,
+    check_smiles_cols,
+    determine_string_representation,
+)
 
 
 def select_data_form():
@@ -20,6 +24,15 @@ def select_data_form():
         help="This name will be used to identify your experiment in the app.",
     )
 
+    exp_path = polynet_experiments_base_dir() / experiment_name
+
+    if experiment_name and exp_path.exists():
+        st.error(
+            f"Experiment with name '{experiment_name}' already exists. Please choose a different name."
+        )
+    if not experiment_name:
+        st.error("Please provide an experiment name.")
+
     csv_file = st.file_uploader(
         "Choose a CSV file",
         type="csv",
@@ -27,22 +40,14 @@ def select_data_form():
         help="Upload a CSV file containing SMILES strings and the target variable.",
     )
 
-    exp_path = polynet_experiments_base_dir() / experiment_name
-
-    if exp_path.exists():
-        st.error(
-            f"Experiment with name '{experiment_name}' already exists. Please choose a different name."
-        )
-        return False
-
     if not csv_file:
         st.warning("Please upload a CSV file to proceed.")
-        return False
 
-    if csv_file and experiment_name:
+    if csv_file:
         st.markdown("**Preview Data**")
         df = pd.read_csv(csv_file)
-        st.write(df)
+        if st.checkbox("Show data provided"):
+            st.write(df)
 
         smiles_cols = st.multiselect(
             "Select SMILES columns",
@@ -52,7 +57,7 @@ def select_data_form():
 
         if not smiles_cols:
             st.error("Please select at least one SMILES column.")
-            return False
+            st.stop()
 
         else:
             invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
@@ -62,16 +67,24 @@ def select_data_form():
 
                 st.stop()
 
-            st.success("SMILES columns checked successfully.")
+            str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
+            st.write(f"The `{str_representation}` representation has been identified.")
+            st.success(f"`{str_representation}` columns checked successfully.")
+            st.session_state[CreateExperimentStateKeys.StringRepresentation] = str_representation
 
         if st.checkbox(
-            "Canonicalise SMILES",
+            f"Canonicalise `{str_representation}`",
             key=CreateExperimentStateKeys.CanonicaliseSMILES,
             help="Select this option to canonicalise the SMILES strings in the selected columns.",
+            value=True,
         ):
             for col in smiles_cols:
-                df[col] = df[col].apply(canonicalise_smiles)
-            st.success("SMILES columns canonicalized successfully.")
+
+                if str_representation == StringRepresentation.Smiles:
+                    df[col] = df[col].apply(canonicalise_smiles)
+                elif str_representation == StringRepresentation.PSmiles:
+                    df[col] = df[col].apply(canonicalise_psmiles)
+            st.success(f"`{str_representation}` columns canonicalized successfully.")
 
         st.selectbox(
             "Select column with the ID of each molecule",
@@ -132,33 +145,37 @@ def select_data_form():
                 help="This will be used to create the plots and log information.",
                 disabled=True,
             )
-            target_name = st.text_input(
-                "Target variable name",
-                value=target_col,
-                key=CreateExperimentStateKeys.TargetVariableName,
-                help="This name will be used to create the plots and log information.",
-            )
 
-            st.text_input(
-                "Target variable units",
-                key=CreateExperimentStateKeys.TargetVariableUnits,
-                help="This will be used to create the plots and log information.",
-            )
+            with st.expander("Extra options"):
+                target_name = st.text_input(
+                    "Target variable name",
+                    value=target_col,
+                    key=CreateExperimentStateKeys.TargetVariableName,
+                    help="This name will be used to create the plots and log information.",
+                )
+
+                st.text_input(
+                    "Target variable units",
+                    key=CreateExperimentStateKeys.TargetVariableUnits,
+                    help="This will be used to create the plots and log information.",
+                )
+
+                if problem_type == ProblemTypes.Classification:
+
+                    class_names = {}
+
+                    for vals in sorted(df[target_col].unique()):
+                        class_name = st.text_input(
+                            f"Class {vals} name",
+                            value=str(vals),
+                            key=f"{CreateExperimentStateKeys.ClassNames}_{vals}",
+                            help="This name will be used to create the plots and log information.",
+                        )
+                        class_names[str(vals)] = class_name
+
+                    st.markdown("**Label Distribution**")
 
             if problem_type == ProblemTypes.Classification:
-
-                class_names = {}
-
-                for vals in sorted(df[target_col].unique()):
-                    class_name = st.text_input(
-                        f"Class {vals} name",
-                        value=str(vals),
-                        key=f"{CreateExperimentStateKeys.ClassNames}_{vals}",
-                        help="This name will be used to create the plots and log information.",
-                    )
-                    class_names[str(vals)] = class_name
-
-                st.markdown("**Label Distribution**")
 
                 fig = show_label_distribution(
                     data=df,
@@ -174,7 +191,7 @@ def select_data_form():
 
                 return class_names
 
-            else:
+            elif problem_type == ProblemTypes.Regression:
 
                 st.markdown("**Continuous Distribution**")
                 st.pyplot(

@@ -29,6 +29,7 @@ def save_experiment(class_names):
         num_classes=st.session_state[CreateExperimentStateKeys.NumClasses],
         target_variable_name=st.session_state[CreateExperimentStateKeys.TargetVariableName],
         target_variable_units=st.session_state[CreateExperimentStateKeys.TargetVariableUnits],
+        string_representation=st.session_state[CreateExperimentStateKeys.StringRepresentation],
         class_names=class_names,  # Optional, can be None
     )
 
@@ -55,8 +56,8 @@ st.write(
 
 class_names = select_data_form()
 
-if class_names is not False:
-    if st.button("Save Experiment"):
-        save_experiment(class_names)
-        st.success("Experiment saved successfully!")
-        st.balloons()
+
+if st.button("Save Experiment", disabled=not class_names):
+    save_experiment(class_names)
+    st.success("Experiment saved successfully!")
+    st.balloons()

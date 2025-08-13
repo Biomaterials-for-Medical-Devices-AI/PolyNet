@@ -18,6 +18,7 @@ class CreateExperimentStateKeys(StrEnum):
     TargetVariableName = "TargetVariableName"
     TargetVariableUnits = "TargetVariableUnits"
     EditPlot = "EditPlot"
+    StringRepresentation = "StringRepresentation"
 
 
 class ViewExperimentKeys(StrEnum):
@@ -35,6 +36,8 @@ class DescriptorCalculationStateKeys(StrEnum):
     MergeDescriptors = "MergeDescriptors"
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
+    polyBERTfp = "polyBERTfp"
+    polyBERTindependent = "polyBERTindependent"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
     IndependentDFDescriptors = "IndependentDFDescriptors"
     IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
@@ -63,6 +66,34 @@ class PlotOptionsStateKeys(StrEnum):
 
 class TrainTMLStateKeys(StrEnum):
     TrainTML = "TrainTML"
+    PerformHyperparameterTuning = "PerformHyperparameterTuning"
+
+    TrainLinearRegression = "LinearRegression"
+    TrainLogisticRegression = "LogisticRegression"
+    LinearRegressionFitIntercept = "LinearRegressionFitIntercept"
+
+    LogisticRegressionPenalty = "LogissticRegressionPenalty"
+    LogisticRegressionC = "LogisticRegressionC"
+    LogisticRegressionSolver = "LogisticRegressionSolver"
+
+    TrainRandomForest = "RandomForest"
+    RFNumberEstimators = "RFNumberEstimators"
+    RFMinSamplesSplit = "RFMinSamplesSplit"
+    RFMinSamplesLeaf = "RFMinSamplesLeaf"
+    RFMaxDepth = "RFMaxDepth"
+
+    TrainXGBoost = "XGBoost"
+    XGBNumberEstimators = "XGBNumberEstimators"
+    XGBLearningRate = "XGBLearningRate"
+    XGBSubsampleSize = "XGBSubsampleSize"
+    XGBMaxDepth = "XGBMaxDepth"
+
+    TrainSupportVectorMachine = "SupportVectorMachine"
+    SVMKernel = "SVMKernel"
+    SVMDegree = "SVMDegree"
+    SVMC = "SVMC"
+
+    TrasformFeatures = "TrasformFeatures"
 
 
 class TrainGNNStateKeys(StrEnum):

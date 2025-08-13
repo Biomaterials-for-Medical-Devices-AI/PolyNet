@@ -79,13 +79,16 @@ def class_balancer(
 
     print(f"Samples to remove: {samples_to_remove}")
 
+    to_drop = []
+    random.seed(random_state)
+    to_drop_numbers = random.sample(range(majority_size), samples_to_remove)
+
+    for i in to_drop_numbers:
+        to_drop.append(data[data[target] == majority_class].index[i])
+
     # Randomly select rows to drop
-    drop_indices = (
-        data[data[target] == majority_class]
-        .sample(n=samples_to_remove, random_state=random_state)
-        .index
-    )
-    data_balanced = data.drop(index=drop_indices)
+    to_drop = list(set(to_drop))
+    data_balanced = data[~data.index.isin(to_drop)]
 
     print_class_balance(data_balanced, target)
 
