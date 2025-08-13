@@ -117,7 +117,7 @@ def train_tml_model(
                     print("Fitting model without hyperparameter optimization...")
                     model.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
-                model_log_name = f"{iteration}_{df_name}_{model_name}"
+                model_log_name = f"{iteration}_{model_name} {df_name}"
                 trained_models[model_log_name] = model
 
     return trained_models, training_data
