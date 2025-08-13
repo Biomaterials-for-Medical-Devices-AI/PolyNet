@@ -38,11 +38,11 @@ from polynet.app.services.model_training import (
     load_models_from_experiment,
     predict_network,
 )
-from polynet.app.utils import check_smiles_cols, create_directory
+from polynet.app.utils import create_directory
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import ProblemTypes
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.utils.chem_utils import canonicalise_smiles, check_smiles
+from polynet.utils.chem_utils import check_smiles_cols
 
 
 def predict(
