@@ -6,6 +6,7 @@ from polynet.options.enums import ApplyWeightingToGraph
 @dataclass
 class TrainGNNOptions:
 
+    TrainGNNModel: bool
     GNNConvolutionalLayers: dict[str, dict]
     GNNNumberOfLayers: int
     GNNEmbeddingDimension: int

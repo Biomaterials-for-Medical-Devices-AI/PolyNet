@@ -7,6 +7,7 @@ class TrainTMLOptions:
     Options for training traditional machine learning models.
     """
 
+    TrainTMLModels: bool = False
     TransformFeatures: str = "NoTransformation"
     HyperparameterOptimization: bool = False
     TrainLinearRegression: bool = True
