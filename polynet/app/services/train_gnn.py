@@ -75,14 +75,12 @@ def train_network(
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     trained_models = {}
+    loaders = {}
 
     # === Step 4: Train one model for each GNN architecture
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
 
         iteration = i + 1
-
-        trained_models[iteration] = {}
-        trained_models[iteration][Results.Model.value] = {}
 
         train_set = filter_dataset_by_ids(dataset, train_idxs)
         val_set = filter_dataset_by_ids(dataset, val_idxs)
@@ -94,10 +92,9 @@ def train_network(
         val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
         test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-        trained_models[iteration][Results.Loaders.value] = (train_loader, val_loader, test_loader)
+        loaders[str(iteration)] = (train_loader, val_loader, test_loader)
 
         for gnn_arch, arch_params in train_gnn_options.GNNConvolutionalLayers.items():
-            st_msg = f"Training model with architecture: {gnn_arch}"
 
             model_kwargs = {
                 "n_node_features": dataset[0].num_node_features,
@@ -147,9 +144,10 @@ def train_network(
                 scheduler=scheduler,
                 device=device,
             )
-            trained_models[iteration][Results.Model.value][gnn_arch] = model
+            model_log_name = f"{iteration}_{gnn_arch}"
+            trained_models[model_log_name] = model
 
-    return trained_models
+    return trained_models, loaders
 
 
 def predict_gnn_model(model, loaders, target_variable_name=None):
