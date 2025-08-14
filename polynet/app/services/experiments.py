@@ -32,7 +32,7 @@ def get_experiments(base_dir: Path | None = None) -> list[str]:
     experiments = filter(lambda x: not x.startswith("."), experiments)
     # Filter out files
     experiments = filter(lambda x: os.path.isdir(os.path.join(base_dir, x)), experiments)
-    return list(experiments)
+    return sorted(list(experiments))
 
 
 def create_experiment(save_dir: Path, data_options: DataOptions):
