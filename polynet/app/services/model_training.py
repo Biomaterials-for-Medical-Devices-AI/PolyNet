@@ -26,6 +26,7 @@ from polynet.app.options.file_paths import gnn_model_dir
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.options.enums import EvaluationMetrics, ProblemTypes, SplitMethods, SplitTypes
 from polynet.utils.data_preprocessing import class_balancer
+import joblib
 
 
 def split_data(data, test_size, random_state, stratify=None):
@@ -92,6 +93,14 @@ def get_data_split_indices(
             test_data_idxs.append(test_data.index.tolist())
 
     return train_data_idxs, val_data_idxs, test_data_idxs
+
+
+def save_tml_model(model, path):
+    joblib.dump(model, path)
+
+
+def load_tml_model(path):
+    return joblib.load(path)
 
 
 def save_gnn_model(model, path):
