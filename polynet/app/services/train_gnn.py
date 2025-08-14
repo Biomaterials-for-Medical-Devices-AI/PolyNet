@@ -144,7 +144,7 @@ def train_network(
                 scheduler=scheduler,
                 device=device,
             )
-            model_log_name = f"{iteration}_{gnn_arch}"
+            model_log_name = f"{gnn_arch}_{iteration}"
             trained_models[model_log_name] = model
 
     return trained_models, loaders
