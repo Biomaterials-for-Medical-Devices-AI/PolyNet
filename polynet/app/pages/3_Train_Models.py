@@ -151,7 +151,7 @@ def train_models(
         save_options(path=tml_training_opts_path, options=train_tml_options)
 
         # train the models
-        tml_models, dataframes = train_tml_model(
+        tml_models, dataframes, scalers = train_tml_model(
             train_tml_options=train_tml_options,
             tml_models=tml_models,
             general_experiment_options=general_experiment_options,
@@ -164,6 +164,10 @@ def train_models(
         for model_name, model in tml_models.items():
             save_path = gnn_models_dir / f"{model_name}.joblib"
             save_tml_model(model, save_path)
+        if scalers:
+            for scaler_name, scaler in scalers.items():
+                save_path = gnn_models_dir / f"{scaler_name}.pkl"
+                save_tml_model(scaler, save_path)
 
         # generate predictions df
         tml_predictions_df = get_predictions_df_tml(
