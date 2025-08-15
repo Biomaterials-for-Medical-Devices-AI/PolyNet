@@ -5,10 +5,7 @@ from imblearn.metrics import specificity_score
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-)
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
