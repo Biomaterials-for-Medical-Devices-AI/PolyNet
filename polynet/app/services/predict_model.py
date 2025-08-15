@@ -422,10 +422,6 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
 
 def predict_unseen_gnn(models: dict, dataset: Dataset, data_options: DataOptions):
 
-    label_col_name = get_true_label_column_name(
-        target_variable_name=data_options.target_variable_name
-    )
-
     predictions_all = None
 
     for model_name, model in models.items():
@@ -440,9 +436,7 @@ def predict_unseen_gnn(models: dict, dataset: Dataset, data_options: DataOptions
 
         preds = model.predict_loader(loader)
 
-        preds_df = pd.DataFrame(
-            {Results.Index.value: preds[0], label_col_name: preds[2], predicted_col_name: preds[1]}
-        )
+        preds_df = pd.DataFrame({Results.Index.value: preds[0], predicted_col_name: preds[1]})
 
         if data_options.problem_type == ProblemTypes.Classification:
             probs_df = prepare_probs_df(
@@ -455,9 +449,7 @@ def predict_unseen_gnn(models: dict, dataset: Dataset, data_options: DataOptions
         if predictions_all is None:
             predictions_all = preds_df.copy()
         else:
-            predictions_all = pd.merge(
-                left=predictions_all, right=preds_df, on=[Results.Index, label_col_name]
-            )
+            predictions_all = pd.merge(left=predictions_all, right=preds_df, on=[Results.Index])
 
     return predictions_all
 
