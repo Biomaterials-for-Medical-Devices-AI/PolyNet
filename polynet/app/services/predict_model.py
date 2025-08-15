@@ -340,57 +340,65 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
 
         train_loader, val_loader, test_loader = loaders[iteration]
         train_loader = DataLoader(train_loader.dataset, batch_size=1, shuffle=False)
+        val_loader = DataLoader(val_loader.dataset, batch_size=1, shuffle=False)
+        test_loader = DataLoader(test_loader.dataset, batch_size=1, shuffle=False)
 
-        idx, preds, y_vals, train_scores = model.predict_loader(train_loader)
+        train_preds = model.predict_loader(train_loader)
 
         train_df = pd.DataFrame(
             {
-                Results.Index.value: idx,
+                Results.Index.value: train_preds[0],
                 Results.Set.value: DataSets.Training.value,
-                label_col_name: y_vals,
-                predicted_col_name: preds,
+                label_col_name: np.concatenate(
+                    [mol.y.cpu().detach().numpy() for mol in train_loader]
+                ),
+                predicted_col_name: train_preds[1],
             }
         )
 
-        idx, preds, y_vals, val_scores = model.predict_loader(val_loader)
+        val_preds = model.predict_loader(val_loader)
 
         val_df = pd.DataFrame(
             {
-                Results.Index.value: idx,
+                Results.Index.value: val_preds[0],
                 Results.Set.value: DataSets.Validation.value,
-                label_col_name: y_vals,
-                predicted_col_name: preds,
+                label_col_name: np.concatenate(
+                    [mol.y.cpu().detach().numpy() for mol in val_loader]
+                ),
+                predicted_col_name: val_preds[1],
             }
         )
 
-        idx, preds, y_vals, test_scores = model.predict_loader(test_loader)
+        test_preds = model.predict_loader(test_loader)
 
         test_df = pd.DataFrame(
             {
-                Results.Index.value: idx,
+                Results.Index.value: test_preds[0],
                 Results.Set.value: DataSets.Test.value,
-                label_col_name: y_vals,
-                predicted_col_name: preds,
+                label_col_name: np.concatenate(
+                    [mol.y.cpu().detach().numpy() for mol in test_loader]
+                ),
+                predicted_col_name: test_preds[1],
             }
         )
 
         if data_options.problem_type == ProblemTypes.Classification:
             probs_train = prepare_probs_df(
-                probs=train_scores,
+                probs=train_preds[-1],
                 target_variable_name=data_options.target_variable_name,
                 model_name=gnn_arch,
             )
             train_df[probs_train.columns] = probs_train.to_numpy()
 
             probs_val = prepare_probs_df(
-                probs=val_scores,
+                probs=val_preds[-1],
                 target_variable_name=data_options.target_variable_name,
                 model_name=gnn_arch,
             )
             val_df[probs_val.columns] = probs_val.to_numpy()
 
             probs_test = prepare_probs_df(
-                probs=test_scores,
+                probs=test_preds[-1],
                 target_variable_name=data_options.target_variable_name,
                 model_name=gnn_arch,
             )
