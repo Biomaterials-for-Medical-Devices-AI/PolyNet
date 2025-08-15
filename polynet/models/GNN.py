@@ -262,7 +262,7 @@ class BaseNetwork(nn.Module):
         self.to(device)
         self.eval()
 
-        y_pred, y_true, idx = [], [], []
+        y_pred, idx = [], []
 
         with torch.no_grad():
             for batch in loader:
@@ -278,14 +278,12 @@ class BaseNetwork(nn.Module):
 
                 out = out.cpu().detach().numpy().flatten()
                 y_pred.append(out)
-                y_true.append(batch.y.cpu().detach().numpy().flatten())
                 idx.append(batch.idx)
 
         y_pred = np.concatenate(y_pred, axis=0)
-        y_true = np.concatenate(y_true, axis=0)
         idx = np.concatenate(idx, axis=0)
 
-        return idx, y_pred, y_true, None
+        return idx, y_pred
 
 
 class BaseNetworkClassifier(BaseNetwork):
@@ -389,7 +387,7 @@ class BaseNetworkClassifier(BaseNetwork):
         self.to(device)
         self.eval()
 
-        y_pred, y_true, idx, y_score = [], [], [], []
+        y_pred, idx, y_score = [], [], []
 
         with torch.no_grad():
             for batch in loader:
@@ -409,12 +407,10 @@ class BaseNetworkClassifier(BaseNetwork):
                 y_score.append(probs.numpy())
                 y_pred.append(preds.numpy().flatten())
 
-                y_true.append(batch.y.cpu().detach().numpy().flatten())
                 idx.append(batch.idx)
 
         y_pred = np.concatenate(y_pred, axis=0)
-        y_true = np.concatenate(y_true, axis=0)
         idx = np.concatenate(idx, axis=0)
         y_score = np.concatenate(y_score, axis=0)
 
-        return idx, y_pred, y_true, y_score
+        return idx, y_pred, y_score

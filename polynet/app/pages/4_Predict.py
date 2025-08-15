@@ -26,46 +26,53 @@ from polynet.app.options.file_paths import (
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
+    train_tml_model_options_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.state_keys import PredictPageStateKeys, ViewExperimentKeys
+from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
+from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options
+from polynet.app.services.descriptors import build_vector_representation
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import (
     calculate_metrics,
     load_models_from_experiment,
-    predict_network,
+    load_scalers_from_experiment,
 )
-from polynet.app.utils import create_directory
+from polynet.app.services.predict_model import predict_unseen_gnn, predict_unseen_tml
+from polynet.app.utils import (
+    create_directory,
+    get_predicted_label_column_name,
+    get_true_label_column_name,
+)
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import ProblemTypes
+from polynet.options.enums import ProblemTypes, Results, TransformDescriptors
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.utils.chem_utils import check_smiles_cols
+from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
 
 
 def predict(
     experiment_path,
     df: pd.DataFrame,
-    models: list[str],
+    tml_models: list[str],
+    gnn_models: list[str],
     data_options: DataOptions,
     representation_options: RepresentationOptions,
 ):
 
     dataset_name = st.session_state[PredictPageStateKeys.PredictData].name
 
+    # save data and remove old results
     path_to_data = gnn_raw_data_predict_path(
         experiment_path=experiment_path, file_name=dataset_name
     )
-
     if path_to_data.exists():
         rmtree(path_to_data)
-
     create_directory(path_to_data)
 
     file_path = gnn_raw_data_predict_file(experiment_path=experiment_path, file_name=dataset_name)
-
     predictions_dir = gnn_predictions_file_path(experiment_path=experiment_path)
 
     if predictions_dir.exists():
@@ -74,73 +81,122 @@ def predict(
 
     if data_options.id_col in df.columns:
         df = df.set_index(data_options.id_col, drop=True)
-
     df.to_csv(file_path)
 
-    dataset = CustomPolymerGraph(
-        filename=dataset_name,
-        root=path_to_data.parent,
-        smiles_cols=data_options.smiles_cols,
-        target_col=data_options.target_variable_col,
-        id_col=data_options.id_col,
-        weights_col=representation_options.weights_col,
-        node_feats=representation_options.node_feats,
-        edge_feats=representation_options.edge_feats,
+    df = df.reset_index(drop=False)
+
+    id_cols = (
+        [data_options.id_col]
+        + data_options.smiles_cols
+        + list(representation_options.weights_col.values())
+        + [data_options.target_variable_col]
+    )
+    id_cols = [col for col in df.columns if col in id_cols]
+    id_df = df[id_cols].copy()
+    true_label_name = get_true_label_column_name(data_options.target_variable_name)
+
+    id_df = id_df.rename(
+        columns={
+            data_options.id_col: Results.Index.value,
+            data_options.target_variable_col: true_label_name,
+        }
     )
 
-    models = load_models_from_experiment(experiment_path=experiment_path, model_names=models)
+    if tml_models:
+        # calculate descriptors
+        descriptor_dfs = build_vector_representation(
+            representation_opts=representation_options, data_options=data_options, data=df
+        )
 
-    predictions = predict_network(models=models, dataset=dataset)
+        for df_name, df in descriptor_dfs.items():
+            if df is None:
+                continue
+            new_cols = [col for col in df.columns if col not in id_cols]
+            descriptor_dfs[df_name] = df[new_cols]
 
-    if len(models) > 1:
+        # load the models and scalers
+        models = load_models_from_experiment(
+            experiment_path=experiment_path, model_names=tml_models
+        )
 
-        if data_options.problem_type == ProblemTypes.Classification:
-
-            # Calculate majority vote for classification tasks
-            majority_vote, _ = mode(predictions.values, axis=1, keepdims=False)
-            majority_vote = pd.Series(
-                majority_vote, index=predictions.index, name="Ensemble Prediction"
+        if train_tml_options.TransformFeatures != TransformDescriptors.NoTransformation:
+            scalers = load_scalers_from_experiment(
+                experiment_path=experiment_path, model_names=tml_models
             )
-            predictions = predictions.merge(
-                majority_vote, left_index=True, right_index=True, how="left"
-            )
+        else:
+            scalers = {}
 
-        elif data_options.problem_type == ProblemTypes.Regression:
+        # get predictions
+        predictions_tml = predict_unseen_tml(
+            models=models, scalers=scalers, dfs=descriptor_dfs, data_options=data_options
+        )
 
-            # Calculate mean prediction for regression tasks
-            mean_prediction = predictions.mean(axis=1)
-            mean_prediction = pd.Series(
-                mean_prediction, index=predictions.index, name="Ensemble Prediction"
-            )
-            predictions = predictions.merge(
-                mean_prediction, left_index=True, right_index=True, how="left"
-            )
+        predictions_tml = pd.concat([id_df, predictions_tml], axis=1, ignore_index=False)
+
+    if gnn_models:
+        # create graph representation
+        dataset = CustomPolymerGraph(
+            filename=dataset_name,
+            root=path_to_data.parent,
+            smiles_cols=data_options.smiles_cols,
+            target_col=data_options.target_variable_col,
+            id_col=data_options.id_col,
+            weights_col=representation_options.weights_col,
+            node_feats=representation_options.node_feats,
+            edge_feats=representation_options.edge_feats,
+        )
+
+        # load the the selected gnn models
+        models = load_models_from_experiment(
+            experiment_path=experiment_path, model_names=gnn_models
+        )
+
+        # get predictions
+        predictions_gnn = predict_unseen_gnn(
+            models=models, dataset=dataset, data_options=data_options
+        )
+
+        predictions_gnn = pd.merge(left=id_df, right=predictions_gnn, on=[Results.Index])
+
+    if gnn_models and tml_models:
+        predictions = pd.merge(left=predictions_tml, right=predictions_gnn, on=list(id_df.columns))
+
+    elif gnn_models:
+        predictions = predictions_gnn.copy()
+
+    else:
+        predictions = predictions_tml.copy()
 
     if st.session_state.get(PredictPageStateKeys.CompareTarget, False):
 
-        target_col = df[data_options.target_variable_col]
-
-        predictions = predictions.merge(target_col, left_index=True, right_index=True, how="left")
-
+        label_col_name = get_true_label_column_name(
+            target_variable_name=data_options.target_variable_name
+        )
         metrics = {}
 
-        for col in predictions.columns[:-1]:
+        for col in predictions.columns[2:]:
 
-            if "_" in col:
-                model, number = col.split("_")
+            if Results.Predicted.value in col:
+                split_name = col.split(" ")
+                model, number = split_name[0], split_name[1]
+                model_name = f"{model} {number}"
+                probs_cols = [
+                    col_name
+                    for col_name in predictions.columns[2:]
+                    if Results.Score.value in col_name and model_name in col_name
+                ]
             else:
-                model = col
-                number = "1"
+                continue
 
             if number not in metrics:
                 metrics[number] = {}
             if model not in metrics[number]:
                 metrics[number][model] = {}
 
-            metrics[number][model]["Test"] = calculate_metrics(
-                y_true=predictions[data_options.target_variable_col],
+            metrics[number][model][dataset_name] = calculate_metrics(
+                y_true=predictions[label_col_name],
                 y_pred=predictions[col],
-                y_probs=predictions[col],
+                y_probs=predictions[probs_cols],
                 problem_type=data_options.problem_type,
             )
 
@@ -151,7 +207,7 @@ def predict(
 
         display_mean_std_model_metrics(metrics)
 
-    st.write("Predictions:")
+    st.subheader("Predictions:")
     st.dataframe(predictions)
     predictions.to_csv(gnn_predictions_file(experiment_path=experiment_path))
 
@@ -173,34 +229,42 @@ if experiment_name:
 
     experiment_path = polynet_experiments_base_dir() / experiment_name
 
-    path_to_data_opts = data_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
-
+    # load data options
+    path_to_data_opts = data_options_path(experiment_path=experiment_path)
     data_options = load_options(path=path_to_data_opts, options_class=DataOptions)
     smiles_cols = data_options.smiles_cols
 
-    path_to_representation_opts = representation_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    # load representation options
+    path_to_representation_opts = representation_options_path(experiment_path=experiment_path)
     representation_options = load_options(
         path=path_to_representation_opts, options_class=RepresentationOptions
     )
     weights_col = representation_options.weights_col
 
-    path_to_train_gnn_options = train_gnn_model_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
-
-    train_gnn_options = load_options(path=path_to_train_gnn_options, options_class=TrainGNNOptions)
-
+    # load general options
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
-
     general_experiment_options = load_options(
         path=path_to_general_opts, options_class=GeneralConfigOptions
     )
 
-    if not path_to_train_gnn_options.exists() or not path_to_general_opts.exists():
+    # load tml options
+    path_to_train_tml_options = train_tml_model_options_path(experiment_path=experiment_path)
+    if path_to_train_tml_options.exists:
+        train_tml_options = load_options(
+            path=path_to_train_tml_options, options_class=TrainTMLOptions
+        )
+
+    # load train gnn options
+    path_to_train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
+    if path_to_train_gnn_options.exists():
+        train_gnn_options = load_options(
+            path=path_to_train_gnn_options, options_class=TrainGNNOptions
+        )
+
+    if (
+        not (path_to_train_gnn_options.exists() or path_to_train_tml_options.exists)
+        or not path_to_general_opts.exists()
+    ):
         st.error(
             "No models have been trained yet. Please train a model first in the 'Train GNN' section."
         )
@@ -231,30 +295,41 @@ if experiment_name:
 
         if path_to_data.exists():
             st.warning(
-                "It seems that you have already uploaded this file. The previous prediction results will be overwritten."
+                "It seems that you have already analysed this file. The previous prediction results will be overwritten."
             )
 
         df = pd.read_csv(csv_file)
-        st.write("Preview of the uploaded data:")
-        st.write(df)
 
-        for smiles_col in smiles_cols:
-            if smiles_col not in df.columns:
-                st.error(f"Column '{smiles_col}' not found in the uploaded data.")
+        if st.checkbox("Preview data"):
+            st.write("Preview of the uploaded data:")
+            st.dataframe(df)
+
+        # check if the provided df has the smiles cols and weight cols required
+        for col in smiles_cols:
+            if col not in df.columns:
+                st.error(f"Column '{col}' not found in the uploaded data.")
                 st.stop()
             elif weights_col:
-                col = weights_col[smiles_col]
+                col = weights_col[col]
                 if col not in df.columns:
                     st.error(f"Column '{col}' for weights not found in the uploaded data.")
                     st.stop()
 
+        # check if smiles are valid
         invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
         if invalid_smiles:
             for col, smiles in invalid_smiles.values():
                 st.error(f"Invalid SMILES found in column '{col}': {', '.join(smiles)}")
             st.stop()
-        else:
-            st.success("SMILES columns checked successfully.")
+
+        str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
+        st.write(f"The `{str_representation}` representation has been identified.")
+        st.success(f"`{str_representation}` columns checked successfully.")
+
+        if str_representation != data_options.string_representation:
+            st.warning(
+                f"We found `{str_representation}` used in the provided data, however `{data_options.string_representation}` was used to train the models. You can continue with the predictions, however, it is recommended to use the same representation as used for training."
+            )
 
         if data_options.target_variable_col in df.columns:
             if st.checkbox(
@@ -310,31 +385,58 @@ if experiment_name:
 
         gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
 
-        gnn_models = [
-            model.name
-            for model in gnn_models_dir.iterdir()
-            if model.is_file() and model.suffix == ".pt"
-        ]
+        if path_to_train_gnn_options.exists():
+            gnn_models = [
+                model.name
+                for model in gnn_models_dir.iterdir()
+                if model.is_file() and model.suffix == ".pt"
+            ]
 
-        if st.toggle("Select all models", key=PredictPageStateKeys.SelectAllModels):
-            default_models = gnn_models
+            if st.toggle("Select all models", key=PredictPageStateKeys.SelectAllModels):
+                default_models = gnn_models
+            else:
+                default_models = None
+
+            selected_gnn_models = st.multiselect(
+                "Select a GNN Model to predict with",
+                options=sorted(gnn_models),
+                key="model",
+                default=default_models,
+            )
         else:
-            default_models = None
+            selected_gnn_models = []
 
-        models = st.multiselect(
-            "Select a GNN Model to predict with",
-            options=sorted(gnn_models),
-            key="model",
-            default=default_models,
-        )
+        if path_to_train_tml_options.exists():
+            tml_models = [
+                model.name
+                for model in gnn_models_dir.iterdir()
+                if model.is_file() and model.suffix == ".joblib"
+            ]
+            if st.toggle("Select all models"):
+                default_models = tml_models
+            else:
+                default_models = None
 
-        if models:
+            selected_tml_models = st.multiselect(
+                "Select a TML model to predict with",
+                options=sorted(tml_models),
+                key="tml_model",
+                default=default_models,
+            )
+        else:
+            selected_tml_models = []
 
-            if st.button("Predict"):
-                predict(
-                    experiment_path=experiment_path,
-                    df=df,
-                    models=sorted(models),
-                    data_options=data_options,
-                    representation_options=representation_options,
-                )
+        if selected_gnn_models or selected_tml_models:
+            disable = False
+        else:
+            disable = True
+
+        if st.button("Predict", disabled=disable):
+            predict(
+                experiment_path=experiment_path,
+                df=df,
+                gnn_models=sorted(selected_gnn_models),
+                tml_models=sorted(selected_tml_models),
+                data_options=data_options,
+                representation_options=representation_options,
+            )

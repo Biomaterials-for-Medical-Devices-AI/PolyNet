@@ -10,6 +10,7 @@ class TrainTMLOptions:
     TrainTMLModels: bool = False
     TransformFeatures: str = "NoTransformation"
     HyperparameterOptimization: bool = False
+    TMLModelsParams: dict[str, dict] = None
     TrainLinearRegression: bool = True
     TrainLogisticRegression: bool = True
     TrainRandomForest: bool = True

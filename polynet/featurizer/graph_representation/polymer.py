@@ -42,9 +42,9 @@ class CustomPolymerGraph(PolymerGraphDataset):
         target_col = self.target_col
         id_col = self.id_col
 
-        data = pd.read_csv(self.raw_paths[0])
+        data_df = pd.read_csv(self.raw_paths[0])
 
-        for index, mols in tqdm(data.iterrows(), total=data.shape[0]):
+        for index, mols in tqdm(data_df.iterrows(), total=data_df.shape[0]):
             monomers = []
             node_feats_polymer = None
 
@@ -92,7 +92,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
 
             y = (
                 torch.tensor(mols[target_col], dtype=torch.float32)
-                if target_col is not None
+                if target_col is not None and target_col in data_df.columns
                 else None
             )
 

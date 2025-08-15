@@ -37,6 +37,7 @@ def train_tml_model(
 
     trained_models = {}
     training_data = {}
+    scalers = {}
 
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
 
@@ -49,32 +50,28 @@ def train_tml_model(
             val_df = df.loc[val_idxs]
             test_df = df.loc[test_idxs]
 
+            log_name = f"{df_name}_{iteration}"
+
             if train_tml_options.TransformFeatures != TransformDescriptors.NoTransformation:
 
                 original_train_features = train_df.iloc[:, :-1].copy()
 
-                train_features = transform_dependent_variables(
+                train_features, scaler = transform_dependent_variables(
                     fit_data=original_train_features,
                     transform_data=train_df.iloc[:, :-1],
                     transform_type=train_tml_options.TransformFeatures,
                 )
                 train_df.iloc[:, :-1] = train_features
 
-                val_features = transform_dependent_variables(
-                    fit_data=original_train_features,
-                    transform_data=val_df.iloc[:, :-1],
-                    transform_type=train_tml_options.TransformFeatures,
-                )
+                val_features = scaler.transform(val_df.iloc[:, :-1])
                 val_df.iloc[:, :-1] = val_features
 
-                test_features = transform_dependent_variables(
-                    fit_data=original_train_features,
-                    transform_data=test_df.iloc[:, :-1],
-                    transform_type=train_tml_options.TransformFeatures,
-                )
+                test_features = scaler.transform(test_df.iloc[:, :-1])
                 test_df.iloc[:, :-1] = test_features
 
-            training_data[f"{iteration}_{df_name}"] = (train_df, val_df, test_df)
+                scalers[log_name] = scaler
+
+            training_data[log_name] = (train_df, val_df, test_df)
 
             models = generate_models(train_tml_options, data_options.problem_type)
 
@@ -116,10 +113,10 @@ def train_tml_model(
                     print("Fitting model without hyperparameter optimization...")
                     model.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
-                model_log_name = f"{iteration}_{model_name} {df_name}"
+                model_log_name = f"{model_name.replace(' ' ,'')}-{log_name}"
                 trained_models[model_log_name] = model
 
-    return trained_models, training_data
+    return trained_models, training_data, scalers
 
 
 def get_model(model_type: type, model_params: dict = None, random_state: int = None):
@@ -162,7 +159,7 @@ def transform_dependent_variables(
     else:
         raise ValueError(f"Unsupported transformation type: {transform_type}")
 
-    return transform_data
+    return transform_data, scaler
 
 
 def generate_models(train_tml_options: TrainTMLOptions, problem_type: ProblemTypes):

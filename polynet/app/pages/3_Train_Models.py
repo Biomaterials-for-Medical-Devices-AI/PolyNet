@@ -47,7 +47,7 @@ from polynet.app.services.model_training import (
     calculate_metrics,
     get_data_split_indices,
     save_gnn_model,
-    save_plot,
+    save_tml_model,
 )
 from polynet.app.services.predict_model import (
     get_metrics,
@@ -137,6 +137,7 @@ def train_models(
             HyperparameterOptimization=st.session_state[
                 TrainTMLStateKeys.PerformHyperparameterTuning
             ],
+            TMLModelsParams=tml_models,
             TrainLinearRegression=st.session_state.get(
                 TrainTMLStateKeys.TrainLinearRegression, False
             ),
@@ -150,7 +151,7 @@ def train_models(
         save_options(path=tml_training_opts_path, options=train_tml_options)
 
         # train the models
-        tml_models, dataframes = train_tml_model(
+        tml_models, dataframes, scalers = train_tml_model(
             train_tml_options=train_tml_options,
             tml_models=tml_models,
             general_experiment_options=general_experiment_options,
@@ -159,6 +160,14 @@ def train_models(
             experiment_path=experiment_path,
             train_val_test_idxs=train_val_test_idxs,
         )
+
+        for model_name, model in tml_models.items():
+            save_path = gnn_models_dir / f"{model_name}.joblib"
+            save_tml_model(model, save_path)
+        if scalers:
+            for scaler_name, scaler in scalers.items():
+                save_path = gnn_models_dir / f"{scaler_name}.pkl"
+                save_tml_model(scaler, save_path)
 
         # generate predictions df
         tml_predictions_df = get_predictions_df_tml(
@@ -214,6 +223,10 @@ def train_models(
             representation_options=representation_options,
             train_val_test_idxs=train_val_test_idxs,
         )
+
+        for model_name, model in gnn_models.items():
+            save_path = gnn_models_dir / f"{model_name}.pt"
+            save_gnn_model(model, save_path)
 
         gnn_predictions_df = get_predictions_df_gnn(
             models=gnn_models,
