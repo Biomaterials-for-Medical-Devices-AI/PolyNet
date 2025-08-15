@@ -83,24 +83,30 @@ def predict(
         df = df.set_index(data_options.id_col, drop=True)
     df.to_csv(file_path)
 
+    df = df.reset_index(drop=False)
+
+    id_cols = (
+        [data_options.id_col]
+        + data_options.smiles_cols
+        + list(representation_options.weights_col.values())
+        + [data_options.target_variable_col]
+    )
+    id_cols = [col for col in df.columns if col in id_cols]
+    id_df = df[id_cols].copy()
+    true_label_name = get_true_label_column_name(data_options.target_variable_name)
+
+    id_df = id_df.rename(
+        columns={
+            data_options.id_col: Results.Index.value,
+            data_options.target_variable_col: true_label_name,
+        }
+    )
+
     if tml_models:
-
-        df = df.reset_index(drop=False)
-
         # calculate descriptors
         descriptor_dfs = build_vector_representation(
             representation_opts=representation_options, data_options=data_options, data=df
         )
-
-        id_cols = (
-            [data_options.id_col]
-            + data_options.smiles_cols
-            + list(representation_options.weights_col.values())
-            + [data_options.target_variable_col]
-        )
-
-        id_cols = [col for col in df.columns if col in id_cols]
-        id_df = df[id_cols]
 
         for df_name, df in descriptor_dfs.items():
             if df is None:
@@ -121,16 +127,13 @@ def predict(
             scalers = {}
 
         # get predictions
-        predictions_df = predict_unseen_tml(
+        predictions_tml = predict_unseen_tml(
             models=models, scalers=scalers, dfs=descriptor_dfs, data_options=data_options
         )
 
-        predictions_df = pd.concat([id_df, predictions_df], axis=1, ignore_index=False)
-
-        st.stop()
+        predictions_tml = pd.concat([id_df, predictions_tml], axis=1, ignore_index=False)
 
     if gnn_models:
-
         # create graph representation
         dataset = CustomPolymerGraph(
             filename=dataset_name,
@@ -149,31 +152,20 @@ def predict(
         )
 
         # get predictions
-        predictions = predict_unseen_gnn(models=models, dataset=dataset, data_options=data_options)
+        predictions_gnn = predict_unseen_gnn(
+            models=models, dataset=dataset, data_options=data_options
+        )
 
-    # if len(models) > 1:
+        predictions_gnn = pd.merge(left=id_df, right=predictions_gnn, on=[Results.Index])
 
-    #     if data_options.problem_type == ProblemTypes.Classification:
+    if gnn_models and tml_models:
+        predictions = pd.merge(left=predictions_tml, right=predictions_gnn, on=list(id_df.columns))
 
-    #         # Calculate majority vote for classification tasks
-    #         majority_vote, _ = mode(predictions.values, axis=1, keepdims=False)
-    #         majority_vote = pd.Series(
-    #             majority_vote, index=predictions.index, name="Ensemble Prediction"
-    #         )
-    #         predictions = predictions.merge(
-    #             majority_vote, left_index=True, right_index=True, how="left"
-    #         )
+    elif gnn_models:
+        predictions = predictions_gnn.copy()
 
-    #     elif data_options.problem_type == ProblemTypes.Regression:
-
-    #         # Calculate mean prediction for regression tasks
-    #         mean_prediction = predictions.mean(axis=1)
-    #         mean_prediction = pd.Series(
-    #             mean_prediction, index=predictions.index, name="Ensemble Prediction"
-    #         )
-    #         predictions = predictions.merge(
-    #             mean_prediction, left_index=True, right_index=True, how="left"
-    #         )
+    else:
+        predictions = predictions_tml.copy()
 
     if st.session_state.get(PredictPageStateKeys.CompareTarget, False):
 
@@ -215,7 +207,7 @@ def predict(
 
         display_mean_std_model_metrics(metrics)
 
-    st.write("Predictions:")
+    st.subheader("Predictions:")
     st.dataframe(predictions)
     predictions.to_csv(gnn_predictions_file(experiment_path=experiment_path))
 
