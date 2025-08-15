@@ -128,6 +128,11 @@ def load_gnn_model(path):
     return load(path, weights_only=False)
 
 
+def load_tml_model(path):
+
+    return joblib.load(path)
+
+
 def save_plot(fig, path, dpi=300):
     """
     Saves the plot to the specified path.
@@ -221,9 +226,39 @@ def load_models_from_experiment(experiment_path: str, model_names: list) -> dict
     for model_name in model_names:
         model_file = gnn_models_path / model_name
         model_name = model_file.stem
-        models[model_name] = load_gnn_model(model_file)
+        termination = str(model_file).split(".")[-1]
+        if termination == "pt":
+            models[model_name] = load_gnn_model(model_file)
+        else:
+            models[model_name] = load_tml_model(model_file)
 
     return models
+
+
+def load_scalers_from_experiment(experiment_path: str, model_names: list) -> dict:
+    """
+    Loads trained GNN models from the specified experiment path.
+
+    Args:
+        experiment_path (str): Path to the experiment directory.
+
+    Returns:
+        dict: Dictionary containing model names as keys and loaded models as values.
+    """
+
+    gnn_models_path = gnn_model_dir(experiment_path)
+    scaler = {}
+
+    for model_name in model_names:
+
+        model_name = model_name.split(".")[0]
+        scaler_name = model_name.split("-")[-1]
+
+        scaler_file = gnn_models_path / f"{scaler_name}.pkl"
+
+        scaler[scaler_name] = load_tml_model(scaler_file)
+
+    return scaler
 
 
 def predict_network(models: dict, dataset: Dataset) -> pd.DataFrame:
