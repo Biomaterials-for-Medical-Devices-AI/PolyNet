@@ -5,8 +5,8 @@ import pandas as pd
 import streamlit as st
 import torch
 from torch.nn import Module
-from torch_geometric.loader import DataLoader
 from torch_geometric.data import Dataset
+from torch_geometric.loader import DataLoader
 
 from polynet.app.options.data import DataOptions
 from polynet.app.options.representation import RepresentationOptions
