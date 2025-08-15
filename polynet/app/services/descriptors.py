@@ -12,7 +12,10 @@ from polynet.utils.chem_utils import PS
 def get_data_index(
     data: pd.DataFrame, id_col: str, smiles_cols: list, weights_col: Dict, target_col: str
 ):
-    return data[[id_col] + smiles_cols + list(weights_col.values()) + [target_col]].copy()
+    idx_cols = [id_col] + smiles_cols + list(weights_col.values())
+    if target_col in data.columns:
+        idx_cols += [target_col]
+    return data[idx_cols].copy()
 
 
 def get_unique_smiles(data: pd.DataFrame, smiles_cols: list) -> list:
