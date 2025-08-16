@@ -5,14 +5,13 @@ from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.analyse_results import (
     confusion_matrix_plot_form,
     parity_plot_form,
+    compare_predictions_form,
 )
 from polynet.app.components.plots import display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_raw_data_file,
-    gnn_raw_data_path,
     ml_gnn_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
@@ -86,6 +85,9 @@ if experiment_name:
         index_col=0,
     )
 
+    if st.checkbox("Show predictions data"):
+        st.dataframe(predictions)
+
     if data_options.problem_type == ProblemTypes.Regression:
 
         st.subheader("Parity Plot")
@@ -118,3 +120,15 @@ if experiment_name:
 
         if confusion_matrix_plot:
             st.pyplot(confusion_matrix_plot, clear_figure=True)
+
+    st.subheader("Compare models")
+
+    compare_plot = compare_predictions_form(
+        predictions_df=predictions,
+        target_variable_name=data_options.target_variable_name,
+        data_options=data_options,
+    )
+
+    if compare_plot:
+
+        st.pyplot(compare_plot)
