@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from polynet.utils.statistical_analysis import mcnemar_pvalue_matrix, regression_pvalue_matrix
 from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
@@ -12,8 +13,44 @@ from polynet.app.utils import (
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.options.enums import DataSets, Plots, Results
-from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity
+from polynet.options.enums import DataSets, Plots, Results, ProblemTypes
+from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity, plot_pvalue_matrix
+
+
+def compare_predictions_form(
+    predictions_df: pd.DataFrame, target_variable_name: str, data_options: DataOptions
+):
+
+    st.write("### Model predictions pairwise comparison")
+
+    label_col_name = get_true_label_column_name(target_variable_name=target_variable_name)
+    true_vals = predictions_df[label_col_name].to_numpy()
+
+    trained_models = [
+        col.split(" ")[0] for col in predictions_df.columns if Results.Predicted in col
+    ]
+    compare_models = st.multiselect(
+        "Select models to test statistically difference in predictions", options=trained_models
+    )
+
+    if len(compare_models) > 1:
+
+        predicted_cols = [
+            get_predicted_label_column_name(
+                target_variable_name=target_variable_name, model_name=model
+            )
+            for model in compare_models
+        ]
+        predictions_array = predictions_df[predicted_cols].to_numpy().T
+
+        if data_options.problem_type == ProblemTypes.Classification:
+            p_matrix = mcnemar_pvalue_matrix(y_true=true_vals, predictions=predictions_array)
+        elif data_options.problem_type == ProblemTypes.Regression:
+            p_matrix = regression_pvalue_matrix(y_true=true_vals, predictions=predictions_array)
+
+        plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=compare_models)
+
+        return plot
 
 
 def get_plot_customisation_form(
