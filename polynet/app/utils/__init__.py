@@ -199,3 +199,14 @@ def extract_number(filename):
         return int(match.group(1))
     else:
         raise ValueError(f"No number found in filename: {filename}")
+
+
+def significance_marker(p):
+    if p < 0.001:
+        return "***"
+    elif p < 0.01:
+        return "**"
+    elif p < 0.05:
+        return "*"
+    else:
+        return ""
