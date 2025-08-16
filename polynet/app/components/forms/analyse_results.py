@@ -23,6 +23,16 @@ def compare_predictions_form(
 
     st.write("### Model predictions pairwise comparison")
 
+    analyse_set = st.selectbox(
+        "Select a set to analyse",
+        options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All sets"],
+        index=2,
+        key="analyse_set",
+    )
+
+    if analyse_set != "All sets":
+        predictions_df = predictions_df.loc[predictions_df[Results.Set] == analyse_set]
+
     label_col_name = get_true_label_column_name(target_variable_name=target_variable_name)
     true_vals = predictions_df[label_col_name].to_numpy()
 
