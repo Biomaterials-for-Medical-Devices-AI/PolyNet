@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import (
@@ -7,6 +8,7 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
+from polynet.app.utils import significance_marker
 
 
 def plot_parity(
@@ -192,3 +194,91 @@ def plot_auroc(
         ax.get_legend().remove()
 
     return fig
+
+
+def plot_pvalue_matrix(
+    p_matrix,
+    model_names=None,
+    alpha=0.05,
+    decimals=3,
+    dpi=300,
+    height=11,
+    width=9,
+    title=None,
+    title_fontsize=25,
+    x_label_fontsize=20,
+    y_label_fontsize=20,
+    tick_size=15,
+    signifficant_colour="#D73027",
+    non_signifficant_colour="#4575B4",
+):
+    """
+    Plot a lower-triangular McNemar/Wilcoxon p-value matrix with significance colors and stars.
+
+    Parameters
+    ----------
+    p_matrix : np.ndarray
+        Symmetric matrix of p-values (n_models x n_models).
+    model_names : list of str, optional
+        Names of the models.
+    alpha : float
+        Significance threshold for coloring.
+    decimals : int
+        Decimal places to display.
+    """
+    n = p_matrix.shape[0]
+    if model_names is None:
+        model_names = [f"Model {i+1}" for i in range(n)]
+
+    # Round for annotation display
+    annot_matrix = np.empty_like(p_matrix, dtype=object)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                annot_matrix[i, j] = ""  # leave diagonal empty
+            else:
+                p = p_matrix[i, j]
+                if p < 0.001:
+                    annot_matrix[i, j] = "<0.001" + significance_marker(p)
+                else:
+                    annot_matrix[i, j] = f"{p:.{decimals}f}{significance_marker(p)}"
+
+    # Mask the upper triangle
+    mask = np.triu(np.ones_like(p_matrix, dtype=bool))
+
+    # Colors: red for significant, blue for non-significant
+    significant_color = signifficant_colour  # red
+    non_significant_color = non_signifficant_colour  # blue
+    cmap = sns.color_palette([significant_color, non_significant_color])
+
+    # Plot
+    f, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+
+    sns.heatmap(
+        p_matrix,
+        mask=mask,
+        cmap=cmap,
+        annot=annot_matrix,
+        fmt="",
+        linewidths=0.5,
+        cbar=False,  # no colorbar (since we're using binary colors)
+        vmin=0,
+        vmax=1,
+        center=alpha,
+        annot_kws={"fontsize": tick_size},
+        xticklabels=model_names,
+        yticklabels=model_names,
+        ax=ax,
+    )
+
+    # Adjust fonts
+    ax.set_xticklabels(model_names, fontsize=x_label_fontsize, rotation=45, ha="right")
+    ax.set_yticklabels(model_names, fontsize=y_label_fontsize, rotation=0)
+
+    if title is None:
+        title = "Pairwise Model Comparison (p-values)"
+    plt.title(title, fontsize=title_fontsize)
+
+    plt.tight_layout()
+
+    return f
