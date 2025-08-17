@@ -131,6 +131,7 @@ class Plots(StrEnum):
     FeatureImportance = "Feature Importance"
     GraphVisualization = "Graph Visualization"
     MatrixPlot = "matrix_plot"
+    MetricsBoxPlot = "metrics_box_plot"
 
 
 class AtomBondDescriptorDictKeys(StrEnum):
