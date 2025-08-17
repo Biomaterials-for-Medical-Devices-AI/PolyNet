@@ -4,6 +4,42 @@ from scipy.stats import ttest_rel
 from statsmodels.stats.contingency_tables import mcnemar
 
 
+def metrics_pvalue_matrix(metrics_dict, test="wilcoxon"):
+    """
+    metrics_dict: {model_name: 1D array-like of bootstrap metric values}
+    Returns: (p_matrix, model_names)
+    """
+    model_names = list(metrics_dict.keys())
+    n = len(model_names)
+    p_matrix = np.ones((n, n), dtype=float)
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            x = np.asarray(metrics_dict[model_names[i]], dtype=float)
+            y = np.asarray(metrics_dict[model_names[j]], dtype=float)
+
+            # align lengths (if needed) and drop NaNs
+            L = min(len(x), len(y))
+            x, y = x[:L], y[:L]
+            mask = np.isfinite(x) & np.isfinite(y)
+            x, y = x[mask], y[mask]
+
+            if len(x) == 0:
+                pij = np.nan
+            else:
+                if test == "wilcoxon":
+                    # 'pratt' handles zeros in differences gracefully
+                    _, pij = wilcoxon(x, y, zero_method="pratt", alternative="two-sided")
+                elif test == "ttest":
+                    _, pij = ttest_rel(x, y, nan_policy="omit")
+                else:
+                    raise ValueError("test must be 'wilcoxon' or 'ttest'")
+
+            p_matrix[i, j] = p_matrix[j, i] = pij
+
+    return p_matrix, model_names
+
+
 def regression_pvalue_matrix(y_true, predictions, test="wilcoxon"):
     """
     Compare regression models pairwise using statistical tests on residuals.
