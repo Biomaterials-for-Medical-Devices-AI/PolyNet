@@ -9,6 +9,7 @@ from sklearn.metrics import (
     roc_curve,
 )
 from polynet.app.utils import significance_marker
+import pandas as pd
 
 
 def plot_parity(
@@ -211,6 +212,7 @@ def plot_pvalue_matrix(
     tick_size=15,
     signifficant_colour="#D73027",
     non_signifficant_colour="#4575B4",
+    mask_upper_triangle=True,
 ):
     """
     Plot a lower-triangular McNemar/Wilcoxon p-value matrix with significance colors and stars.
@@ -239,12 +241,17 @@ def plot_pvalue_matrix(
             else:
                 p = p_matrix[i, j]
                 if p < 0.001:
-                    annot_matrix[i, j] = "<0.001" + significance_marker(p)
+                    annot_matrix[i, j] = significance_marker(p) + "\n<0.001"
                 else:
-                    annot_matrix[i, j] = f"{p:.{decimals}f}{significance_marker(p)}"
+                    annot_matrix[i, j] = f"{significance_marker(p)}\n{p:.{decimals}f}"
 
     # Mask the upper triangle
-    mask = np.triu(np.ones_like(p_matrix, dtype=bool))
+    if mask_upper_triangle:
+        mask = np.triu(np.ones_like(p_matrix, dtype=bool))
+    else:
+        mask = np.zeros_like(p_matrix, dtype=bool)
+
+    np.fill_diagonal(mask, True)
 
     # Colors: red for significant, blue for non-significant
     significant_color = signifficant_colour  # red
@@ -252,7 +259,7 @@ def plot_pvalue_matrix(
     cmap = sns.color_palette([significant_color, non_significant_color])
 
     # Plot
-    f, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
 
     sns.heatmap(
         p_matrix,
@@ -281,4 +288,60 @@ def plot_pvalue_matrix(
 
     plt.tight_layout()
 
-    return f
+    return fig
+
+
+def plot_bootstrap_boxplots(
+    metrics_dict,
+    metric_name="Metric",
+    height=9,
+    width=7.5,
+    title=None,
+    title_fontsize=25,
+    x_label_fontsize=20,
+    y_label_fontsize=20,
+    tick_size=15,
+    fill_colour="lightgray",
+    border_colour="black",
+    median_colour="red",
+    dpi=350,
+):
+    """
+    Plot boxplots of bootstrap metric distributions for multiple models,
+    with overlayed mean ± 95% CI.
+
+    Parameters
+    ----------
+    metrics_dict : dict
+        {model_name: list/array of bootstrap metric values}
+    metric_name : str, optional
+        Name of the metric to display on the y-axis (default="Metric").
+    title : str, optional
+        Title of the plot.
+    """
+    model_names = list(metrics_dict.keys())
+    data = [np.array(vals) for vals in metrics_dict.values()]
+
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+
+    # Draw boxplots
+    plt.boxplot(
+        data,
+        labels=model_names,
+        patch_artist=True,
+        boxprops=dict(facecolor=fill_colour, color=border_colour),
+        medianprops=dict(color=median_colour, linewidth=2),
+    )
+
+    plt.ylabel(metric_name, fontdict={"fontsize": y_label_fontsize})
+    ax.tick_params(axis="y", which="major", labelsize=tick_size)
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+        label.set_horizontalalignment("right")  # <-- important
+        label.set_fontsize(x_label_fontsize)
+
+    title = f"Bootstrap Distributions of {metric_name}" if title is None else title
+    plt.title(title, fontsize=title_fontsize)
+
+    plt.tight_layout()
+    return fig
