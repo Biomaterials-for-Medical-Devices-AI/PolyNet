@@ -3,7 +3,11 @@ import re
 import pandas as pd
 import streamlit as st
 
-from polynet.utils.statistical_analysis import mcnemar_pvalue_matrix, regression_pvalue_matrix
+from polynet.utils.statistical_analysis import (
+    mcnemar_pvalue_matrix,
+    regression_pvalue_matrix,
+    metrics_pvalue_matrix,
+)
 from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
@@ -14,7 +18,12 @@ from polynet.app.utils import (
     get_true_label_column_name,
 )
 from polynet.options.enums import DataSets, Plots, Results, ProblemTypes
-from polynet.utils.plot_utils import plot_confusion_matrix, plot_parity, plot_pvalue_matrix
+from polynet.utils.plot_utils import (
+    plot_confusion_matrix,
+    plot_parity,
+    plot_pvalue_matrix,
+    plot_bootstrap_boxplots,
+)
 
 
 def compare_predictions_form(
@@ -71,6 +80,68 @@ def compare_predictions_form(
         return plot
 
 
+def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
+
+    st.write("### Model metrics comparison")
+
+    analyse_set = st.selectbox(
+        "Select a set to analyse",
+        options=[DataSets.Training, DataSets.Validation, DataSets.Test],
+        index=2,
+        key="analyse_set_metrics",
+    )
+
+    # Build: data_dict[model][metric_name] -> list of bootstrap values
+    data_dict = {}
+    metrics_name = set()
+    for _, dictio in metrics.items():
+        for model, per_model_dict in dictio.items():
+            data_dict.setdefault(model, {})
+            for metric_name, val in per_model_dict[analyse_set].items():
+                data_dict[model].setdefault(metric_name, [])
+                data_dict[model][metric_name].append(val)
+                metrics_name.add(metric_name)
+
+    models = st.multiselect(
+        "Select models to compare", options=list(data_dict.keys()), key="comparemodelmetrics"
+    )
+
+    metric_choice = st.selectbox(
+        "Select a metric to compare", options=sorted(metrics_name), key="metriccomparemetric"
+    )
+
+    selected = {m: data_dict[m][metric_choice] for m in models if m in data_dict}
+
+    plot_type = st.selectbox("Select a type of plot", options=["P-value Matrix", "Box Plot"])
+
+    if len(selected) > 1:
+
+        if plot_type == "P-value Matrix":
+            config = get_plot_customisation_form(
+                plot_type=Plots.MatrixPlot,
+                data=None,
+                data_options=data_options,
+                color_by_opts=None,
+                model_pred_col=None,
+                model_true_cols=None,
+            )
+            p_matrix, order = metrics_pvalue_matrix(selected, test="wilcoxon")
+            plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=order, **config)
+        elif plot_type == "Box Plot":
+            config = get_plot_customisation_form(
+                plot_type=Plots.MetricsBoxPlot,
+                data=None,
+                data_options=data_options,
+                color_by_opts=None,
+                model_pred_col=None,
+                model_true_cols=None,
+            )
+            plot = plot_bootstrap_boxplots(
+                metrics_dict=selected, metric_name=metric_choice, **config
+            )
+        return plot
+
+
 def get_plot_customisation_form(
     plot_type: str,
     data: pd.DataFrame,
@@ -106,8 +177,15 @@ def get_plot_customisation_form(
 
         columns = st.columns(2)
         with columns[0]:
-
-            if plot_type != Plots.MatrixPlot:
+            config["height"] = st.slider(
+                "Plot height",
+                min_value=4,
+                max_value=14,
+                value=7,
+                step=1,
+                key="plot_height" + plot_type,
+            )
+            if plot_type not in [Plots.MatrixPlot, Plots.MetricsBoxPlot]:
                 config["x_label"] = st.text_input(
                     "X-axis Label",
                     value=model_true_cols,
@@ -124,7 +202,17 @@ def get_plot_customisation_form(
                 help="Select the font size for the X-axis label.",
             )
         with columns[1]:
-            if plot_type != Plots.MatrixPlot:
+
+            config["width"] = st.slider(
+                "Plot width",
+                min_value=4,
+                max_value=14,
+                value=7,
+                step=1,
+                key="plot_width" + plot_type,
+            )
+
+            if plot_type not in [Plots.MatrixPlot, Plots.MetricsBoxPlot]:
                 config["y_label"] = st.text_input(
                     "Y-axis Label",
                     value=model_pred_col,
@@ -275,6 +363,9 @@ def get_plot_customisation_form(
                 config["display_labels"].append(name)
 
         elif plot_type == Plots.MatrixPlot:
+
+            config["mask_upper_triangle"] = st.checkbox("Mask upper triangle")
+
             col1, col2 = st.columns(2)
 
             with col1:
@@ -285,6 +376,36 @@ def get_plot_customisation_form(
                 config["signifficant_colour"] = st.color_picker(
                     "Non-signifficant colour", value="#D73027", key="signifficant" + plot_type
                 )
+
+        elif plot_type == Plots.MetricsBoxPlot:
+
+            cols = st.columns(3)
+
+            with cols[0]:
+                fill_colour = st.color_picker(
+                    "Box Fill Colour",
+                    value="#9aa0a5",
+                    key="box_fill" + plot_type,
+                    help="Select a fill color for the box in the box plot.",
+                )
+            with cols[1]:
+                border_colour = st.color_picker(
+                    "Box Border Colour",
+                    value="#000000",
+                    key="box_border" + plot_type,
+                    help="Select a border color for the box in the box plot.",
+                )
+            with cols[2]:
+                median_colour = st.color_picker(
+                    "Median Line Colour",
+                    value="#FF0000",
+                    key="median_color" + plot_type,
+                    help="Select a color for the median line in the box plot.",
+                )
+
+            config["fill_colour"] = fill_colour
+            config["border_colour"] = border_colour
+            config["median_colour"] = median_colour
 
         config["dpi"] = st.slider(
             "DPI",
