@@ -1,24 +1,25 @@
+import json
+
 import pandas as pd
 import streamlit as st
-import json
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.analyse_results import (
+    compare_metrics_form,
+    compare_predictions_form,
     confusion_matrix_plot_form,
     parity_plot_form,
-    compare_predictions_form,
-    compare_metrics_form,
 )
 from polynet.app.components.plots import display_model_results
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
+    gnn_model_metrics_file_path,
     ml_gnn_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
-    gnn_model_metrics_file_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions

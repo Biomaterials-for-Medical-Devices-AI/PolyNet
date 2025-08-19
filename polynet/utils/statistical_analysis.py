@@ -1,6 +1,5 @@
 import numpy as np
-from scipy.stats import wilcoxon
-from scipy.stats import ttest_rel
+from scipy.stats import ttest_rel, wilcoxon
 from statsmodels.stats.contingency_tables import mcnemar
 
 

@@ -3,11 +3,12 @@ from pathlib import Path
 
 import captum
 import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
-import seaborn as sns
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import streamlit as st
@@ -36,8 +37,6 @@ from polynet.options.enums import (
     ProblemTypes,
     Results,
 )
-from matplotlib.colors import Normalize
-
 
 # Define a softer blue and red
 

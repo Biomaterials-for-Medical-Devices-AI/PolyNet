@@ -1,5 +1,6 @@
-import numpy as np
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -8,8 +9,8 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
+
 from polynet.app.utils import significance_marker
-import pandas as pd
 
 
 def plot_parity(

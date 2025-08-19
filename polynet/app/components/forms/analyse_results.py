@@ -3,11 +3,6 @@ import re
 import pandas as pd
 import streamlit as st
 
-from polynet.utils.statistical_analysis import (
-    mcnemar_pvalue_matrix,
-    regression_pvalue_matrix,
-    metrics_pvalue_matrix,
-)
 from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
@@ -17,12 +12,17 @@ from polynet.app.utils import (
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.options.enums import DataSets, Plots, Results, ProblemTypes
+from polynet.options.enums import DataSets, Plots, ProblemTypes, Results
 from polynet.utils.plot_utils import (
+    plot_bootstrap_boxplots,
     plot_confusion_matrix,
     plot_parity,
     plot_pvalue_matrix,
-    plot_bootstrap_boxplots,
+)
+from polynet.utils.statistical_analysis import (
+    mcnemar_pvalue_matrix,
+    metrics_pvalue_matrix,
+    regression_pvalue_matrix,
 )
 
 
