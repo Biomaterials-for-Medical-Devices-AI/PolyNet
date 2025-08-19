@@ -106,7 +106,7 @@ def train_network(
                 "n_classes": int(data_options.num_classes),
                 "dropout": train_gnn_options.GNNDropoutRate,
                 "apply_weighting_to_graph": train_gnn_options.ApplyMonomerWeighting,
-                "seed": general_experiment_options.random_seed + iteration,
+                "seed": general_experiment_options.random_seed + i,
             }
 
             all_kwargs = {**model_kwargs, **arch_params}

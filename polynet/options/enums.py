@@ -130,6 +130,8 @@ class Plots(StrEnum):
     TrainingHistory = "Training History"
     FeatureImportance = "Feature Importance"
     GraphVisualization = "Graph Visualization"
+    MatrixPlot = "matrix_plot"
+    MetricsBoxPlot = "metrics_box_plot"
 
 
 class AtomBondDescriptorDictKeys(StrEnum):
@@ -198,3 +200,9 @@ class TransformDescriptors(StrEnum):
     PowerTransformer = "Power Transformer"
     QuantileTransformer = "Quantile Transformer"
     Normalizer = "Normalizer"
+
+
+class StatisticalTests(StrEnum):
+    McNemar = "mcnemar"
+    Wilcoxon = "Wilcoxon"
+    TTest = "t-test"

@@ -106,8 +106,10 @@ def get_predictions_df_tml(
             test_df[probs_test.columns] = probs_test.to_numpy()
 
         predictions_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
-
         predictions_df[iterator] = iteration
+        predictions_df = predictions_df[
+            ~predictions_df[Results.Index.value].duplicated(keep="last")
+        ]
 
         if last_iteration is None:
             predictions_all = predictions_df.copy()
@@ -406,6 +408,9 @@ def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type
 
         predictions_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
         predictions_df[iterator] = iteration
+        predictions_df = predictions_df[
+            ~predictions_df[Results.Index.value].duplicated(keep="last")
+        ]
 
         if last_iteration is None:
             predictions_all = predictions_df.copy()

@@ -3,10 +3,12 @@ from pathlib import Path
 
 import captum
 import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+import seaborn as sns
 from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import streamlit as st
@@ -61,6 +63,7 @@ def analyse_graph_embeddings(
     model,
     dataset: CustomPolymerGraph,
     labels: pd.Series,
+    style_by: pd.Series,
     mols_to_plot: list,
     reduction_method: str,
     reduction_parameters: dict,
@@ -83,7 +86,9 @@ def analyse_graph_embeddings(
 
     labels = labels.loc[mols_to_plot]
 
-    projection_fig = plot_projection_embeddings(reduced_embeddings, labels=labels, cmap=colormap)
+    projection_fig = plot_projection_embeddings(
+        reduced_embeddings, labels=labels, cmap=colormap, style=style_by
+    )
     st.pyplot(projection_fig, use_container_width=True)
 
 
@@ -363,26 +368,44 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> np.ndarray:
 
 
 def plot_projection_embeddings(
-    tsne_embeddings: np.ndarray, labels: list = None, cmap="blues"
+    tsne_embeddings: np.ndarray, labels: list = None, cmap: str = "blues", style: list = None
 ) -> plt.Figure:
     """
-    Plot projection of embeddings of the dataset in 2 dimensional space.
+    Plot projection of embeddings using seaborn (simplified version).
 
     Args:
-        embeddings (np.ndarray): The graph embeddings to plot.
-        labels (list, optional): Labels for coloring the points. Defaults to None.
+        tsne_embeddings: 2D array of embeddings
+        labels: Color mapping (optional)
+        cmap: Colormap name (default: "blues")
+        markers: List of marker styles for each point (optional)
     """
+    fig, ax = plt.subplots(figsize=(10, 8), dpi=400)
 
-    fig = plt.figure(figsize=(10, 8), dpi=400)
-    if labels is not None:
-        scatter = plt.scatter(tsne_embeddings[:, 0], tsne_embeddings[:, 1], c=labels, cmap=cmap)
-        plt.colorbar(scatter)
-    else:
-        plt.scatter(tsne_embeddings[:, 0], tsne_embeddings[:, 1])
+    sns.scatterplot(
+        x=tsne_embeddings[:, 0],
+        y=tsne_embeddings[:, 1],
+        hue=labels,
+        style=style,
+        palette=cmap,
+        s=50,  # Adjust point size as needed
+    )
 
-    plt.title("Projection of Graph Embeddings")
-    plt.xlabel("Component 1")
-    plt.ylabel("Component 2")
+    plt.title("Projection of Graph Embeddings", fontsize=25)
+    plt.xlabel("Component 1", fontsize=22)
+    plt.ylabel("Component 2", fontsize=22)
     plt.grid()
+
+    is_continuous = (
+        labels is not None
+        and np.issubdtype(np.array(labels).dtype, np.number)
+        and len(np.unique(labels)) > 10  # Arbitrary threshold for "continuous"
+    )
+
+    if is_continuous:
+        norm = Normalize(vmin=min(labels), vmax=max(labels))
+        sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+        sm.set_array([])
+        fig.colorbar(sm, ax=ax, label="Value")  # Explicitly pass `ax`
+        plt.gca().get_legend().remove()
 
     return fig
