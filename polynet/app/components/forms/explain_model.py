@@ -117,7 +117,10 @@ def embedding_projection(
         preds_projection = preds.loc[
             preds[iterator_col] == iteration, [Results.Set.value, predicted_col_name]
         ]
-        projection_data = pd.concat([data, preds_projection], axis=1)
+
+        projection_data = pd.merge(
+            left=data, right=preds_projection, left_index=True, right_index=True
+        )
 
         # select the reduction method
         reduction_method = st.selectbox(
@@ -141,6 +144,13 @@ def embedding_projection(
 
         # set random seed for reproducibility
         reduction_params["random_state"] = random_seed
+
+        mols_to_plot = explain_mols_widget(
+            data=projection_data,
+            SetStateKey=ProjectionPlotStateKeys.PlotProjectionSet,
+            ManuallySelectStateKey=ProjectionPlotStateKeys.ProjectionManualSelection,
+            MolsStateKey=ProjectionPlotStateKeys.PlotProjectionMols,
+        )
 
         # Select how to colour the points in the projection
         colour_projection_by = st.selectbox(
@@ -169,18 +179,18 @@ def embedding_projection(
                 projection_data = merge_weighted(
                     descriptors, projection_data, weights_col, projection_data
                 )
-                projection_data[descriptor] /= 100
                 colour_projection_by = descriptor
 
-        mols_to_plot = explain_mols_widget(
-            data=projection_data,
-            SetStateKey=ProjectionPlotStateKeys.PlotProjectionSet,
-            ManuallySelectStateKey=ProjectionPlotStateKeys.ProjectionManualSelection,
-            MolsStateKey=ProjectionPlotStateKeys.PlotProjectionMols,
+        style_by = st.selectbox(
+            "Select a column to style the projection plot by",
+            options=[None, data_options.target_variable_col, predicted_col_name, Results.Set.value],
+            key="style",
+            index=3,
         )
 
         projection_data = projection_data.loc[mols_to_plot]
         labels = projection_data[colour_projection_by]
+        style = projection_data[style_by] if style_by else None
 
         if st.checkbox("See data", key=ProjectionPlotStateKeys.ProjectionData):
             st.dataframe(projection_data)
@@ -199,6 +209,7 @@ def embedding_projection(
                 model=model,
                 dataset=dataset,
                 labels=labels,
+                style_by=style,
                 mols_to_plot=mols_to_plot,
                 reduction_method=reduction_method,
                 reduction_parameters=reduction_params,
@@ -275,9 +286,9 @@ def explain_predictions_form(
                         preds[[true_col_name, predicted_col_name]].loc[mol].astype(int).astype(str)
                     )
                     preds_dict[mol][Results.Predicted] = class_names[
-                        predicted_vals.loc[predicted_col_name]
+                        predicted_vals[predicted_col_name]
                     ]
-                    preds_dict[mol][Results.Label] = class_names[predicted_vals.loc[true_col_name]]
+                    preds_dict[mol][Results.Label] = class_names[predicted_vals[true_col_name]]
 
         mol_names = {}
         if st.toggle("Set Monomer Name"):
