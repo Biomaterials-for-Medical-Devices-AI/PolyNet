@@ -5,7 +5,10 @@ from imblearn.metrics import specificity_score
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+)
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
@@ -194,7 +197,9 @@ def calculate_metrics(y_true, y_pred, y_probs, problem_type):
             EvaluationMetrics.Specificity: specificity_score(
                 y_true, y_pred
             ),  # Recall for negative samples or True negative rate
-            EvaluationMetrics.AUROC: roc_auc_score(y_true=y_true, y_score=y_probs),
+            EvaluationMetrics.AUROC: (
+                roc_auc_score(y_true=y_true, y_score=y_probs) if y_probs is not None else None
+            ),
             EvaluationMetrics.MCC: mcc(y_true, y_pred),
             EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
             EvaluationMetrics.GScore: gmean(y_true, y_pred),

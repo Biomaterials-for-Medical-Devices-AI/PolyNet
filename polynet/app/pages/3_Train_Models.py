@@ -259,11 +259,12 @@ def train_models(
         label_col_name = get_true_label_column_name(
             target_variable_name=data_options.target_variable_name
         )
+        gnn_predictions_df = gnn_predictions_df.drop(columns=[label_col_name])
 
         predictions = pd.merge(
             left=tml_predictions_df,
             right=gnn_predictions_df,
-            on=[Results.Index, Results.Set, iterator, label_col_name],
+            on=[Results.Index, Results.Set, iterator],
         )
 
         metrics = {}

@@ -156,6 +156,58 @@ def predict(
             models=models, dataset=dataset, data_options=data_options
         )
 
+        cols = predictions_gnn.columns
+
+        analysed_arch = []
+        gnn_cols = []
+        for col in cols:
+            # get the column names that contain predicitons of GNN models (can be same architecture different seed/bootstraps)
+            if Results.Predicted in col:
+                gnn_cols.append(col)
+            # check which architecture was used
+            gnn_arch = col.split(" ")[0]
+            if gnn_arch in analysed_arch or col == Results.Index.value:
+                continue
+            # stores each unique GNN architecture used (not repeats)
+            else:
+                analysed_arch.append(gnn_arch)
+
+        ensemble_cols = {}
+        for arch in analysed_arch:
+            # get the columns with predictions of the same architecture
+            arch_cols = [col for col in cols if arch in col and Results.Predicted in col]
+            # store the columns in a dictionary where the key is the architecture used
+            ensemble_cols[arch] = arch_cols
+        # add a key for ALL GNN models
+        ensemble_cols["GNN"] = gnn_cols
+
+        ensemble_preds = []
+        if data_options.problem_type == ProblemTypes.Classification:
+            for gnn_arch, gnn_cols in ensemble_cols.items():
+                if len(gnn_cols) < 2:
+                    continue
+                # get the predicitons for a given architecture
+                gnn_df = predictions_gnn[gnn_cols]
+                # get majority vote
+                ensemble_prediction, _ = mode(gnn_df.values, axis=1, keepdims=False)
+                # append the voting prediction to list of ensmble predictions
+                ensemble_preds.append(
+                    pd.Series(
+                        ensemble_prediction,
+                        index=gnn_df.index,
+                        name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                    )
+                )
+
+        elif data_options.problem_type == ProblemTypes.Regression:
+            pass
+
+        if ensemble_preds:
+            # concat all ensemble predictions into a single DF
+            ensemble_preds = pd.concat(ensemble_preds, axis=1)
+            # concat ensemble DF to the original predictions DF
+            predictions_gnn = pd.concat([predictions_gnn, ensemble_preds], axis=1)
+
         predictions_gnn = pd.merge(left=id_df, right=predictions_gnn, on=[Results.Index])
 
     if gnn_models and tml_models:
@@ -176,7 +228,7 @@ def predict(
 
         for col in predictions.columns[2:]:
 
-            if Results.Predicted.value in col:
+            if Results.Predicted.value in col and "Ensemble" not in col:
                 split_name = col.split(" ")
                 model, number = split_name[0], split_name[1]
                 model_name = f"{model} {number}"
@@ -185,6 +237,10 @@ def predict(
                     for col_name in predictions.columns[2:]
                     if Results.Score.value in col_name and model_name in col_name
                 ]
+            elif Results.Predicted.value in col:
+                split_name = col.split(" ")
+                model = split_name[0] + " " + split_name[1]
+                probs_cols = None
             else:
                 continue
 
@@ -196,7 +252,7 @@ def predict(
             metrics[number][model][dataset_name] = calculate_metrics(
                 y_true=predictions[label_col_name],
                 y_pred=predictions[col],
-                y_probs=predictions[probs_cols],
+                y_probs=predictions[probs_cols] if probs_cols else None,
                 problem_type=data_options.problem_type,
             )
 
@@ -207,7 +263,7 @@ def predict(
 
         display_mean_std_model_metrics(metrics)
 
-    st.subheader("Predictions:")
+    st.subheader("Predictions")
     st.dataframe(predictions)
     predictions.to_csv(gnn_predictions_file(experiment_path=experiment_path))
 
