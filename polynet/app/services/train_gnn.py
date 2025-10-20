@@ -14,7 +14,6 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.services.model_training import split_data
 from polynet.app.utils import (
     get_predicted_label_column_name,
     get_score_column_name,
@@ -28,15 +27,7 @@ from polynet.call_methods import (
     make_scheduler,
 )
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import (
-    DataSets,
-    Optimizers,
-    ProblemTypes,
-    Results,
-    Schedulers,
-    SplitMethods,
-    SplitTypes,
-)
+from polynet.options.enums import DataSets, Optimizers, ProblemTypes, Results, Schedulers
 from polynet.utils.model_training import predict_network, train_model
 
 
