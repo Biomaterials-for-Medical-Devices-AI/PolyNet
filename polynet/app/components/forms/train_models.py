@@ -472,7 +472,7 @@ def GNN_shared_params_form(
 
     shared_params[NetworkParams.NumConvolutions] = conv_layers
     shared_params[NetworkParams.EmbeddingDim] = emb_dim
-    shared_params[NetworkParams.PoolingNet] = pooling
+    shared_params[NetworkParams.PoolingMethod] = pooling
     shared_params[NetworkParams.ReadoutLayers] = readout_layers
     shared_params[NetworkParams.Dropout] = dropout
     shared_params[NetworkParams.LearningRate] = learning_rate
