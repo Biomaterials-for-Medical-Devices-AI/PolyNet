@@ -15,6 +15,8 @@ class TrainGNNOptions:
     GNNLearningRate: float
     GNNBatchSize: int
     ApplyMonomerWeighting: ApplyWeightingToGraph
+    HyperparameterOptimisation: bool = False
+    ShareGNNParameters: bool = True
     AsymmetricLoss: bool = False
     ImbalanceStrength: float = 0.0
     TrainGNNModel: bool = True
