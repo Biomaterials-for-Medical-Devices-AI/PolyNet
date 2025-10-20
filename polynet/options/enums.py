@@ -32,12 +32,15 @@ class NetworkParams(StrEnum):
     # MPNN
 
     # shared params
-    Pooling = "pooling"
+    PoolingMethod = "pooling"
     NumConvolutions = "n_convolutions"
     EmbeddingDim = "embedding_dim"
     ReadoutLayers = "readout_layers"
     Dropout = "dropout"
     ApplyWeightingGraph = "apply_weighting_to_graph"
+    LearningRate = "learning_rate"
+    BatchSize = "batch_size"
+    AssymetricLossStrength = "assymetric_loss_strength"
 
 
 class ExplainAlgorithms(StrEnum):
