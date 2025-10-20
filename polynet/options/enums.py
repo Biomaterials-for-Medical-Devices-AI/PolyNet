@@ -31,6 +31,14 @@ class NetworkParams(StrEnum):
     Bias = "bias"
     # MPNN
 
+    # shared params
+    Pooling = "pooling"
+    NumConvolutions = "n_convolutions"
+    EmbeddingDim = "embedding_dim"
+    ReadoutLayers = "readout_layers"
+    Dropout = "dropout"
+    ApplyWeightingGraph = "apply_weighting_to_graph"
+
 
 class ExplainAlgorithms(StrEnum):
     GNNExplainer = "GNNExplainer"
