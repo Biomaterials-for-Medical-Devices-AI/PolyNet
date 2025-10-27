@@ -56,6 +56,7 @@ class BaseNetwork(nn.Module):
         self.apply_weighting_to_graph = apply_weighting_to_graph
         self.seed = seed
         self._seed_everything(seed)
+        self.losses = None
 
         self.pooling_fn = POOLING_FUNCTIONS.get(pooling, gmeanp)
 
