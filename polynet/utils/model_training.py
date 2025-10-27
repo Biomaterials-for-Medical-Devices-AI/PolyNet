@@ -154,6 +154,7 @@ def train_model(
     epochs: int = 250,
 ):
     best_val_loss = float("inf")
+    train_list, val_list, test_list = [], [], []
 
     for epoch in range(1, epochs + 1):
         train_loss = train_network(model, train_loader, loss, optimizer, device)
@@ -169,8 +170,12 @@ def train_model(
         print(
             f"Epoch: {epoch:03d}, LR: {scheduler.get_last_lr()[0]:3f}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Test Loss: {test_loss:.4f}"
         )
+        train_list.append(train_loss)
+        val_list.append(val_loss)
+        test_list.append(test_loss)
 
     model.load_state_dict(best_model_state)
+    model.losses = (train_list, val_list, test_list)
 
     return model
 
