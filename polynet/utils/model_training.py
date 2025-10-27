@@ -1,12 +1,28 @@
+from pathlib import Path
+
 from copy import deepcopy
 
 import matplotlib.pyplot as plt
 import numpy as np
-import pandas as pd
 import seaborn as sns
 import torch
 
-from polynet.options.enums import ProblemTypes, Results
+from polynet.options.enums import ProblemTypes
+
+import ray
+from ray import tune
+from ray.tune.schedulers import ASHAScheduler
+from ray.tune import CLIReporter
+from ray.air import session
+
+from polynet.options.enums import NetworkParams, Networks, Optimizers, Schedulers
+
+from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
+from torch_geometric.loader import DataLoader
+from torch.nn import Module
+
+from sklearn.model_selection import StratifiedKFold, KFold
+from polynet.app.options.search_grids import get_grid_search
 
 
 def train_network(model, train_loader, loss_fn, optimizer, device):
@@ -133,7 +149,15 @@ def plot_parity_plot(df):
 
 
 def train_model(
-    model, train_loader, val_loader, test_loader, loss, optimizer, scheduler, device, epochs=250
+    model: Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    loss: Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler._LRScheduler,
+    device: torch.device,
+    epochs: int = 250,
 ):
     best_val_loss = float("inf")
 
@@ -155,3 +179,180 @@ def train_model(
     model.load_state_dict(best_model_state)
 
     return model
+
+
+def gnn_target_function(
+    config: dict,
+    dataset: list,
+    num_classes: int,
+    train_idxs: list,
+    val_idxs: list,
+    network: Networks,
+    problem_type: ProblemTypes,
+):
+    """
+    Trains and evaluates a GNN model using K-fold cross-validation.
+    Reports mean and std of validation loss to Ray Tune.
+    """
+
+    cfg = deepcopy(config)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    lr = cfg.pop(NetworkParams.LearningRate)
+    batch_size = cfg.pop(NetworkParams.BatchSize)
+    assymetric_loss_strength = cfg.pop(NetworkParams.AssymetricLossStrength)
+
+    fold_val_losses = []
+
+    for fold, (train_idx, val_idx) in enumerate(zip(train_idxs, val_idxs), 1):
+
+        # Prepare datasets
+        train_dataset = [dataset[i] for i in train_idx]
+        val_dataset = [dataset[i] for i in val_idx]
+
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+
+        # Prepare model input kwargs
+        data_kwargs = {
+            "n_node_features": dataset[0].num_node_features,
+            "n_edge_features": dataset[0].num_edge_features,
+            "n_classes": num_classes,
+        }
+        all_kwargs = {**data_kwargs, **cfg}
+
+        # Create model and training tools
+        model = create_network(network=network, problem_type=problem_type, **all_kwargs)
+        optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
+        scheduler = make_scheduler(
+            Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
+        )
+        loss_fn = make_loss(model.problem_type, asymmetric_loss_weights=None)
+
+        best_val_loss = float("inf")
+
+        # === Training loop ===
+        for epoch in range(1, 251):
+
+            train_loss = train_network(
+                model=model,
+                train_loader=train_loader,
+                loss_fn=loss_fn,
+                optimizer=optimizer,
+                device=device,
+            )
+
+            val_loss = eval_network(
+                model=model, test_loader=val_loader, loss_fn=loss_fn, device=device
+            )
+
+            scheduler.step(val_loss)
+
+            # Keep best validation loss for this fold
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+
+            # Optional: report intermediate results to Ray (helps ASHA)
+            # session.report({"train_loss": train_loss, "val_loss": val_loss, "epoch": epoch})
+
+        fold_val_losses.append(best_val_loss)
+
+    # Compute mean and std across folds
+    mean_val_loss = np.mean(fold_val_losses)
+    std_val_loss = np.std(fold_val_losses)
+
+    # Final report to Ray
+    session.report({"val_loss": mean_val_loss, "val_loss_std": std_val_loss})
+
+
+def gnn_hyp_opt(
+    exp_path: Path,
+    gnn_arch: Networks,
+    dataset: list,
+    num_classes: int,
+    num_samples: int,
+    problem_type: ProblemTypes,
+    random_seed: int,
+    n_folds: int = 5,
+):
+    """
+    Runs Ray Tune hyperparameter optimization with early stopping.
+    """
+
+    # --- Configure early stopping via ASHA ---
+    asha_scheduler = ASHAScheduler(
+        time_attr="epoch",
+        metric="val_loss",
+        mode="min",
+        max_t=250,
+        grace_period=50,  # allow warmup epochs before early stopping
+        reduction_factor=2,  # controls aggressiveness
+    )
+
+    metric_cols = ["train_loss", "val_loss", "val_loss_std", "epoch"] + [
+        f"val_loss_fold_{i+1}" for i in range(n_folds)
+    ]
+
+    reporter = CLIReporter(
+        parameter_columns=[
+            NetworkParams.AssymetricLossStrength,
+            NetworkParams.LearningRate,
+            NetworkParams.BatchSize,
+            NetworkParams.NumConvolutions,
+            NetworkParams.EmbeddingDim,
+            NetworkParams.ReadoutLayers,
+        ],
+        metric_columns=metric_cols,
+    )
+
+    config = get_grid_search(
+        model_name=gnn_arch, problem_type=problem_type, random_seed=random_seed
+    )
+
+    for key, value in config.items():
+        if isinstance(value, list):
+            config[key] = tune.choice(value)
+
+    # --- Create indices for cross-validation ---
+    y = [data.y.item() for data in dataset]
+    if problem_type == ProblemTypes.Classification:
+        cv = StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
+    else:
+        cv = KFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
+
+    train_set_idxs, val_set_idxs = [], []
+    for train_idx, val_idx in cv.split(np.zeros(len(y)), y):
+        train_set_idxs.append(train_idx)
+        val_set_idxs.append(val_idx)
+
+    # --- Run Ray Tune ---
+    ray.init(ignore_reinit_error=True, include_dashboard=False)
+
+    results = tune.run(
+        tune.with_parameters(
+            gnn_target_function,
+            dataset=dataset,
+            num_classes=num_classes,
+            train_idxs=train_set_idxs,
+            val_idxs=val_set_idxs,
+            network=gnn_arch,
+            problem_type=problem_type,
+        ),
+        config=config,
+        num_samples=num_samples,
+        scheduler=asha_scheduler,
+        progress_reporter=reporter,
+        storage_path=str(exp_path / "gnn_hyp_opt"),
+        name=f"gnn_hyp_opt_{gnn_arch}",
+        resources_per_trial={"cpu": 0.5, "gpu": 1 if torch.cuda.is_available() else 0},
+    )
+
+    best_trial = results.get_best_trial("val_loss", "min")
+    best_config = best_trial.config
+
+    all_runs_df = results.results_df
+    all_runs_df.to_csv(exp_path / "gnn_hyp_opt" f"/{gnn_arch}.csv", index=False)
+
+    ray.shutdown()
+
+    return best_config
