@@ -54,6 +54,7 @@ from polynet.app.services.predict_model import (
     get_predictions_df_gnn,
     get_predictions_df_tml,
     plot_results,
+    plot_learning_curves,
 )
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.services.train_tml import train_tml_model
@@ -219,6 +220,8 @@ def train_models(
         for model_name, model in gnn_models.items():
             save_path = gnn_models_dir / f"{model_name}.pt"
             save_gnn_model(model, save_path)
+
+        plot_learning_curves(gnn_models, save_path=plots_dir)
 
         gnn_predictions_df = get_predictions_df_gnn(
             models=gnn_models,
