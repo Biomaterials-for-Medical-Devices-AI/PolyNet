@@ -255,7 +255,7 @@ def plot_learning_curves(models: dict, save_path: Path):
         save_plot_path = save_path / f"{model_name}_learning_curve.png"
         save_plot(fig=learning_curve, path=save_plot_path)
 
-        return
+    return
 
 
 def predict_tml_model(
