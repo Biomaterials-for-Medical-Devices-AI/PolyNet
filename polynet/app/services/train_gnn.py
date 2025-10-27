@@ -1,3 +1,4 @@
+from copy import deepcopy
 import numpy as np
 import pandas as pd
 import torch
@@ -64,7 +65,7 @@ def train_network(
         edge_feats=representation_options.edge_feats,
     )
 
-    train_ids, val_ids, test_ids = train_val_test_idxs
+    train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
 
     def filter_dataset_by_ids(dataset, ids):
         return [data for data in dataset if data.idx in ids]
@@ -134,8 +135,8 @@ def train_network(
             )
             # create loaders
             train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-            val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
-            test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+            val_loader = DataLoader(val_set, shuffle=False)
+            test_loader = DataLoader(test_set, shuffle=False)
 
             # Create optimizer, scheduler and loss function
             optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
