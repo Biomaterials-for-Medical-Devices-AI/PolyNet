@@ -76,20 +76,7 @@ class TransformerGNN(BaseNetwork):
         if self.cross_att:
             self.monomer_W_att = nn.Linear(self.embedding_dim, self.embedding_dim)
 
-        # graph embedding is the concatenation of the global mean and max pooling, thus 2*embedding_dim
-        graph_embedding = self.graph_embedding
-
-        # Readout layers
-        self.readout = nn.ModuleList([])
-        for _ in range(self.readout_layers - 1):
-            reduced_dim = int(graph_embedding / 2)
-            self.readout.append(
-                nn.Sequential(nn.Linear(graph_embedding, reduced_dim), nn.BatchNorm1d(reduced_dim))
-            )
-            graph_embedding = reduced_dim
-
-        # Final readout layer
-        self.output_layer = nn.Linear(graph_embedding, self.n_classes)
+        self.make_readout_layers()
 
 
 class TransformerGNNClassifier(TransformerGNN, BaseNetworkClassifier):
