@@ -129,7 +129,7 @@ def plot_confusion_matrix(
 
 
 def show_label_distribution(data, target_variable, title=None):
-    plt.figure(figsize=(8, 6), dpi=300)
+    fig = plt.figure(figsize=(8, 6), dpi=300)
     ax = sns.countplot(
         data=data, x=target_variable, hue=target_variable, legend=False, palette="Blues"
     )
@@ -150,7 +150,7 @@ def show_label_distribution(data, target_variable, title=None):
             textcoords="offset points",
         )
 
-    return plt
+    return fig
 
 
 def plot_auroc(
@@ -345,4 +345,35 @@ def plot_bootstrap_boxplots(
     plt.title(title, fontsize=title_fontsize)
 
     plt.tight_layout()
+    return fig
+
+
+def plot_learning_curve(losses, title="Learning Curve"):
+    """
+    Plots training, validation, and test losses versus epochs.
+
+    Args:
+        losses (tuple): A tuple (train_losses, val_losses, test_losses),
+                        where each element is a list of losses per epoch.
+        title (str): Title of the plot.
+        save_path (str, optional): If provided, saves the plot to this path.
+
+    Returns:
+        None
+    """
+    train_losses, val_losses, test_losses = losses
+    epochs = range(1, len(train_losses) + 1)
+
+    fig = plt.figure(figsize=(8, 6))
+    plt.plot(epochs, train_losses, label="Training Loss", color="tab:blue", linewidth=2)
+    plt.plot(epochs, val_losses, label="Validation Loss", color="tab:orange", linewidth=2)
+    plt.plot(epochs, test_losses, label="Test Loss", color="tab:green", linewidth=2)
+
+    plt.xlabel("Epoch", fontsize=12)
+    plt.ylabel("Loss", fontsize=12)
+    plt.title(title, fontsize=14)
+    plt.legend()
+    plt.grid(True, linestyle="--", alpha=0.6)
+    plt.tight_layout()
+
     return fig
