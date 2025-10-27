@@ -202,16 +202,8 @@ def train_models(
         train_gnn_options = TrainGNNOptions(
             TrainGNNModel=st.session_state[TrainGNNStateKeys.TrainGNN],
             GNNConvolutionalLayers=gnn_conv_params,
-            GNNNumberOfLayers=st.session_state[TrainGNNStateKeys.GNNNumberOfLayers],
-            GNNEmbeddingDimension=st.session_state[TrainGNNStateKeys.GNNEmbeddingDimension],
-            GNNPoolingMethod=st.session_state[TrainGNNStateKeys.GNNPoolingMethod],
-            GNNReadoutLayers=st.session_state[TrainGNNStateKeys.GNNReadoutLayers],
-            GNNDropoutRate=st.session_state[TrainGNNStateKeys.GNNDropoutRate],
-            GNNLearningRate=st.session_state[TrainGNNStateKeys.GNNLearningRate],
-            GNNBatchSize=st.session_state[TrainGNNStateKeys.GNNBatchSize],
-            ApplyMonomerWeighting=st.session_state[TrainGNNStateKeys.GNNMonomerWeighting],
-            AsymmetricLoss=st.session_state.get(TrainGNNStateKeys.AsymmetricLoss, False),
-            ImbalanceStrength=st.session_state.get(TrainGNNStateKeys.ImbalanceStrength, 0.0),
+            HyperparameterOptimisation=st.session_state[TrainGNNStateKeys.HypTunning],
+            ShareGNNParameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
         )
         save_options(path=gnn_training_opts_path, options=train_gnn_options)
 
@@ -351,6 +343,7 @@ if experiment_name:
         gnn_conv_params = train_GNN_models_form(
             representation_opts=representation_opts, problem_type=data_opts.problem_type
         )
+
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."

@@ -1,12 +1,10 @@
 import numpy as np
 import pandas as pd
-import streamlit as st
 import torch
 from torch_geometric.loader import DataLoader
 
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
-    gnn_model_dir,
     gnn_raw_data_file,
     gnn_raw_data_path,
     polynet_experiments_base_dir,
@@ -14,7 +12,6 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.services.model_training import split_data
 from polynet.app.utils import (
     get_predicted_label_column_name,
     get_score_column_name,
@@ -30,14 +27,13 @@ from polynet.call_methods import (
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     DataSets,
+    NetworkParams,
     Optimizers,
     ProblemTypes,
     Results,
     Schedulers,
-    SplitMethods,
-    SplitTypes,
 )
-from polynet.utils.model_training import predict_network, train_model
+from polynet.utils.model_training import gnn_hyp_opt, predict_network, train_model
 
 
 def train_network(
@@ -77,6 +73,10 @@ def train_network(
     trained_models = {}
     loaders = {}
 
+    assymetric_losses = {}
+    lrs = {}
+    batch_sizes = {}
+
     # === Step 4: Train one model for each GNN architecture
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
 
@@ -87,51 +87,72 @@ def train_network(
         test_set = filter_dataset_by_ids(dataset, test_idxs)
 
         # === Step 3: Prepare dataloaders
-        batch_size = train_gnn_options.GNNBatchSize
-        train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
-        test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
+        train_loader = DataLoader(train_set, shuffle=True)
+        val_loader = DataLoader(val_set, shuffle=False)
+        test_loader = DataLoader(test_set, shuffle=False)
 
         loaders[str(iteration)] = (train_loader, val_loader, test_loader)
 
         for gnn_arch, arch_params in train_gnn_options.GNNConvolutionalLayers.items():
 
+            if train_gnn_options.HyperparameterOptimisation:
+                arch_params = gnn_hyp_opt(
+                    exp_path=experiment_path,
+                    gnn_arch=gnn_arch,
+                    dataset=train_set + val_set,
+                    num_classes=int(data_options.num_classes),
+                    num_samples=50,
+                    problem_type=data_options.problem_type,
+                    random_seed=general_experiment_options.random_seed + i,
+                )
+
+            # take out non-model related params
+            if gnn_arch not in assymetric_losses:
+                assymetric_losses[gnn_arch] = arch_params.pop(NetworkParams.AssymetricLossStrength)
+            if gnn_arch not in lrs:
+                lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
+            if gnn_arch not in batch_sizes:
+                batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+
+            assymetric_loss_strength = assymetric_losses[gnn_arch]
+            lr = lrs[gnn_arch]
+            batch_size = batch_sizes[gnn_arch]
+
+            # get model params together and create model
             model_kwargs = {
+                # data related kwargs
                 "n_node_features": dataset[0].num_node_features,
                 "n_edge_features": dataset[0].num_edge_features,
-                "pooling": train_gnn_options.GNNPoolingMethod,
-                "n_convolutions": train_gnn_options.GNNNumberOfLayers,
-                "embedding_dim": train_gnn_options.GNNEmbeddingDimension,
-                "readout_layers": train_gnn_options.GNNReadoutLayers,
                 "n_classes": int(data_options.num_classes),
-                "dropout": train_gnn_options.GNNDropoutRate,
-                "apply_weighting_to_graph": train_gnn_options.ApplyMonomerWeighting,
+                # Experiment seed
                 "seed": general_experiment_options.random_seed + i,
             }
-
             all_kwargs = {**model_kwargs, **arch_params}
 
             model = create_network(
                 network=gnn_arch, problem_type=data_options.problem_type, **all_kwargs
             )
+            # create loaders
+            train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+            test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
 
-            optimizer = make_optimizer(Optimizers.Adam, model, lr=train_gnn_options.GNNLearningRate)
+            # Create optimizer, scheduler and loss function
+            optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
             scheduler = make_scheduler(
                 Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
             )
-
             if (
                 model.problem_type == ProblemTypes.Classification
-                and train_gnn_options.AsymmetricLoss
+                and assymetric_loss_strength is not None
             ):
                 weights = compute_class_weights(
                     labels=data[data_options.target_variable_col].to_numpy(),
                     num_classes=int(data_options.num_classes),
-                    imbalance_strength=train_gnn_options.ImbalanceStrength,
+                    imbalance_strength=assymetric_loss_strength,
                 )
             else:
                 weights = None
-
             loss_fn = make_loss(model.problem_type, asymmetric_loss_weights=weights)
 
             model = train_model(

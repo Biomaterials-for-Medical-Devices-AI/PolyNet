@@ -29,8 +29,6 @@ def train_TML_models(problem_type: ProblemTypes):
 
     if st.toggle("Train TML models", key=TrainTMLStateKeys.TrainTML):
 
-        st.divider()
-
         hyperparameter_tunning = st.checkbox(
             "Perform hyperparameter tuning",
             key=TrainTMLStateKeys.PerformHyperparameterTuning,
@@ -42,8 +40,6 @@ def train_TML_models(problem_type: ProblemTypes):
             ### Select the machine learning algorithms you want to train
             """
         )
-
-        st.divider()
 
         if problem_type == ProblemTypes.Regression:
 
@@ -269,167 +265,221 @@ def train_GNN_models_form(representation_opts: RepresentationOptions, problem_ty
 
     gnn_conv_params = {}
 
-    if st.toggle("Train GNN models", key=TrainGNNStateKeys.TrainGNN):
+    if not st.toggle("Train GNN models", key=TrainGNNStateKeys.TrainGNN):
+        return gnn_conv_params
 
-        conv_layers = st.multiselect(
-            "Select a GNN convolutional layer to train",
-            options=[
-                Networks.GCN,
-                Networks.GraphSAGE,
-                Networks.TransformerGNN,
-                Networks.GAT,
-                Networks.MPNN,
-                Networks.CGGNN,
-            ],
-            default=[Networks.GCN],
-            key=TrainGNNStateKeys.GNNConvolutionalLayers,
+    hyperparameter_tunning = st.checkbox(
+        "Perform hyperparameter tuning",
+        key=TrainGNNStateKeys.HypTunning,
+        help="If enabled, hyperparameters will be tuned via grid search (can be slow).",
+    )
+
+    st.markdown("### Select the GNN convolutional layers you want to train")
+
+    conv_layers = st.multiselect(
+        "Select GNN convolutional layers to train",
+        options=[
+            Networks.GCN,
+            Networks.GraphSAGE,
+            Networks.TransformerGNN,
+            Networks.GAT,
+            Networks.MPNN,
+            Networks.CGGNN,
+        ],
+        default=[Networks.GCN],
+        key=TrainGNNStateKeys.GNNConvolutionalLayers,
+    )
+
+    if not conv_layers:
+        st.error("Please select at least one GNN convolutional layer to train.")
+        st.stop()
+
+    if not hyperparameter_tunning:
+        share_params = st.checkbox(
+            "Use same hyperparameter values for shared GNN parameters across all architectures.",
+            value=True,
+            key=TrainGNNStateKeys.SharedGNNParams,
+            help="If enabled, shared GNN hyperparameters (e.g., layers, embedding dim, pooling) are the same across all architectures.",
         )
+    else:
+        share_params = None
 
-        if not conv_layers:
-            st.error("Please select at least one GNN convolutional layer to train.")
-            st.stop()
+    # Define per-network UI in a simple, modular way
+    def gcn_ui():
+        st.warning("Be aware that `GCN` does not support edge features.")
+        improved = st.selectbox("Fit bias", [True, False], key=TrainGNNStateKeys.Improved)
+        return {NetworkParams.Improved: improved}
 
-        if Networks.GCN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GCN Hyperparameters")
+    def sage_ui():
+        st.warning("Be aware that `GraphSAGE` does not support edge features.")
+        bias = st.selectbox("Fit bias", [True, False], key=TrainGNNStateKeys.Bias)
+        return {NetworkParams.Bias: bias}
 
-            st.warning("Beaware that GCN does not support edge features. ")
-            # Add GCN specific hyperparameters here
-            improved = st.selectbox(
-                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Improved, index=0
+    def transformer_ui():
+        num_heads = st.slider("Number of attention heads", 1, 8, 4, key=TrainGNNStateKeys.NumHeads)
+        return {NetworkParams.NumHeads: num_heads}
+
+    def gat_ui():
+        num_heads = st.slider("Number of attention heads", 1, 8, 4, key=TrainGNNStateKeys.NHeads)
+        return {NetworkParams.NumHeads: num_heads}
+
+    def empty_ui(msg):
+        st.write(msg)
+        return {}
+
+    # Central configuration
+    NETWORK_UIS = {
+        Networks.GCN: ("GCN Hyperparameters", gcn_ui),
+        Networks.GraphSAGE: ("GraphSAGE Hyperparameters", sage_ui),
+        Networks.TransformerGNN: ("Transformer GNN Hyperparameters", transformer_ui),
+        Networks.GAT: ("GAT Hyperparameters", gat_ui),
+        Networks.MPNN: (
+            "MPNN Hyperparameters",
+            lambda: empty_ui("Currently, no specific parameters for `MPNN` are available."),
+        ),
+        Networks.CGGNN: (
+            "CGGNN Hyperparameters",
+            lambda: empty_ui("Currently, no specific parameters for `CGGNN` are available."),
+        ),
+    }
+
+    for network in conv_layers:
+        title, ui_func = NETWORK_UIS[network]
+        if not hyperparameter_tunning:
+            st.write(f"#### {title}")
+            specific_params = ui_func()
+            st.divider()
+        else:
+            specific_params = {}
+
+        gnn_conv_params[network] = specific_params
+
+        # Handle non-shared parameters if applicable
+        if not share_params and not hyperparameter_tunning:
+            shared = GNN_shared_params_form(
+                representation_opts=representation_opts, problem_type=problem_type, network=network
             )
-            gnn_conv_params[Networks.GCN] = {NetworkParams.Improved: improved}
+            st.divider()
+            gnn_conv_params[network].update(shared)
 
-        if Networks.GraphSAGE in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GraphSAGE Hyperparameters")
+    # Handle shared parameters once at the end
+    if share_params:
+        st.markdown("#### Set shared GNN hyperparameters")
+        shared_params = GNN_shared_params_form(
+            representation_opts=representation_opts, problem_type=problem_type, network=None
+        )
+        for net in gnn_conv_params:
+            gnn_conv_params[net].update(shared_params)
 
-            st.warning("Beaware that GCN does not support edge features. ")
-            # Add GraphSAGE specific hyperparameters here
-            bias = st.selectbox(
-                "Fit bias", options=[True, False], key=TrainGNNStateKeys.Bias, index=0
-            )
-            gnn_conv_params[Networks.GraphSAGE] = {NetworkParams.Bias: bias}
+    return gnn_conv_params
 
-        if Networks.TransformerGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### Transformer GNN Hyperparameters")
-            # Add Transformer GNN specific hyperparameters here
-            num_heads = st.slider(
-                "Select the number of attention heads",
-                min_value=1,
-                max_value=8,
-                value=4,
-                key=TrainGNNStateKeys.NumHeads,
-            )
-            gnn_conv_params[Networks.TransformerGNN] = {NetworkParams.NumHeads: num_heads}
 
-        if Networks.GAT in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### GAT Hyperparameters")
-            # Add GAT specific hyperparameters here
-            num_heads = st.slider(
-                "Select the number of attention heads",
-                min_value=1,
-                max_value=8,
-                value=4,
-                key=TrainGNNStateKeys.NHeads,
-            )
-            gnn_conv_params[Networks.GAT] = {NetworkParams.NumHeads: num_heads}
+def GNN_shared_params_form(
+    representation_opts: RepresentationOptions, problem_type: ProblemTypes, network: Networks = None
+):
 
-        if Networks.MPNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### MPNN Hyperparameters")
-            # Add MPNN specific hyperparameters here
+    shared_params = {}
 
-            gnn_conv_params[Networks.MPNN] = {}
+    with st.expander("General GNN Hyperparameters", expanded=True):
 
-        if Networks.CGGNN in st.session_state[TrainGNNStateKeys.GNNConvolutionalLayers]:
-            st.write("#### CGCGNN Hyperparameters")
-            # Add MPNN specific hyperparameters here
-
-            gnn_conv_params[Networks.CGGNN] = {}
-
-        st.write(" ### General GNN Hyperparameters")
-
-        st.select_slider(
+        conv_layers = st.select_slider(
             "Select the number of convolutional GNN layers",
             options=list(range(1, 6)),
             value=2,
-            key=TrainGNNStateKeys.GNNNumberOfLayers,
+            key=TrainGNNStateKeys.GNNNumberOfLayers + network.value if network else "",
         )
 
-        st.select_slider(
+        emb_dim = st.select_slider(
             "Select the embedding dimension",
             options=list(range(16, 257, 16)),
             value=128,
-            key=TrainGNNStateKeys.GNNEmbeddingDimension,
+            key=TrainGNNStateKeys.GNNEmbeddingDimension + network.value if network else "",
         )
 
-        st.selectbox(
+        pooling = st.selectbox(
             "Select the pooling method",
             options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
-            key=TrainGNNStateKeys.GNNPoolingMethod,
+            key=TrainGNNStateKeys.GNNPoolingMethod + network.value if network else "",
             index=2,
         )
 
-        st.slider(
+        readout_layers = st.slider(
             "Select the number of readout layers",
             min_value=1,
             max_value=5,
             value=2,
-            key=TrainGNNStateKeys.GNNReadoutLayers,
+            key=TrainGNNStateKeys.GNNReadoutLayers + network.value if network else "",
         )
 
-        st.slider(
+        dropout = st.slider(
             "Select the dropout rate",
             min_value=0.0,
             max_value=0.5,
             value=0.01,
             step=0.01,
-            key=TrainGNNStateKeys.GNNDropoutRate,
+            key=TrainGNNStateKeys.GNNDropoutRate + network.value if network else "",
         )
 
-        st.slider(
+        learning_rate = st.slider(
             "Select the learning rate",
             min_value=0.0001,
             max_value=0.1,
             value=0.01,
             step=0.001,
-            key=TrainGNNStateKeys.GNNLearningRate,
+            key=TrainGNNStateKeys.GNNLearningRate + network.value if network else "",
         )
 
-        st.slider(
+        batch_size = st.slider(
             "Select the batch size",
             min_value=16,
             max_value=128,
             value=32,
             step=16,
-            key=TrainGNNStateKeys.GNNBatchSize,
+            key=TrainGNNStateKeys.GNNBatchSize + network.value if network else "",
         )
 
         if representation_opts.weights_col:
-            st.selectbox(
+            apply_weighting = st.selectbox(
                 "Select when you would like to apply the weighting to the graph",
                 options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
                 index=0,
-                key=TrainGNNStateKeys.GNNMonomerWeighting,
+                key=TrainGNNStateKeys.GNNMonomerWeighting + network.value if network else "",
             )
         else:
-            st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = (
+            apply_weighting = st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = (
                 ApplyWeightingToGraph.NoWeighting
             )
 
         if problem_type == ProblemTypes.Classification:
             if st.checkbox(
-                "Apply asymmetric loss function", value=True, key=TrainGNNStateKeys.AsymmetricLoss
+                "Apply asymmetric loss function",
+                value=True,
+                key=TrainGNNStateKeys.AsymmetricLoss + network.value if network else "",
             ):
-                st.slider(
+                assym_loss_strength = st.slider(
                     "Set the imbalance strength",
                     min_value=0.0,
                     max_value=1.0,
                     value=0.5,
                     step=0.1,
-                    key=TrainGNNStateKeys.ImbalanceStrength,
+                    key=TrainGNNStateKeys.ImbalanceStrength + network.value if network else "",
                     help="Controls how much strength to apply to the asymmetric loss function. A value of 1 means that weighting will be given by the inverse of the total count of each label, while a value of 0 means that each class will be weighted equally.",
                 )
+            else:
+                assym_loss_strength = None
 
-    return gnn_conv_params
+            shared_params[NetworkParams.AssymetricLossStrength] = assym_loss_strength
+
+    shared_params[NetworkParams.NumConvolutions] = conv_layers
+    shared_params[NetworkParams.EmbeddingDim] = emb_dim
+    shared_params[NetworkParams.PoolingMethod] = pooling
+    shared_params[NetworkParams.ReadoutLayers] = readout_layers
+    shared_params[NetworkParams.Dropout] = dropout
+    shared_params[NetworkParams.LearningRate] = learning_rate
+    shared_params[NetworkParams.BatchSize] = batch_size
+    shared_params[NetworkParams.ApplyWeightingGraph] = apply_weighting
+
+    return shared_params
 
 
 def split_data_form(problem_type: ProblemTypes):

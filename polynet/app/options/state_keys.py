@@ -102,6 +102,8 @@ class TrainGNNStateKeys(StrEnum):
     """
 
     TrainGNN = "TrainGNN"
+    HypTunning = "HypTunning"
+    SharedGNNParams = "SharedGNNParams"
     GNNConvolutionalLayers = "GNNConvolutionalLayers"
     GNNNumberOfLayers = "GNNNumberOfLayers"
     GNNEmbeddingDimension = "GNNEmbeddingDimension"
