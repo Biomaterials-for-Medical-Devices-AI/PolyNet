@@ -1,4 +1,11 @@
-from polynet.options.enums import ProblemTypes, TradtionalMLModels, NetworkParams, Pooling, Networks
+from polynet.options.enums import (
+    ProblemTypes,
+    TradtionalMLModels,
+    NetworkParams,
+    Pooling,
+    Networks,
+    ApplyWeightingToGraph,
+)
 
 LINEAR_MODEL_GRID = {"fit_intercept": [True, False]}
 
@@ -31,7 +38,7 @@ SVM_GRID = {
 }
 
 GNN_SHARED_GRID = {
-    NetworkParams.PoolingNet: [
+    NetworkParams.PoolingMethod: [
         Pooling.GlobalAddPool,
         Pooling.GlobalMaxPool,
         Pooling.GlobalMeanPool,
@@ -41,7 +48,13 @@ GNN_SHARED_GRID = {
     NetworkParams.EmbeddingDim: [32, 64, 128],
     NetworkParams.ReadoutLayers: [1, 2, 3],
     NetworkParams.Dropout: [0.01, 0.05, 0.1],
-    NetworkParams.ApplyWeightingGraph: [True, False],
+    NetworkParams.LearningRate: [0.0001, 0.001, 0.01],
+    NetworkParams.BatchSize: [16, 32, 64],
+    NetworkParams.ApplyWeightingGraph: [
+        # ApplyWeightingToGraph.BeforeMPP,
+        ApplyWeightingToGraph.BeforePooling
+    ],
+    NetworkParams.AssymetricLossStrength: [None],
 }
 
 GCN_GRID = {NetworkParams.Improved: [True, False]}
@@ -81,27 +94,27 @@ def get_grid_search(
             return SVM_GRID
 
         case Networks.GCN:
-            GCN_GRID["random_state"] = [random_seed]
+            GCN_GRID["seed"] = [random_seed]
             return {**GCN_GRID, **GNN_SHARED_GRID}
 
         case Networks.GraphSAGE:
-            GraphSAGE_GRID["random_state"] = [random_seed]
+            GraphSAGE_GRID["seed"] = [random_seed]
             return {**GraphSAGE_GRID, **GNN_SHARED_GRID}
 
         case Networks.TransformerGNN:
-            TransformerGNN_GRID["random_state"] = [random_seed]
+            TransformerGNN_GRID["seed"] = [random_seed]
             return {**TransformerGNN_GRID, **GNN_SHARED_GRID}
 
         case Networks.GAT:
-            GAT_GRID["random_state"] = [random_seed]
+            GAT_GRID["seed"] = [random_seed]
             return {**GAT_GRID, **GNN_SHARED_GRID}
 
         case Networks.MPNN:
-            MPNN_GRID = {"random_state": [random_seed]}
+            MPNN_GRID = {"seed": [random_seed]}
             return {**MPNN_GRID, **GNN_SHARED_GRID}
 
         case Networks.CGGNN:
-            CGGNN_GRID = {"random_state": [random_seed]}
+            CGGNN_GRID = {"seed": [random_seed]}
             return {**CGGNN_GRID, **GNN_SHARED_GRID}
 
         case _:
