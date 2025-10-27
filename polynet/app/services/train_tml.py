@@ -1,4 +1,5 @@
 from pathlib import Path
+from copy import deepcopy
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -9,12 +10,12 @@ from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
 from polynet.app.options.data import DataOptions
-from polynet.app.options.file_paths import representation_file, representation_file_path
+from polynet.app.options.file_paths import representation_file
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.search_grids import get_grid_search
 from polynet.app.options.train_TML import TrainTMLOptions
-from polynet.options.enums import ProblemTypes, Results, TradtionalMLModels, TransformDescriptors
+from polynet.options.enums import ProblemTypes, TradtionalMLModels, TransformDescriptors
 
 
 def train_tml_model(
@@ -33,8 +34,7 @@ def train_tml_model(
         target_variable_col=data_options.target_variable_col,
     )
 
-    train_ids, val_ids, test_ids = train_val_test_idxs
-
+    train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
     trained_models = {}
     training_data = {}
     scalers = {}
