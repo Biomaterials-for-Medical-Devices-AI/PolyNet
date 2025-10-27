@@ -1,10 +1,10 @@
 from polynet.options.enums import (
+    ApplyWeightingToGraph,
+    NetworkParams,
+    Networks,
+    Pooling,
     ProblemTypes,
     TradtionalMLModels,
-    NetworkParams,
-    Pooling,
-    Networks,
-    ApplyWeightingToGraph,
 )
 
 LINEAR_MODEL_GRID = {"fit_intercept": [True, False]}

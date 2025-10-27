@@ -1,28 +1,22 @@
-from pathlib import Path
-
 from copy import deepcopy
+from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-import seaborn as sns
-import torch
-
-from polynet.options.enums import ProblemTypes
-
 import ray
 from ray import tune
-from ray.tune.schedulers import ASHAScheduler
-from ray.tune import CLIReporter
 from ray.air import session
-
-from polynet.options.enums import NetworkParams, Networks, Optimizers, Schedulers
-
-from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
-from torch_geometric.loader import DataLoader
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler
+import seaborn as sns
+from sklearn.model_selection import KFold, StratifiedKFold
+import torch
 from torch.nn import Module
+from torch_geometric.loader import DataLoader
 
-from sklearn.model_selection import StratifiedKFold, KFold
 from polynet.app.options.search_grids import get_grid_search
+from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
+from polynet.options.enums import NetworkParams, Networks, Optimizers, ProblemTypes, Schedulers
 
 
 def train_network(model, train_loader, loss_fn, optimizer, device):

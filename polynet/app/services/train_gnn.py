@@ -27,13 +27,13 @@ from polynet.call_methods import (
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import (
     DataSets,
+    NetworkParams,
     Optimizers,
     ProblemTypes,
     Results,
     Schedulers,
-    NetworkParams,
 )
-from polynet.utils.model_training import predict_network, train_model, gnn_hyp_opt
+from polynet.utils.model_training import gnn_hyp_opt, predict_network, train_model
 
 
 def train_network(
