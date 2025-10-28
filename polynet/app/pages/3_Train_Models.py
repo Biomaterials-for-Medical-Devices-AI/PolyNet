@@ -53,8 +53,8 @@ from polynet.app.services.predict_model import (
     get_metrics,
     get_predictions_df_gnn,
     get_predictions_df_tml,
-    plot_results,
     plot_learning_curves,
+    plot_results,
 )
 from polynet.app.services.train_gnn import predict_gnn_model, train_network
 from polynet.app.services.train_tml import train_tml_model

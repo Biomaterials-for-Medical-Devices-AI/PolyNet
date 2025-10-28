@@ -23,8 +23,8 @@ from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes, T
 from polynet.utils.plot_utils import (
     plot_auroc,
     plot_confusion_matrix,
-    plot_parity,
     plot_learning_curve,
+    plot_parity,
 )
 
 

@@ -1,5 +1,5 @@
-from pathlib import Path
 from copy import deepcopy
+from pathlib import Path
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
