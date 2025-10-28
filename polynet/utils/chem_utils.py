@@ -1,9 +1,11 @@
 from collections import defaultdict
 from typing import Optional
 
-from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
+# from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
+# from psmiles import PolymerSmiles
+from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
 import pandas as pd
-from psmiles import PolymerSmiles
+from polynet.utils.psmiles import PolymerSmiles
 from rdkit import Chem
 from rdkit.Chem import BRICS
 
