@@ -172,6 +172,7 @@ def select_data_form():
                             help="This name will be used to create the plots and log information.",
                         )
                         class_names[str(vals)] = class_name
+                    st.session_state[CreateExperimentStateKeys.ClassNames] = class_names
 
                     st.markdown("**Label Distribution**")
 
@@ -189,7 +190,7 @@ def select_data_form():
                 )
                 st.pyplot(fig)
 
-                return class_names
+                return df
 
             elif problem_type == ProblemTypes.Regression:
 
@@ -205,4 +206,4 @@ def select_data_form():
                         ),
                     )
                 )
-                return True
+                return df
