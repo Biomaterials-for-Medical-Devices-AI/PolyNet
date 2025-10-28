@@ -75,8 +75,8 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
-            disabled=disabled,
-            help="polyBERT can only be calculated if PSMiles were provided.",
+            disabled=True,
+            help="polyBERT will remain disabled until Git repo becomes available again.",
         )
 
         st.markdown("### Descriptors from DataFrame")

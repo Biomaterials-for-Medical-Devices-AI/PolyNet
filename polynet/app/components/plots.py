@@ -50,6 +50,10 @@ def display_plots(plots_path):
             model, iteration = match.groups()
             plot_type = "Parity Plot"
 
+        elif match := re.match(r"(.+?)_(\d+)_learning_curve", name):
+            model, iteration = match.groups()
+            plot_type = "Learning Curve"
+
         else:
             continue  # Unrecognized format
 

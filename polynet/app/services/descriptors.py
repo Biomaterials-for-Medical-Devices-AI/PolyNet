@@ -126,6 +126,8 @@ def build_vector_representation(
 
         elif DescriptorMergingMethods.NoMerging == representation_opts.smiles_merge_approach:
             rdkit_descriptors = single_smiles(rdkit_df_dict, data_index)
+        else:
+            raise Exception("Invalid merging method selected.")
 
     else:
         rdkit_descriptors = None

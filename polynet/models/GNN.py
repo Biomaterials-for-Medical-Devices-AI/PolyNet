@@ -56,6 +56,7 @@ class BaseNetwork(nn.Module):
         self.apply_weighting_to_graph = apply_weighting_to_graph
         self.seed = seed
         self._seed_everything(seed)
+        self.losses = None
 
         self.pooling_fn = POOLING_FUNCTIONS.get(pooling, gmeanp)
 
@@ -63,6 +64,20 @@ class BaseNetwork(nn.Module):
             self.graph_embedding = self.embedding_dim * 2
         else:
             self.graph_embedding = self.embedding_dim
+
+    def make_readout_layers(self):
+        self.readout = nn.ModuleList([])
+
+        graph_embedding = self.graph_embedding
+
+        for _ in range(self.readout_layers - 1):
+            reduced_dim = int(graph_embedding / 2)
+            self.readout.append(
+                nn.Sequential(nn.Linear(graph_embedding, reduced_dim), nn.BatchNorm1d(reduced_dim))
+            )
+            graph_embedding = reduced_dim
+
+        self.output_layer = nn.Linear(graph_embedding, self.n_classes)
 
     def forward(
         self,

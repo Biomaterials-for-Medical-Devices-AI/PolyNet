@@ -20,7 +20,12 @@ from polynet.app.utils import (
     get_true_label_column_name,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes, TransformDescriptors
-from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
+from polynet.utils.plot_utils import (
+    plot_auroc,
+    plot_confusion_matrix,
+    plot_learning_curve,
+    plot_parity,
+)
 
 
 def get_predictions_df_tml(
@@ -236,6 +241,19 @@ def plot_results(
             )
             save_plot_path = save_path / f"{ml_algorithm}_{iteration}_parity_plot.png"
             save_plot(fig=fig, path=save_plot_path)
+
+    return
+
+
+def plot_learning_curves(models: dict, save_path: Path):
+    for model_name, model in models.items():
+
+        losses = model.losses
+        title = f"{model_name} Learning Curve"
+        learning_curve = plot_learning_curve(losses, title=title)
+
+        save_plot_path = save_path / f"{model_name}_learning_curve.png"
+        save_plot(fig=learning_curve, path=save_plot_path)
 
     return
 
