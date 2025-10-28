@@ -4,20 +4,21 @@
 
 from __future__ import annotations
 
+from importlib import util
 import logging
 import pprint
 import random
 import re
-from importlib import util
 from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
-from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 from rdkit.Chem.inchi import MolToInchi, MolToInchiKey
 from sklearn.metrics.pairwise import cosine_similarity
+
+from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
 
 # from psmiles.helper import in_ipynb
 
@@ -585,10 +586,10 @@ class PolymerSmiles:
             crop (bool, optional): If inkscape is available crop the figure.
                 Defaults to True.
         """
+        from pathlib import Path
         import shutil
         import subprocess
         import tempfile
-        from pathlib import Path
 
         from rdkit.Chem.Draw import rdMolDraw2D
 
