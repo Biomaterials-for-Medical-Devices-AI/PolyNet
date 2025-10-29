@@ -46,11 +46,11 @@ from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import save_gnn_model, save_tml_model
 from polynet.app.services.predict_model import (
     get_metrics,
-    get_predictions_df_gnn,
     get_predictions_df_tml,
     plot_learning_curves,
     plot_results,
 )
+from polynet.predict.predict_gnn import get_predictions_df_gnn
 from polynet.app.services.train_tml import train_tml_model
 from polynet.app.utils import save_data
 from polynet.options.col_names import get_iterator_name, get_true_label_column_name
@@ -235,8 +235,9 @@ def train_models(
         gnn_predictions_df = get_predictions_df_gnn(
             models=gnn_models,
             loaders=loaders,
-            data_options=data_options,
+            problem_type=data_options.problem_type,
             split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
         )
 
         metrics_gnn = get_metrics(
