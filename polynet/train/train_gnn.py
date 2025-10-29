@@ -1,4 +1,6 @@
+from copy import deepcopy
 from pathlib import Path
+
 import numpy as np
 import ray
 from ray import tune
@@ -10,9 +12,8 @@ import torch
 from torch.nn import Module
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
-from copy import deepcopy
+
 from polynet.app.options.search_grids import get_grid_search
-from polynet.options.enums import ProblemTypes, NetworkParams, Optimizers, Schedulers, Networks
 from polynet.call_methods import (
     compute_class_weights,
     create_network,
@@ -20,6 +21,7 @@ from polynet.call_methods import (
     make_optimizer,
     make_scheduler,
 )
+from polynet.options.enums import NetworkParams, Networks, Optimizers, ProblemTypes, Schedulers
 
 
 def filter_dataset_by_ids(dataset, ids):

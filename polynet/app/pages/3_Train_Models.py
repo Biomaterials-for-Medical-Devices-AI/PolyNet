@@ -45,15 +45,15 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import save_gnn_model, save_tml_model
 from polynet.app.services.predict_model import get_predictions_df_tml
-from polynet.train.evaluate_model import get_metrics, plot_results, plot_learning_curves
-from polynet.predict.predict_gnn import get_predictions_df_gnn
 from polynet.app.services.train_tml import train_tml_model
 from polynet.app.utils import save_data
+from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.col_names import get_iterator_name, get_true_label_column_name
 from polynet.options.enums import Results
-from polynet.utils.split_data import get_data_split_indices
+from polynet.predict.predict_gnn import get_predictions_df_gnn
+from polynet.train.evaluate_model import get_metrics, plot_learning_curves, plot_results
 from polynet.train.train_gnn import train_GNN_ensemble
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
+from polynet.utils.split_data import get_data_split_indices
 
 
 def train_models(

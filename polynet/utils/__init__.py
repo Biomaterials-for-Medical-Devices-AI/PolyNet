@@ -1,5 +1,6 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
+
 from polynet.options.col_names import get_score_column_name
 
 

@@ -1,4 +1,4 @@
-from polynet.options.enums import Results, IteratorTypes, SplitTypes
+from polynet.options.enums import IteratorTypes, Results, SplitTypes
 
 
 def get_iterator_name(split_type):
