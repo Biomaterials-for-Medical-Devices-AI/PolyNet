@@ -17,6 +17,7 @@ from sklearn.metrics import (
 )
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
 from polynet.utils import save_plot
+from polynet.utils.plot_utils import plot_learning_curve
 
 
 def get_metrics(
@@ -100,6 +101,19 @@ def calculate_metrics(y_true, y_pred, y_probs, problem_type):
             EvaluationMetrics.MAE: mean_absolute_error(y_true, y_pred),
             # "sep": calculate_standard_error(y_true, y_pred),
         }
+
+
+def plot_learning_curves(models: dict, save_path: Path):
+    for model_name, model in models.items():
+
+        losses = model.losses
+        title = f"{model_name} Learning Curve"
+        learning_curve = plot_learning_curve(losses, title=title)
+
+        save_plot_path = save_path / f"{model_name}_learning_curve.png"
+        save_plot(fig=learning_curve, path=save_plot_path)
+
+    return None
 
 
 def plot_results(

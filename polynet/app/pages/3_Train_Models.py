@@ -44,8 +44,8 @@ from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import save_gnn_model, save_tml_model
-from polynet.app.services.predict_model import get_predictions_df_tml, plot_learning_curves
-from polynet.train.evaluate_model import get_metrics, plot_results
+from polynet.app.services.predict_model import get_predictions_df_tml
+from polynet.train.evaluate_model import get_metrics, plot_results, plot_learning_curves
 from polynet.predict.predict_gnn import get_predictions_df_gnn
 from polynet.app.services.train_tml import train_tml_model
 from polynet.app.utils import save_data
