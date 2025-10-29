@@ -43,7 +43,7 @@ from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import calculate_metrics, save_gnn_model, save_tml_model
+from polynet.app.services.model_training import save_gnn_model, save_tml_model
 from polynet.app.services.predict_model import (
     get_metrics,
     get_predictions_df_gnn,
@@ -51,19 +51,10 @@ from polynet.app.services.predict_model import (
     plot_learning_curves,
     plot_results,
 )
-from polynet.app.services.train_gnn import predict_gnn_model, train_network
+from polynet.app.services.train_gnn import train_network
 from polynet.app.services.train_tml import train_tml_model
-from polynet.app.utils import (
-    ensemble_predictions,
-    get_iterator_name,
-    get_predicted_label_column_name,
-    get_score_column_name,
-    get_true_label_column_name,
-    merge_model_predictions,
-    save_data,
-)
+from polynet.app.utils import get_iterator_name, get_true_label_column_name, save_data
 from polynet.options.enums import Results
-from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
 from polynet.utils.split_data import get_data_split_indices
 
 
