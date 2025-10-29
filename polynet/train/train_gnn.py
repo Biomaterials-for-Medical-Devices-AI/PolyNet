@@ -66,6 +66,7 @@ def train_GNN_ensemble(
         for gnn_arch, arch_params in gnn_conv_params.items():
 
             if not arch_params:
+                print("No hyperparameters have been set. Initialising hyperparameter optimisation.")
                 arch_params = gnn_hyp_opt(
                     exp_path=experiment_path,
                     gnn_arch=gnn_arch,
@@ -75,6 +76,8 @@ def train_GNN_ensemble(
                     problem_type=problem_type,
                     random_seed=random_seed + i,
                 )
+                print("Hyperparameter optimisation finalised.")
+                print(f"Selected hyperparameters: \n{arch_params}")
 
             # take out non-model related params
             if gnn_arch not in assymetric_losses:
