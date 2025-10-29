@@ -7,8 +7,8 @@ from polynet.options.col_names import (
     get_predicted_label_column_name,
     get_true_label_column_name,
     get_iterator_name,
-    get_score_column_name,
 )
+from polynet.utils import prepare_probs_df
 
 
 def get_predictions_df_gnn(
@@ -120,38 +120,3 @@ def get_predictions_df_gnn(
     cols += [col for col in predictions if col not in cols]
 
     return predictions[cols]
-
-
-def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_name: str = None):
-    """
-    Convert probability predictions into a DataFrame.
-
-    - For binary classification (2 classes), include only the second class (index 1).
-    - For multi-class classification (3+ classes), include a column per class.
-
-    Args:
-        probs (np.ndarray): Array of shape (n_samples, n_classes)
-        target_variable_name (str): Name of the target variable
-        model_name (str): Name of the model
-
-    Returns:
-        pd.DataFrame: A DataFrame with appropriately named probability columns
-    """
-    n_classes = probs.shape[1] if probs.ndim > 1 else 1
-    probs_df = pd.DataFrame()
-
-    if n_classes == 2:
-        col_name = get_score_column_name(
-            target_variable_name=target_variable_name, model_name=model_name
-        )
-        # Binary classification: only use the second class (probability of class 1)
-        probs_df[f"{col_name}"] = probs[:, 1]
-    else:
-        # Multi-class classification: create one column per class
-        for i in range(n_classes):
-            col_name = get_score_column_name(
-                target_variable_name=target_variable_name, model_name=model_name, class_num=i
-            )
-            probs_df[f"{col_name} {i}"] = probs[:, i]
-
-    return probs_df

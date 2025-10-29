@@ -12,7 +12,7 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.model_training import calculate_metrics, save_plot
-from polynet.app.services.train_gnn import prepare_probs_df
+from polynet.utils import prepare_probs_df
 from polynet.app.services.train_tml import load_dataframes, transform_dependent_variables
 from polynet.options.col_names import (
     get_iterator_name,
