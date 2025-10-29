@@ -20,7 +20,6 @@ from polynet.call_methods import (
     make_optimizer,
     make_scheduler,
 )
-from polynet.utils.model_training import gnn_hyp_opt
 
 
 def filter_dataset_by_ids(dataset, ids):
@@ -31,7 +30,7 @@ def train_GNN_ensemble(
     experiment_path: Path,
     dataset: Dataset,
     split_indexes: tuple,
-    GNNConvolutionalLayers: dict,
+    gnn_conv_params: dict,
     problem_type: ProblemTypes,
     num_classes: int,
     random_seed: int,
@@ -64,7 +63,7 @@ def train_GNN_ensemble(
 
         loaders[str(iteration)] = (train_loader, val_loader, test_loader)
 
-        for gnn_arch, arch_params in GNNConvolutionalLayers.items():
+        for gnn_arch, arch_params in gnn_conv_params.items():
 
             if not arch_params:
                 arch_params = gnn_hyp_opt(
