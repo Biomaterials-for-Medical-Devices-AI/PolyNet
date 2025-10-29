@@ -104,7 +104,9 @@ def train_GNN_ensemble(
             }
             all_kwargs = {**model_kwargs, **arch_params}
 
-            model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs)
+            model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs).to(
+                device
+            )
             # create loaders
             train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(val_set, shuffle=False)
