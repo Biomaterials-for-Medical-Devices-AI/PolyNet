@@ -43,12 +43,7 @@ from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import (
-    calculate_metrics,
-    get_data_split_indices,
-    save_gnn_model,
-    save_tml_model,
-)
+from polynet.app.services.model_training import calculate_metrics, save_gnn_model, save_tml_model
 from polynet.app.services.predict_model import (
     get_metrics,
     get_predictions_df_gnn,
@@ -69,6 +64,7 @@ from polynet.app.utils import (
 )
 from polynet.options.enums import Results
 from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
+from polynet.utils.split_data import get_data_split_indices
 
 
 def train_models(
@@ -118,7 +114,15 @@ def train_models(
     )
     # generate indices to split data
     train_val_test_idxs = get_data_split_indices(
-        data=data, data_options=data_options, general_experiment_options=general_experiment_options
+        data=data,
+        split_type=general_experiment_options.split_type,
+        n_bootstrap_iterations=general_experiment_options.n_bootstrap_iterations,
+        val_ratio=general_experiment_options.val_ratio,
+        test_ratio=general_experiment_options.test_ratio,
+        target_variable_col=data_options.target_variable_col,
+        split_method=general_experiment_options.split_method,
+        train_set_balance=general_experiment_options.train_set_balance,
+        random_seed=general_experiment_options.random_seed,
     )
 
     # Create directory to save plots
