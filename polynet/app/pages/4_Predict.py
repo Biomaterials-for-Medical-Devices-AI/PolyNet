@@ -42,11 +42,8 @@ from polynet.app.services.model_training import (
     load_scalers_from_experiment,
 )
 from polynet.app.services.predict_model import predict_unseen_gnn, predict_unseen_tml
-from polynet.app.utils import (
-    create_directory,
-    get_predicted_label_column_name,
-    get_true_label_column_name,
-)
+from polynet.app.utils import create_directory
+from polynet.options.col_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import ProblemTypes, Results, TransformDescriptors
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution

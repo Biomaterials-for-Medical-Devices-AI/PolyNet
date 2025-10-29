@@ -14,7 +14,7 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.utils import (
+from polynet.options.col_names import (
     get_predicted_label_column_name,
     get_score_column_name,
     get_true_label_column_name,

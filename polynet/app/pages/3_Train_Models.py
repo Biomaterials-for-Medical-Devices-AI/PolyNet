@@ -53,7 +53,8 @@ from polynet.app.services.predict_model import (
 )
 from polynet.app.services.train_gnn import train_network
 from polynet.app.services.train_tml import train_tml_model
-from polynet.app.utils import get_iterator_name, get_true_label_column_name, save_data
+from polynet.app.utils import save_data
+from polynet.options.col_names import get_iterator_name, get_true_label_column_name
 from polynet.options.enums import Results
 from polynet.utils.split_data import get_data_split_indices
 
