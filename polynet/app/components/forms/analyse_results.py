@@ -7,7 +7,7 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.utils import (
+from polynet.options.col_names import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,

@@ -43,32 +43,17 @@ from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import (
-    calculate_metrics,
-    get_data_split_indices,
-    save_gnn_model,
-    save_tml_model,
-)
-from polynet.app.services.predict_model import (
-    get_metrics,
-    get_predictions_df_gnn,
-    get_predictions_df_tml,
-    plot_learning_curves,
-    plot_results,
-)
-from polynet.app.services.train_gnn import predict_gnn_model, train_network
+from polynet.app.services.model_training import save_gnn_model, save_tml_model
+from polynet.app.services.predict_model import get_predictions_df_tml
 from polynet.app.services.train_tml import train_tml_model
-from polynet.app.utils import (
-    ensemble_predictions,
-    get_iterator_name,
-    get_predicted_label_column_name,
-    get_score_column_name,
-    get_true_label_column_name,
-    merge_model_predictions,
-    save_data,
-)
+from polynet.app.utils import save_data
+from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
+from polynet.options.col_names import get_iterator_name, get_true_label_column_name
 from polynet.options.enums import Results
-from polynet.utils.plot_utils import plot_auroc, plot_confusion_matrix, plot_parity
+from polynet.predict.predict_gnn import get_predictions_df_gnn
+from polynet.train.evaluate_model import get_metrics, plot_learning_curves, plot_results
+from polynet.train.train_gnn import train_GNN_ensemble
+from polynet.utils.split_data import get_data_split_indices
 
 
 def train_models(
@@ -118,7 +103,15 @@ def train_models(
     )
     # generate indices to split data
     train_val_test_idxs = get_data_split_indices(
-        data=data, data_options=data_options, general_experiment_options=general_experiment_options
+        data=data,
+        split_type=general_experiment_options.split_type,
+        n_bootstrap_iterations=general_experiment_options.n_bootstrap_iterations,
+        val_ratio=general_experiment_options.val_ratio,
+        test_ratio=general_experiment_options.test_ratio,
+        target_variable_col=data_options.target_variable_col,
+        split_method=general_experiment_options.split_method,
+        train_set_balance=general_experiment_options.train_set_balance,
+        random_seed=general_experiment_options.random_seed,
     )
 
     # Create directory to save plots
@@ -195,8 +188,8 @@ def train_models(
             target_variable_name=data_options.target_variable_name,
             ml_algorithms=tml_models.keys(),
             problem_type=data_options.problem_type,
-            data_options=data_options,
             save_path=plots_dir,
+            class_names=data_options.class_names,
         )
 
     if gnn_conv_params:
@@ -208,13 +201,25 @@ def train_models(
         )
         save_options(path=gnn_training_opts_path, options=train_gnn_options)
 
-        gnn_models, loaders = train_network(
-            train_gnn_options=train_gnn_options,
-            general_experiment_options=general_experiment_options,
-            experiment_name=experiment_name,
-            data_options=data_options,
-            representation_options=representation_options,
-            train_val_test_idxs=train_val_test_idxs,
+        dataset = CustomPolymerGraph(
+            filename=data_options.data_name,
+            root=gnn_raw_data_path(experiment_path).parent,
+            smiles_cols=data_options.smiles_cols,
+            target_col=data_options.target_variable_col,
+            id_col=data_options.id_col,
+            weights_col=representation_options.weights_col,
+            node_feats=representation_options.node_feats,
+            edge_feats=representation_options.edge_feats,
+        )
+
+        gnn_models, loaders = train_GNN_ensemble(
+            experiment_path=experiment_path,
+            dataset=dataset,
+            split_indexes=train_val_test_idxs,
+            gnn_conv_params=train_gnn_options.GNNConvolutionalLayers,
+            problem_type=data_options.problem_type,
+            num_classes=data_options.num_classes,
+            random_seed=general_experiment_options.random_seed,
         )
 
         for model_name, model in gnn_models.items():
@@ -226,8 +231,9 @@ def train_models(
         gnn_predictions_df = get_predictions_df_gnn(
             models=gnn_models,
             loaders=loaders,
-            data_options=data_options,
+            problem_type=data_options.problem_type,
             split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
         )
 
         metrics_gnn = get_metrics(
@@ -244,8 +250,8 @@ def train_models(
             target_variable_name=data_options.target_variable_name,
             ml_algorithms=gnn_models.keys(),
             problem_type=data_options.problem_type,
-            data_options=data_options,
             save_path=plots_dir,
+            class_names=data_options.class_names,
         )
 
     if tml_models and gnn_conv_params:

@@ -12,20 +12,14 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.model_training import calculate_metrics, save_plot
-from polynet.app.services.train_gnn import prepare_probs_df
 from polynet.app.services.train_tml import load_dataframes, transform_dependent_variables
-from polynet.app.utils import (
+from polynet.options.col_names import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
 from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes, TransformDescriptors
-from polynet.utils.plot_utils import (
-    plot_auroc,
-    plot_confusion_matrix,
-    plot_learning_curve,
-    plot_parity,
-)
+from polynet.utils import prepare_probs_df
 
 
 def get_predictions_df_tml(
@@ -137,127 +131,6 @@ def get_predictions_df_tml(
     return predictions[cols]
 
 
-def get_metrics(
-    predictions: pd.DataFrame,
-    split_type: SplitTypes,
-    target_variable_name: str,
-    trained_models: list,
-    problem_type: ProblemTypes,
-):
-    iterator = get_iterator_name(split_type)
-
-    label_col_name = get_true_label_column_name(target_variable_name=target_variable_name)
-
-    metrics = {}
-
-    for model in trained_models:
-
-        ml_algorithm, iteration = model.split("_")
-
-        if not iteration in metrics:
-            metrics[iteration] = {}
-
-        iteration_df = predictions.loc[predictions[iterator] == iteration]
-
-        result_cols = [col for col in iteration_df.columns if ml_algorithm in col]
-        predicted_col = result_cols.pop(0)
-
-        metrics[iteration][ml_algorithm] = {}
-
-        for set in iteration_df[Results.Set.value].unique():
-
-            set_df = iteration_df.loc[iteration_df[Results.Set.value] == set]
-
-            metrics[iteration][ml_algorithm][set] = calculate_metrics(
-                y_true=set_df[label_col_name],
-                y_pred=set_df[predicted_col],
-                y_probs=(
-                    set_df[result_cols] if problem_type == ProblemTypes.Classification else None
-                ),
-                problem_type=problem_type,
-            )
-
-    return metrics
-
-
-def plot_results(
-    predictions: pd.DataFrame,
-    split_type: SplitTypes,
-    target_variable_name: str,
-    ml_algorithms: list,
-    problem_type: ProblemTypes,
-    data_options: DataOptions,
-    save_path: Path,
-):
-    iterator = get_iterator_name(split_type)
-
-    label_col_name = get_true_label_column_name(target_variable_name=target_variable_name)
-
-    for model in ml_algorithms:
-
-        ml_algorithm, iteration = model.split("_")
-
-        results_df = predictions.loc[
-            (predictions[iterator] == iteration)
-            & (predictions[Results.Set.value] == DataSets.Test.value)
-        ]
-
-        result_cols = [col for col in results_df.columns if ml_algorithm in col]
-        predicted_col = result_cols.pop(0)
-
-        if problem_type == ProblemTypes.Classification:
-
-            fig = plot_confusion_matrix(
-                y_true=results_df[label_col_name],
-                y_pred=results_df[predicted_col],
-                display_labels=(
-                    list(data_options.class_names.values()) if data_options.class_names else None
-                ),
-                title=f"{data_options.target_variable_name}\nConfusion Matrix for\n {ml_algorithm} - {iteration}",
-            )
-            save_plot_path = save_path / f"{ml_algorithm}_{iteration}_confusion_matrix.png"
-            save_plot(fig=fig, path=save_plot_path)
-
-            for class_num, probs_col in enumerate(result_cols):
-
-                if len(result_cols) == 1:
-                    class_num = 1
-
-                fig = plot_auroc(
-                    y_true=results_df[label_col_name],
-                    y_scores=results_df[probs_col],
-                    title=f"{data_options.target_variable_name}\nROC Curve for\n {ml_algorithm} Class {class_num} - {iteration}",
-                )
-                save_plot_path = (
-                    save_path / f"{ml_algorithm}_{iteration}_class_{class_num}_roc_curve.png"
-                )
-                save_plot(fig=fig, path=save_plot_path)
-
-        elif problem_type == ProblemTypes.Regression:
-            fig = plot_parity(
-                y_true=results_df[label_col_name],
-                y_pred=results_df[predicted_col],
-                title=f"{data_options.target_variable_name}\nParity Plot for\n {ml_algorithm} - {iteration}",
-            )
-            save_plot_path = save_path / f"{ml_algorithm}_{iteration}_parity_plot.png"
-            save_plot(fig=fig, path=save_plot_path)
-
-    return
-
-
-def plot_learning_curves(models: dict, save_path: Path):
-    for model_name, model in models.items():
-
-        losses = model.losses
-        title = f"{model_name} Learning Curve"
-        learning_curve = plot_learning_curve(losses, title=title)
-
-        save_plot_path = save_path / f"{model_name}_learning_curve.png"
-        save_plot(fig=learning_curve, path=save_plot_path)
-
-    return
-
-
 def predict_tml_model(
     model: dict,
     fit_data: pd.DataFrame,
@@ -338,117 +211,6 @@ def predict_unseen_tml(models: dict, scalers: dict, dfs: dict, data_options: Dat
             predictions_all = pd.concat([predictions_all, preds_df], axis=1)
 
     return predictions_all
-
-
-def get_predictions_df_gnn(models: dict, loaders: dict, data_options, split_type):
-
-    label_col_name = get_true_label_column_name(
-        target_variable_name=data_options.target_variable_name
-    )
-    iterator = get_iterator_name(split_type)
-
-    all_dfs = []
-    predictions_all = pd.DataFrame()
-    last_iteration = None
-
-    for model_name, model in models.items():
-        gnn_arch, iteration = model_name.split("_")
-
-        predicted_col_name = get_predicted_label_column_name(
-            target_variable_name=data_options.target_variable_name, model_name=gnn_arch
-        )
-
-        train_loader, val_loader, test_loader = loaders[iteration]
-        train_loader = DataLoader(train_loader.dataset, batch_size=1, shuffle=False)
-        val_loader = DataLoader(val_loader.dataset, batch_size=1, shuffle=False)
-        test_loader = DataLoader(test_loader.dataset, batch_size=1, shuffle=False)
-
-        train_preds = model.predict_loader(train_loader)
-
-        train_df = pd.DataFrame(
-            {
-                Results.Index.value: train_preds[0],
-                Results.Set.value: DataSets.Training.value,
-                label_col_name: np.concatenate(
-                    [mol.y.cpu().detach().numpy() for mol in train_loader]
-                ),
-                predicted_col_name: train_preds[1],
-            }
-        )
-
-        val_preds = model.predict_loader(val_loader)
-
-        val_df = pd.DataFrame(
-            {
-                Results.Index.value: val_preds[0],
-                Results.Set.value: DataSets.Validation.value,
-                label_col_name: np.concatenate(
-                    [mol.y.cpu().detach().numpy() for mol in val_loader]
-                ),
-                predicted_col_name: val_preds[1],
-            }
-        )
-
-        test_preds = model.predict_loader(test_loader)
-
-        test_df = pd.DataFrame(
-            {
-                Results.Index.value: test_preds[0],
-                Results.Set.value: DataSets.Test.value,
-                label_col_name: np.concatenate(
-                    [mol.y.cpu().detach().numpy() for mol in test_loader]
-                ),
-                predicted_col_name: test_preds[1],
-            }
-        )
-
-        if data_options.problem_type == ProblemTypes.Classification:
-            probs_train = prepare_probs_df(
-                probs=train_preds[-1],
-                target_variable_name=data_options.target_variable_name,
-                model_name=gnn_arch,
-            )
-            train_df[probs_train.columns] = probs_train.to_numpy()
-
-            probs_val = prepare_probs_df(
-                probs=val_preds[-1],
-                target_variable_name=data_options.target_variable_name,
-                model_name=gnn_arch,
-            )
-            val_df[probs_val.columns] = probs_val.to_numpy()
-
-            probs_test = prepare_probs_df(
-                probs=test_preds[-1],
-                target_variable_name=data_options.target_variable_name,
-                model_name=gnn_arch,
-            )
-            test_df[probs_test.columns] = probs_test.to_numpy()
-
-        predictions_df = pd.concat([train_df, val_df, test_df], ignore_index=True)
-        predictions_df[iterator] = iteration
-        predictions_df = predictions_df[
-            ~predictions_df[Results.Index.value].duplicated(keep="last")
-        ]
-
-        if last_iteration is None:
-            predictions_all = predictions_df.copy()
-            last_iteration = iteration
-        elif iteration == last_iteration:
-            new_cols = [col for col in predictions_df.columns if col not in predictions_all.columns]
-            predictions_df = predictions_df[new_cols]
-            predictions_all = pd.concat([predictions_all, predictions_df], axis=1)
-        else:
-            all_dfs.append(predictions_all.copy())
-            predictions_all = predictions_df.copy()
-            last_iteration = iteration
-
-    all_dfs.append(predictions_all)
-    predictions = pd.concat(all_dfs)
-
-    cols = [Results.Index.value, Results.Set.value, iterator, label_col_name]
-    cols += [col for col in predictions if col not in cols]
-
-    return predictions[cols]
 
 
 def predict_unseen_gnn(models: dict, dataset: Dataset, data_options: DataOptions):

@@ -1,22 +1,185 @@
 from copy import deepcopy
 from pathlib import Path
 
-import matplotlib.pyplot as plt
 import numpy as np
 import ray
 from ray import tune
 from ray.air import session
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
-import seaborn as sns
 from sklearn.model_selection import KFold, StratifiedKFold
 import torch
 from torch.nn import Module
+from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
 from polynet.app.options.search_grids import get_grid_search
-from polynet.call_methods import create_network, make_loss, make_optimizer, make_scheduler
+from polynet.call_methods import (
+    compute_class_weights,
+    create_network,
+    make_loss,
+    make_optimizer,
+    make_scheduler,
+)
 from polynet.options.enums import NetworkParams, Networks, Optimizers, ProblemTypes, Schedulers
+
+
+def filter_dataset_by_ids(dataset, ids):
+    return [data for data in dataset if data.idx in ids]
+
+
+def train_GNN_ensemble(
+    experiment_path: Path,
+    dataset: Dataset,
+    split_indexes: tuple,
+    gnn_conv_params: dict,
+    problem_type: ProblemTypes,
+    num_classes: int,
+    random_seed: int,
+):
+
+    train_ids, val_ids, test_ids = deepcopy(split_indexes)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    print(f"Device: {device}")
+
+    trained_models = {}
+    loaders = {}
+
+    assymetric_losses = {}
+    lrs = {}
+    batch_sizes = {}
+
+    for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
+
+        iteration = i + 1
+
+        train_set = filter_dataset_by_ids(dataset, train_idxs)
+        val_set = filter_dataset_by_ids(dataset, val_idxs)
+        test_set = filter_dataset_by_ids(dataset, test_idxs)
+
+        # === This loaders are only created to make predictions later, no for training
+        train_loader = DataLoader(train_set, shuffle=False)
+        val_loader = DataLoader(val_set, shuffle=False)
+        test_loader = DataLoader(test_set, shuffle=False)
+
+        loaders[str(iteration)] = (train_loader, val_loader, test_loader)
+
+        for gnn_arch, arch_params in gnn_conv_params.items():
+
+            if not arch_params:
+                print("No hyperparameters have been set. Initialising hyperparameter optimisation.")
+                arch_params = gnn_hyp_opt(
+                    exp_path=experiment_path,
+                    gnn_arch=gnn_arch,
+                    dataset=train_set + val_set,
+                    num_classes=int(num_classes),
+                    num_samples=50,
+                    problem_type=problem_type,
+                    random_seed=random_seed + i,
+                )
+                print("Hyperparameter optimisation finalised.")
+                print(f"Selected hyperparameters: \n{arch_params}")
+
+            # take out non-model related params
+            if gnn_arch not in assymetric_losses:
+                assymetric_losses[gnn_arch] = arch_params.pop(NetworkParams.AssymetricLossStrength)
+            if gnn_arch not in lrs:
+                lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
+            if gnn_arch not in batch_sizes:
+                batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+
+            assymetric_loss_strength = assymetric_losses[gnn_arch]
+            lr = lrs[gnn_arch]
+            batch_size = batch_sizes[gnn_arch]
+
+            # get model params together and create model
+            model_kwargs = {
+                # data related kwargs
+                "n_node_features": dataset[0].num_node_features,
+                "n_edge_features": dataset[0].num_edge_features,
+                "n_classes": int(num_classes),
+                # Experiment seed
+                "seed": random_seed + i,
+            }
+            all_kwargs = {**model_kwargs, **arch_params}
+
+            model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs)
+            # create loaders
+            train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+            val_loader = DataLoader(val_set, shuffle=False)
+            test_loader = DataLoader(test_set, shuffle=False)
+
+            # Create optimizer, scheduler and loss function
+            optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
+            scheduler = make_scheduler(
+                Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
+            )
+            # if (
+            #     model.problem_type == ProblemTypes.Classification
+            #     and assymetric_loss_strength is not None
+            # ):
+            #     weights = compute_class_weights(
+            #         labels=data[data_options.target_variable_col].to_numpy(),
+            #         num_classes=int(data_options.num_classes),
+            #         imbalance_strength=assymetric_loss_strength,
+            #     )
+            # else:
+            #     weights = None
+            loss_fn = make_loss(model.problem_type, asymmetric_loss_weights=None)
+
+            model = train_model(
+                model=model,
+                train_loader=train_loader,
+                val_loader=val_loader,
+                test_loader=test_loader,
+                loss=loss_fn,
+                optimizer=optimizer,
+                scheduler=scheduler,
+                device=device,
+            )
+            model_log_name = f"{gnn_arch}_{iteration}"
+            trained_models[model_log_name] = model
+
+    return trained_models, loaders
+
+
+def train_model(
+    model: Module,
+    train_loader: DataLoader,
+    val_loader: DataLoader,
+    test_loader: DataLoader,
+    loss: Module,
+    optimizer: torch.optim.Optimizer,
+    scheduler: torch.optim.lr_scheduler._LRScheduler,
+    device: torch.device,
+    epochs: int = 250,
+):
+    best_val_loss = float("inf")
+    train_list, val_list, test_list = [], [], []
+
+    for epoch in range(1, epochs + 1):
+        train_loss = train_network(model, train_loader, loss, optimizer, device)
+        val_loss = eval_network(model, val_loader, loss, device)
+        test_loss = eval_network(model, test_loader, loss, device)
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_model_state = deepcopy(model.state_dict())
+
+        scheduler.step(val_loss)
+
+        print(
+            f"Epoch: {epoch:03d}, LR: {scheduler.get_last_lr()[0]:3f}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Test Loss: {test_loss:.4f}"
+        )
+        train_list.append(train_loss)
+        val_list.append(val_loss)
+        test_list.append(test_loss)
+
+    model.load_state_dict(best_model_state)
+    model.losses = (train_list, val_list, test_list)
+
+    return model
 
 
 def train_network(model, train_loader, loss_fn, optimizer, device):
@@ -70,114 +233,6 @@ def eval_network(model, test_loader, loss_fn, device):
             test_loss += loss.item() * batch.num_graphs
 
     return test_loss / len(test_loader.dataset)
-
-
-def predict_network(model, loader):
-    device = torch.device("cpu")
-    model.to(device)
-    model.eval()
-
-    y_pred, y_true, idx, y_score = [], [], [], []
-
-    with torch.no_grad():
-
-        for batch in loader:
-            batch = batch.to(device)
-
-            out = model(
-                x=batch.x,
-                edge_index=batch.edge_index,
-                batch_index=batch.batch,
-                edge_attr=batch.edge_attr,
-                monomer_weight=batch.weight_monomer,
-            )
-
-            out = out.cpu().detach()
-
-            if model.problem_type == ProblemTypes.Classification:
-                if out.dim() == 1 or out.size(1) == 1:
-                    probs = torch.sigmoid(out)
-                    preds = (probs >= 0.5).long()
-                    y_score.append(probs.numpy().flatten())
-                else:
-                    probs = torch.softmax(out, dim=1)
-                    preds = torch.argmax(probs, dim=1)
-                    y_score.append(probs.numpy())  # Shape: [batch_size, num_classes]
-                y_pred.append(preds.numpy().flatten())
-            else:
-                out = out.numpy().flatten()
-                y_pred.append(out)
-                y_score = None  # No probabilities for regression
-
-            y_true.append(batch.y.cpu().detach().numpy().flatten())
-            idx.append(batch.idx)
-
-        y_pred = np.concatenate(y_pred, axis=0)
-        y_true = np.concatenate(y_true, axis=0)
-        idx = np.concatenate(idx, axis=0)
-        if model.problem_type == ProblemTypes.Classification:
-            y_score = np.concatenate(y_score, axis=0)
-        else:
-            y_score = None
-
-    return idx, y_true, y_pred, y_score
-
-
-def plot_training_curve(train_losses, val_losses, test_losses, best_epoch=None):
-    plt.plot(train_losses, label="Train Loss")
-    plt.plot(val_losses, label="Validation Loss")
-    plt.plot(test_losses, label="Test Loss")
-    if best_epoch:
-        plt.axvline(x=best_epoch, color="red", linestyle="--", label="Best Epoch")
-    plt.xlabel("Epoch", size=12)
-    plt.ylabel("Loss", size=12)
-    plt.legend()
-    plt.show()
-
-
-def plot_parity_plot(df):
-    sns.lmplot(x="True", y="Predicted", data=df, hue="set")
-    plt.xlabel("True")
-    plt.ylabel("Predicted")
-    plt.show()
-
-
-def train_model(
-    model: Module,
-    train_loader: DataLoader,
-    val_loader: DataLoader,
-    test_loader: DataLoader,
-    loss: Module,
-    optimizer: torch.optim.Optimizer,
-    scheduler: torch.optim.lr_scheduler._LRScheduler,
-    device: torch.device,
-    epochs: int = 250,
-):
-    best_val_loss = float("inf")
-    train_list, val_list, test_list = [], [], []
-
-    for epoch in range(1, epochs + 1):
-        train_loss = train_network(model, train_loader, loss, optimizer, device)
-        val_loss = eval_network(model, val_loader, loss, device)
-        test_loss = eval_network(model, test_loader, loss, device)
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            best_model_state = deepcopy(model.state_dict())
-
-        scheduler.step(val_loss)
-
-        print(
-            f"Epoch: {epoch:03d}, LR: {scheduler.get_last_lr()[0]:3f}, Train Loss: {train_loss:.4f}, Val Loss: {val_loss:.4f}, Test Loss: {test_loss:.4f}"
-        )
-        train_list.append(train_loss)
-        val_list.append(val_loss)
-        test_list.append(test_loss)
-
-    model.load_state_dict(best_model_state)
-    model.losses = (train_list, val_list, test_list)
-
-    return model
 
 
 def gnn_target_function(

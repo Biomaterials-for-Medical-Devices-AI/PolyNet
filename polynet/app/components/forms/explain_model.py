@@ -14,11 +14,8 @@ from polynet.app.services.descriptors import (
 )
 from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
 from polynet.app.services.model_training import load_gnn_model
-from polynet.app.utils import (
-    extract_number,
-    get_predicted_label_column_name,
-    get_true_label_column_name,
-)
+from polynet.app.utils import extract_number
+from polynet.options.col_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.options.enums import (
     DataSets,
     DimensionalityReduction,
