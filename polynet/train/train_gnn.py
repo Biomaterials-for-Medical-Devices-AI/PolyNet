@@ -67,7 +67,9 @@ def train_GNN_ensemble(
 
         for gnn_arch, arch_params in gnn_conv_params.items():
 
-            if not arch_params:
+            is_hpo = not arch_params
+
+            if is_hpo:
                 print("No hyperparameters have been set. Initialising hyperparameter optimisation.")
                 arch_params = gnn_hyp_opt(
                     exp_path=experiment_path,
@@ -75,23 +77,34 @@ def train_GNN_ensemble(
                     dataset=train_set + val_set,
                     num_classes=int(num_classes),
                     num_samples=50,
+                    iteration=iteration,
                     problem_type=problem_type,
                     random_seed=random_seed + i,
                 )
-                print("Hyperparameter optimisation finalised.")
-                print(f"Selected hyperparameters: \n{arch_params}")
+                print("Hyperparameter optimisation finalised.\nSelected hyperparameters:")
+                for hyp, val in arch_params:
+                    print(hyp + ": " + val)
 
-            # take out non-model related params
-            if gnn_arch not in assymetric_losses:
-                assymetric_losses[gnn_arch] = arch_params.pop(NetworkParams.AssymetricLossStrength)
-            if gnn_arch not in lrs:
-                lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
-            if gnn_arch not in batch_sizes:
-                batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+                # take out non-model related params
+                assymetric_loss_strength = arch_params.pop(
+                    NetworkParams.AssymetricLossStrength, None
+                )
+                lr = arch_params.pop(NetworkParams.LearningRate, None)
+                batch_size = arch_params.pop(NetworkParams.BatchSize, None)
 
-            assymetric_loss_strength = assymetric_losses[gnn_arch]
-            lr = lrs[gnn_arch]
-            batch_size = batch_sizes[gnn_arch]
+            else:
+                if gnn_arch not in assymetric_losses:
+                    assymetric_losses[gnn_arch] = arch_params.pop(
+                        NetworkParams.AssymetricLossStrength
+                    )
+                if gnn_arch not in lrs:
+                    lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
+                if gnn_arch not in batch_sizes:
+                    batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+
+                assymetric_loss_strength = assymetric_losses[gnn_arch]
+                lr = lrs[gnn_arch]
+                batch_size = batch_sizes[gnn_arch]
 
             # get model params together and create model
             model_kwargs = {
@@ -103,8 +116,10 @@ def train_GNN_ensemble(
                 "seed": random_seed + i,
             }
             all_kwargs = {**model_kwargs, **arch_params}
+            model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs).to(
+                device
+            )
 
-            model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs)
             # create loaders
             train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(val_set, shuffle=False)
@@ -276,7 +291,7 @@ def gnn_target_function(
         all_kwargs = {**data_kwargs, **cfg}
 
         # Create model and training tools
-        model = create_network(network=network, problem_type=problem_type, **all_kwargs)
+        model = create_network(network=network, problem_type=problem_type, **all_kwargs).to(device)
         optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
         scheduler = make_scheduler(
             Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
@@ -325,6 +340,7 @@ def gnn_hyp_opt(
     dataset: list,
     num_classes: int,
     num_samples: int,
+    iteration: int,
     problem_type: ProblemTypes,
     random_seed: int,
     n_folds: int = 5,
@@ -396,9 +412,9 @@ def gnn_hyp_opt(
         num_samples=num_samples,
         scheduler=asha_scheduler,
         progress_reporter=reporter,
-        storage_path=str(exp_path / "gnn_hyp_opt"),
-        name=f"gnn_hyp_opt_{gnn_arch}",
-        resources_per_trial={"cpu": 0.5, "gpu": 1 if torch.cuda.is_available() else 0},
+        storagstorage_path=Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}").resolve(),
+        name=gnn_arch,
+        resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
 
     best_trial = results.get_best_trial("val_loss", "min")
