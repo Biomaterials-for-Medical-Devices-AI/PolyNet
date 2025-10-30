@@ -75,6 +75,7 @@ def train_GNN_ensemble(
                     dataset=train_set + val_set,
                     num_classes=int(num_classes),
                     num_samples=50,
+                    iteration=iteration,
                     problem_type=problem_type,
                     random_seed=random_seed + i,
                 )
@@ -278,7 +279,7 @@ def gnn_target_function(
         all_kwargs = {**data_kwargs, **cfg}
 
         # Create model and training tools
-        model = create_network(network=network, problem_type=problem_type, **all_kwargs)
+        model = create_network(network=network, problem_type=problem_type, **all_kwargs).to(device)
         optimizer = make_optimizer(Optimizers.Adam, model, lr=lr)
         scheduler = make_scheduler(
             Schedulers.ReduceLROnPlateau, optimizer, step_size=15, gamma=0.9, min_lr=1e-8
@@ -327,6 +328,7 @@ def gnn_hyp_opt(
     dataset: list,
     num_classes: int,
     num_samples: int,
+    iteration: int,
     problem_type: ProblemTypes,
     random_seed: int,
     n_folds: int = 5,
@@ -398,9 +400,9 @@ def gnn_hyp_opt(
         num_samples=num_samples,
         scheduler=asha_scheduler,
         progress_reporter=reporter,
-        storage_path=str(exp_path / "gnn_hyp_opt"),
-        name=f"gnn_hyp_opt_{gnn_arch}",
-        resources_per_trial={"cpu": 0.5, "gpu": 1 if torch.cuda.is_available() else 0},
+        storagstorage_path=Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}").resolve(),
+        name=gnn_arch,
+        resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
 
     best_trial = results.get_best_trial("val_loss", "min")
