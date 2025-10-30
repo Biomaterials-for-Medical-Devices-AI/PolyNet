@@ -67,7 +67,9 @@ def train_GNN_ensemble(
 
         for gnn_arch, arch_params in gnn_conv_params.items():
 
-            if not arch_params:
+            is_hpo = not arch_params
+
+            if is_hpo:
                 print("No hyperparameters have been set. Initialising hyperparameter optimisation.")
                 arch_params = gnn_hyp_opt(
                     exp_path=experiment_path,
@@ -79,20 +81,30 @@ def train_GNN_ensemble(
                     problem_type=problem_type,
                     random_seed=random_seed + i,
                 )
-                print("Hyperparameter optimisation finalised.")
-                print(f"Selected hyperparameters: \n{arch_params}")
+                print("Hyperparameter optimisation finalised.\nSelected hyperparameters:")
+                for hyp, val in arch_params:
+                    print(hyp + ": " + val)
 
-            # take out non-model related params
-            if gnn_arch not in assymetric_losses:
-                assymetric_losses[gnn_arch] = arch_params.pop(NetworkParams.AssymetricLossStrength)
-            if gnn_arch not in lrs:
-                lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
-            if gnn_arch not in batch_sizes:
-                batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+                # take out non-model related params
+                assymetric_loss_strength = arch_params.pop(
+                    NetworkParams.AssymetricLossStrength, None
+                )
+                lr = arch_params.pop(NetworkParams.LearningRate, None)
+                batch_size = arch_params.pop(NetworkParams.BatchSize, None)
 
-            assymetric_loss_strength = assymetric_losses[gnn_arch]
-            lr = lrs[gnn_arch]
-            batch_size = batch_sizes[gnn_arch]
+            else:
+                if gnn_arch not in assymetric_losses:
+                    assymetric_losses[gnn_arch] = arch_params.pop(
+                        NetworkParams.AssymetricLossStrength
+                    )
+                if gnn_arch not in lrs:
+                    lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
+                if gnn_arch not in batch_sizes:
+                    batch_sizes[gnn_arch] = arch_params.pop(NetworkParams.BatchSize)
+
+                assymetric_loss_strength = assymetric_losses[gnn_arch]
+                lr = lrs[gnn_arch]
+                batch_size = batch_sizes[gnn_arch]
 
             # get model params together and create model
             model_kwargs = {
@@ -104,10 +116,10 @@ def train_GNN_ensemble(
                 "seed": random_seed + i,
             }
             all_kwargs = {**model_kwargs, **arch_params}
-
             model = create_network(network=gnn_arch, problem_type=problem_type, **all_kwargs).to(
                 device
             )
+
             # create loaders
             train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
             val_loader = DataLoader(val_set, shuffle=False)
