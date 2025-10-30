@@ -412,7 +412,7 @@ def gnn_hyp_opt(
         num_samples=num_samples,
         scheduler=asha_scheduler,
         progress_reporter=reporter,
-        storagstorage_path=Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}").resolve(),
+        storage_path=Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}").resolve(),
         name=gnn_arch,
         resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
