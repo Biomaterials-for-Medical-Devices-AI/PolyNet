@@ -1,5 +1,4 @@
 from copy import deepcopy
-from pathlib import Path
 
 import pandas as pd
 
@@ -9,7 +8,6 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from polynet.app.options.data import DataOptions
 
 from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
 from polynet.options.search_grids import get_grid_search
 from polynet.options.enums import ProblemTypes, TransformDescriptors
 
