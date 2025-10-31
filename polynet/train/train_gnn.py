@@ -76,14 +76,14 @@ def train_GNN_ensemble(
                     gnn_arch=gnn_arch,
                     dataset=train_set + val_set,
                     num_classes=int(num_classes),
-                    num_samples=50,
+                    num_samples=150,
                     iteration=iteration,
                     problem_type=problem_type,
                     random_seed=random_seed + i,
                 )
                 print("Hyperparameter optimisation finalised.\nSelected hyperparameters:")
-                for hyp, val in arch_params:
-                    print(hyp + ": " + val)
+                for hyp, val in arch_params.items():
+                    print(hyp + ": " + str(val))
 
                 # take out non-model related params
                 assymetric_loss_strength = arch_params.pop(
@@ -398,6 +398,8 @@ def gnn_hyp_opt(
     # --- Run Ray Tune ---
     ray.init(ignore_reinit_error=True, include_dashboard=False)
 
+    hop_results_path = Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}")
+
     results = tune.run(
         tune.with_parameters(
             gnn_target_function,
@@ -412,7 +414,7 @@ def gnn_hyp_opt(
         num_samples=num_samples,
         scheduler=asha_scheduler,
         progress_reporter=reporter,
-        storage_path=Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}").resolve(),
+        storage_path=hop_results_path.resolve(),
         name=gnn_arch,
         resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
@@ -421,7 +423,7 @@ def gnn_hyp_opt(
     best_config = best_trial.config
 
     all_runs_df = results.results_df
-    all_runs_df.to_csv(exp_path / "gnn_hyp_opt" f"/{gnn_arch}.csv", index=False)
+    all_runs_df.to_csv(hop_results_path / gnn_arch / f"{gnn_arch}.csv", index=False)
 
     ray.shutdown()
 
