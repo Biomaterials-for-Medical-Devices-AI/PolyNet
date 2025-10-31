@@ -11,6 +11,13 @@ class StringRepresentation(StrEnum):
     PSmiles = "Psmiles"
 
 
+class MolecularDescriptors(StrEnum):
+    RDKit = "rdkit"
+    polyBERT = "polybert"
+    DataFrame = "dataframe"
+    RDKit_DataFrame = "rdkit_dataframe"
+
+
 class Networks(StrEnum):
     GCN = "GCN"
     TransformerGNN = "TransformerConvGNN"
