@@ -44,7 +44,7 @@ from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import save_gnn_model, save_tml_model, load_dataframes
-from polynet.app.services.predict_model import get_predictions_df_tml
+from polynet.predict.predict_tml import get_predictions_df_tml
 from polynet.train.train_tml import train_tml_ensemble
 from polynet.app.utils import save_data
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
@@ -174,7 +174,9 @@ def train_models(
             models=tml_models,
             dataframes=dataframes,
             split_type=general_experiment_options.split_type,
-            data_options=data_options,
+            target_variable_col=data_options.target_variable_col,
+            problem_type=data_options.problem_type,
+            target_variable_name=data_options.target_variable_name,
         )
 
         tml_models_dir = tml_model_dir(experiment_path=experiment_path)
