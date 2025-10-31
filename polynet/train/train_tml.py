@@ -1,16 +1,8 @@
 from copy import deepcopy
-
 import pandas as pd
-
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
-
-
-from polynet.app.options.data import DataOptions
-
-from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.options.search_grids import get_grid_search
 from polynet.options.enums import ProblemTypes, TransformDescriptors
-
 from polynet.featurizer.preprocess import transform_dependent_variables
 from polynet.train.model_utils import generate_models, get_model
 from polynet.options.enums import TradtionalMLModels
@@ -21,8 +13,7 @@ def train_tml_ensemble(
     problem_type: ProblemTypes,
     transform_features: TransformDescriptors,
     dataframes: dict[str, pd.DataFrame],
-    general_experiment_options: GeneralConfigOptions,
-    data_options: DataOptions,
+    random_seed: int,
     train_val_test_idxs: tuple,
 ):
 
@@ -77,21 +68,17 @@ def train_tml_ensemble(
                 model = get_model(
                     model_type=model,
                     model_params=tml_models[model_name],
-                    random_state=general_experiment_options.random_seed + i,
+                    random_state=random_seed + i,
                 )
 
                 if is_hpo:
                     param_grid = get_grid_search(
                         model_name=model_name,
-                        random_seed=general_experiment_options.random_seed + i,
-                        problem_type=data_options.problem_type,
+                        random_seed=random_seed + i,
+                        problem_type=problem_type,
                     )
-                    if data_options.problem_type == ProblemTypes.Classification:
-                        cv = StratifiedKFold(
-                            n_splits=5,
-                            shuffle=True,
-                            random_state=general_experiment_options.random_seed + i,
-                        )
+                    if problem_type == ProblemTypes.Classification:
+                        cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed + i)
                     else:
                         cv = 5
 
