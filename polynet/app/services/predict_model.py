@@ -1,18 +1,13 @@
-from pathlib import Path
-
 import numpy as np
 import pandas as pd
-import streamlit as st
 import torch
 from torch.nn import Module
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
 from polynet.app.options.data import DataOptions
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.train_TML import TrainTMLOptions
-from polynet.app.services.model_training import calculate_metrics, save_plot
-from polynet.app.services.train_tml import load_dataframes, transform_dependent_variables
+from polynet.featurizer.preprocess import transform_dependent_variables
 from polynet.options.col_names import (
     get_iterator_name,
     get_predicted_label_column_name,
