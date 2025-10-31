@@ -76,7 +76,7 @@ def load_dataframes(
 
         rdkit_df = sanitise_df(
             df=rdkit_df,
-            descriptors=representation_options.rdkit_descriptors,
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit],
             target_variable_col=target_variable_col,
         )
 
@@ -91,7 +91,9 @@ def load_dataframes(
 
         df_df = sanitise_df(
             df=df_df,
-            descriptors=representation_options.df_descriptors,
+            descriptors=representation_options.molecular_descriptors[
+                MolecularDescriptors.DataFrame
+            ],
             target_variable_col=target_variable_col,
         )
 
@@ -107,8 +109,8 @@ def load_dataframes(
 
         mix_df = sanitise_df(
             df=mix_df,
-            descriptors=representation_options.rdkit_descriptors
-            + representation_options.df_descriptors,
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit]
+            + representation_options.molecular_descriptors[MolecularDescriptors.DataFrame],
             target_variable_col=target_variable_col,
         )
 
