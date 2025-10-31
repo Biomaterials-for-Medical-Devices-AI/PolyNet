@@ -14,6 +14,7 @@ from polynet.options.enums import (
     StringRepresentation,
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
+from polynet.options.enums import MolecularDescriptors
 
 
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):
@@ -147,7 +148,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 value=True,
                 key=DescriptorCalculationStateKeys.polyBERTindependent,
                 disabled=True,
-                help="Currently, polyBERT fingerprints cannot be combained with any other representation.",
+                help="Currently, polyBERT fingerprints cannot be combined with any other representation.",
             )
 
         if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
@@ -221,7 +222,11 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
         else:
             mol_weights_col = {}
 
-    return selected_descriptors, descriptors_df, mol_weights_col
+    descriptors_dict = {}
+    descriptors_dict[MolecularDescriptors.RDKit] = selected_descriptors
+    descriptors_dict[MolecularDescriptors.DataFrame] = descriptors_df
+
+    return descriptors_dict, mol_weights_col
 
 
 def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict, dict]:
