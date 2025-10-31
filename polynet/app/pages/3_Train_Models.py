@@ -43,9 +43,9 @@ from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.model_training import save_gnn_model, save_tml_model
+from polynet.app.services.model_training import save_gnn_model, save_tml_model, load_dataframes
 from polynet.app.services.predict_model import get_predictions_df_tml
-from polynet.app.services.train_tml import train_tml_model
+from polynet.train.train_tml import train_tml_ensemble
 from polynet.app.utils import save_data
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.col_names import get_iterator_name, get_true_label_column_name
@@ -144,14 +144,20 @@ def train_models(
         )
         save_options(path=tml_training_opts_path, options=train_tml_options)
 
-        # train the models
-        tml_models, dataframes, scalers = train_tml_model(
-            train_tml_options=train_tml_options,
-            tml_models=tml_models,
-            general_experiment_options=general_experiment_options,
+        # load dataframes
+        dataframes = load_dataframes(
             representation_options=representation_options,
-            data_options=data_options,
             experiment_path=experiment_path,
+            target_variable_col=data_options.target_variable_col,
+        )
+
+        # train the models
+        tml_models, dataframes, scalers = train_tml_ensemble(
+            tml_models=tml_models,
+            problem_type=data_options.problem_type,
+            transform_features=train_tml_options.TransformFeatures,
+            dataframes=dataframes,
+            random_seed=general_experiment_options.random_seed,
             train_val_test_idxs=train_val_test_idxs,
         )
 
