@@ -22,20 +22,19 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
-from polynet.app.services.descriptors import build_vector_representation
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
 from polynet.app.utils import create_directory
+from polynet.featurizer.descriptor_calculation import build_vector_representation
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import DescriptorMergingMethods
+from polynet.options.enums import DescriptorMergingMethods, MolecularDescriptors
 
 
 def parse_representation_options(
     experiment_name: str,
     node_feats: dict,
     edge_feats: dict,
-    rdkit_descriptors: list,
-    df_descriptors: list,
+    molecular_descriptors: dict[MolecularDescriptors, list[str]],
     data: pd.DataFrame,
     data_options: DataOptions,
     weights_col: dict,
@@ -48,13 +47,16 @@ def parse_representation_options(
     calculate_polybert_fps = st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False)
 
     representation_options = RepresentationOptions(
-        rdkit_descriptors=rdkit_descriptors,
-        df_descriptors=df_descriptors,
+        molecular_descriptors=molecular_descriptors,
+        rdkit_descriptors=None,
+        df_descriptors=None,
         rdkit_independent=st.session_state.get(
-            DescriptorCalculationStateKeys.IndependentRDKitDescriptors, bool(rdkit_descriptors)
+            DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
+            bool(molecular_descriptors[MolecularDescriptors.RDKit]),
         ),
         df_descriptors_independent=st.session_state.get(
-            DescriptorCalculationStateKeys.IndependentDFDescriptors, bool(df_descriptors)
+            DescriptorCalculationStateKeys.IndependentDFDescriptors,
+            bool(molecular_descriptors[MolecularDescriptors.DataFrame]),
         ),
         mix_rdkit_df_descriptors=st.session_state.get(
             DescriptorCalculationStateKeys.MergeDescriptors, False
@@ -82,10 +84,19 @@ def parse_representation_options(
 
     save_options(path=representation_opts_path, options=representation_options)
 
-    if rdkit_descriptors or df_descriptors or calculate_polybert_fps:
+    if molecular_descriptors:
 
         descriptor_dfs = build_vector_representation(
-            representation_opts=representation_options, data_options=data_options, data=data
+            molecular_descriptors=representation_options.molecular_descriptors,
+            smiles_cols=data_options.smiles_cols,
+            id_col=data_options.id_col,
+            descriptor_merging_approach=representation_options.smiles_merge_approach,
+            target_col=data_options.target_variable_col,
+            weights_col=representation_options.weights_col,
+            data=data,
+            rdkit_independent=representation_options.rdkit_independent,
+            df_descriptors_independent=representation_options.df_descriptors_independent,
+            mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
         )
 
         create_directory(representation_file_path(experiment_path=experiment_path))
@@ -182,7 +193,7 @@ if experiment_name:
 
     st.write(data.describe())
 
-    rdkit_descriptors, df_descriptors, descriptor_weights = molecular_descriptor_representation(
+    molecular_descriptors, descriptor_weights = molecular_descriptor_representation(
         df=data, data_options=data_opts
     )
 
@@ -202,8 +213,7 @@ if experiment_name:
             experiment_name=experiment_name,
             node_feats=atomic_properties,
             edge_feats=bond_properties,
-            rdkit_descriptors=rdkit_descriptors,
-            df_descriptors=df_descriptors,
+            molecular_descriptors=molecular_descriptors,
             data=data,
             data_options=data_opts,
             weights_col=graph_weights,

@@ -1,27 +1,13 @@
-from math import sqrt
+from pathlib import Path
 
-from imblearn.metrics import geometric_mean_score as gmean
-from imblearn.metrics import specificity_score
 import joblib
-import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score
-from sklearn.metrics import (
-    mean_absolute_error,
-    mean_squared_error,
-    precision_score,
-    r2_score,
-    recall_score,
-    roc_auc_score,
-)
-from sklearn.metrics import matthews_corrcoef as mcc
-import torch
 from torch import load, save
-from torch_geometric.data import Dataset
-from torch_geometric.loader import DataLoader
 
-from polynet.app.options.file_paths import gnn_model_dir
-from polynet.options.enums import EvaluationMetrics, ProblemTypes
+from polynet.app.options.file_paths import gnn_model_dir, representation_file
+from polynet.app.options.representation import RepresentationOptions
+from polynet.featurizer.preprocess import sanitise_df
+from polynet.options.enums import MolecularDescriptors
 
 
 def save_tml_model(model, path):
@@ -74,70 +60,75 @@ def save_plot(fig, path, dpi=300):
     print(f"Plot saved to {path}")
 
 
-def calculate_standard_error(actual_values, predicted_values):
-    return np.sqrt(np.mean((actual_values - predicted_values) ** 2))
+def load_dataframes(
+    representation_options: RepresentationOptions, experiment_path: Path, target_variable_col: str
+):
 
+    dataframe_dict = {}
 
-def calculate_sep(y_true, y_pred):
-    """
-    Calculates the Standard Error of Prediction (SEP).
+    if representation_options.rdkit_independent:
 
-    Parameters:
-    - y_true: array-like of shape (n_samples,), ground truth values.
-    - y_pred: array-like of shape (n_samples,), predicted values.
+        rdkit_file_path = representation_file(
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.RDKit}.csv"
+        )
 
-    Returns:
-    - sep: float, the standard error of prediction.
-    """
-    y_true = np.asarray(y_true)
-    y_pred = np.asarray(y_pred)
+        rdkit_df = pd.read_csv(rdkit_file_path, index_col=0)
 
-    if len(y_true) != len(y_pred):
-        raise ValueError("y_true and y_pred must be the same length")
+        rdkit_df = sanitise_df(
+            df=rdkit_df,
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit],
+            target_variable_col=target_variable_col,
+        )
 
-    residuals = y_true - y_pred
-    sep = np.sqrt(np.sum(residuals**2) / (len(residuals) - 1))
-    return sep
+        dataframe_dict[MolecularDescriptors.RDKit] = rdkit_df
 
+    if representation_options.df_descriptors_independent:
+        df_file_path = representation_file(
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.DataFrame}.csv"
+        )
 
-def calculate_metrics(y_true, y_pred, y_probs, problem_type):
-    """
-    Calculates evaluation metrics based on the problem type.
+        df_df = pd.read_csv(df_file_path, index_col=0)
 
-    Args:
-        y_true (pd.Series): True labels.
-        y_pred (pd.Series): Predicted labels.
-        problem_type (str): Type of the problem ('classification' or 'regression').
+        df_df = sanitise_df(
+            df=df_df,
+            descriptors=representation_options.molecular_descriptors[
+                MolecularDescriptors.DataFrame
+            ],
+            target_variable_col=target_variable_col,
+        )
 
-    Returns:
-        dict: Dictionary containing calculated metrics.
-    """
-    if problem_type == ProblemTypes.Classification:
+        dataframe_dict[MolecularDescriptors.DataFrame] = df_df
 
-        return {
-            EvaluationMetrics.Accuracy: accuracy_score(y_true, y_pred),
-            EvaluationMetrics.Precision: precision_score(y_true, y_pred),
-            EvaluationMetrics.Recall: recall_score(
-                y_true, y_pred
-            ),  # Also known as sensitivity or true positive rate
-            EvaluationMetrics.Specificity: specificity_score(
-                y_true, y_pred
-            ),  # Recall for negative samples or True negative rate
-            EvaluationMetrics.AUROC: (
-                roc_auc_score(y_true=y_true, y_score=y_probs) if y_probs is not None else None
-            ),
-            EvaluationMetrics.MCC: mcc(y_true, y_pred),
-            EvaluationMetrics.F1Score: f1_score(y_true, y_pred),
-            EvaluationMetrics.GScore: gmean(y_true, y_pred),
-        }
-    else:
+    if representation_options.mix_rdkit_df_descriptors:
 
-        return {
-            EvaluationMetrics.RMSE: sqrt(mean_squared_error(y_true, y_pred)),
-            EvaluationMetrics.R2: r2_score(y_true, y_pred),
-            EvaluationMetrics.MAE: mean_absolute_error(y_true, y_pred),
-            # "sep": calculate_standard_error(y_true, y_pred),
-        }
+        mix_file_path = representation_file(
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.RDKit_DataFrame}.csv"
+        )
+
+        mix_df = pd.read_csv(mix_file_path, index_col=0)
+
+        mix_df = sanitise_df(
+            df=mix_df,
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit]
+            + representation_options.molecular_descriptors[MolecularDescriptors.DataFrame],
+            target_variable_col=target_variable_col,
+        )
+
+        dataframe_dict[MolecularDescriptors.RDKit_DataFrame] = mix_df
+
+    if representation_options.polybert_fp:
+        polybert_file_path = representation_file(
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.polyBERT}.csv"
+        )
+        polybert_df = pd.read_csv(polybert_file_path, index_col=0)
+        polybert_df = sanitise_df(
+            df=polybert_df,
+            descriptors=[f"polyBERT_{i}" for i in range(600)],
+            target_variable_col=target_variable_col,
+        )
+        dataframe_dict[MolecularDescriptors.polyBERT] = polybert_df
+
+    return dataframe_dict
 
 
 def load_models_from_experiment(experiment_path: str, model_names: list) -> dict:
@@ -190,36 +181,3 @@ def load_scalers_from_experiment(experiment_path: str, model_names: list) -> dic
         scaler[scaler_name] = load_tml_model(scaler_file)
 
     return scaler
-
-
-def predict_network(models: dict, dataset: Dataset) -> pd.DataFrame:
-
-    indexes = [data.idx for data in dataset]
-    loader = DataLoader(dataset=dataset, batch_size=1, shuffle=False)
-
-    predictions_models = {}
-
-    for model_name, model in models.items():
-        model.eval()
-        predictions = []
-
-        with torch.no_grad():
-            for batch in loader:
-
-                preds = model.predict(
-                    x=batch.x,
-                    edge_index=batch.edge_index,
-                    edge_attr=batch.edge_attr,
-                    batch_index=batch.batch,
-                    monomer_weight=batch.weight_monomer,
-                )
-
-                predictions.append(preds)
-
-        predictions_models[model_name] = pd.Series(
-            np.concatenate(predictions), index=indexes, name=model_name
-        )
-
-    predictions_models = pd.DataFrame(predictions_models)
-
-    return predictions_models
