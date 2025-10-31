@@ -22,7 +22,7 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
-from polynet.app.services.descriptors import build_vector_representation
+from polynet.featurizer.descriptor_calculation import build_vector_representation
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
 from polynet.app.utils import create_directory
@@ -85,7 +85,16 @@ def parse_representation_options(
     if rdkit_descriptors or df_descriptors or calculate_polybert_fps:
 
         descriptor_dfs = build_vector_representation(
-            representation_opts=representation_options, data_options=data_options, data=data
+            molecular_descriptors=representation_options.molecular_descriptors,
+            smiles_cols=data_options.smiles_cols,
+            id_col=data_options.id_col,
+            descriptor_merging_approach=representation_options.smiles_merge_approach,
+            target_col=data_options.target_variable_col,
+            weights_col=representation_options.weights_col,
+            data=data,
+            rdkit_independent=representation_options.rdkit_independent,
+            df_descriptors_independent=representation_options.df_descriptors_independent,
+            mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
         )
 
         create_directory(representation_file_path(experiment_path=experiment_path))
