@@ -25,7 +25,7 @@ def build_vector_representation(
     unique_smiles = get_unique_smiles(data, smiles_cols)
 
     rdkit_df_dict = {}
-    if MolecularDescriptors.RDKit in molecular_descriptors.keys():
+    if molecular_descriptors[MolecularDescriptors.RDKit]:
         rdkit_df_dict = calculate_rdkit_df_dict(
             unique_smiles, data, smiles_cols, molecular_descriptors[MolecularDescriptors.RDKit]
         )
