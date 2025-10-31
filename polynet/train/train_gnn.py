@@ -13,7 +13,7 @@ from torch.nn import Module
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
-from polynet.app.options.search_grids import get_grid_search
+from polynet.options.search_grids import get_grid_search
 from polynet.call_methods import (
     compute_class_weights,
     create_network,
