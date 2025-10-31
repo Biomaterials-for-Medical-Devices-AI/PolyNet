@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 
 from polynet.options.col_names import get_score_column_name
+import matplotlib.pyplot as plt
 
 
 def save_plot(fig, path, dpi=300):
@@ -14,6 +15,7 @@ def save_plot(fig, path, dpi=300):
     """
     fig.savefig(path, bbox_inches="tight", dpi=dpi)
     print(f"Plot saved to {path}")
+    plt.close()
 
 
 def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_name: str = None):
