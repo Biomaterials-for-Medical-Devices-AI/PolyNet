@@ -10,7 +10,7 @@ def build_vector_representation(
     molecular_descriptors: dict[MolecularDescriptors, str],
     smiles_cols: list[str],
     id_col: str,
-    descriptpr_merging_approach: DescriptorMergingMethods,
+    descriptor_merging_approach: DescriptorMergingMethods,
     target_col: str,
     weights_col: dict[str, str],
     data: pd.DataFrame,
@@ -35,18 +35,18 @@ def build_vector_representation(
         # df_rdkit_weighted = df_rdkit_mean = df_rdkit_concat = df_rdkit_no_merge = None
 
         if (
-            DescriptorMergingMethods.WeightedAverage == descriptpr_merging_approach
+            DescriptorMergingMethods.WeightedAverage == descriptor_merging_approach
         ) and weights_col:
             rdkit_descriptors = merge_weighted(rdkit_df_dict, data, weights_col, data_index)
 
-        elif DescriptorMergingMethods.Average == descriptpr_merging_approach:
+        elif DescriptorMergingMethods.Average == descriptor_merging_approach:
             rdkit_descriptors = merge_average(rdkit_df_dict, data_index)
 
         # TODO: fix case where only one SMILES column is present
-        elif DescriptorMergingMethods.Concatenate == descriptpr_merging_approach:
+        elif DescriptorMergingMethods.Concatenate == descriptor_merging_approach:
             rdkit_descriptors = merge_concatenate(rdkit_df_dict, data_index)
 
-        elif DescriptorMergingMethods.NoMerging == descriptpr_merging_approach:
+        elif DescriptorMergingMethods.NoMerging == descriptor_merging_approach:
             rdkit_descriptors = single_smiles(rdkit_df_dict, data_index)
         else:
             raise Exception("Invalid merging method selected.")
