@@ -10,7 +10,7 @@ from polynet.app.options.data import DataOptions
 
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.search_grids import get_grid_search
+from polynet.options.search_grids import get_grid_search
 from polynet.options.enums import ProblemTypes, TransformDescriptors
 
 from polynet.featurizer.preprocess import transform_dependent_variables
