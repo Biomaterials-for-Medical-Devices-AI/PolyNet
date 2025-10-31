@@ -93,9 +93,9 @@ def build_vector_representation(
 
     # Return dictionary or selected final df depending on use-case
     return {
-        "RDKit": rdkit_descriptors,
-        "DF": df_descriptors_df,
-        "RDKit_DF": rdkit_df_descriptors,
+        MolecularDescriptors.RDKit: rdkit_descriptors,
+        MolecularDescriptors.DataFrame: df_descriptors_df,
+        MolecularDescriptors.RDKit_DataFrame: rdkit_df_descriptors,
         # "polyBERT": polyBERT_descriptors,
     }
 
