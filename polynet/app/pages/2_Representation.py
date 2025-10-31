@@ -22,10 +22,10 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
-from polynet.featurizer.descriptor_calculation import build_vector_representation
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
 from polynet.app.utils import create_directory
+from polynet.featurizer.descriptor_calculation import build_vector_representation
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
 from polynet.options.enums import DescriptorMergingMethods, MolecularDescriptors
 

@@ -13,7 +13,6 @@ from torch.nn import Module
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
-from polynet.options.search_grids import get_grid_search
 from polynet.call_methods import (
     compute_class_weights,
     create_network,
@@ -22,6 +21,7 @@ from polynet.call_methods import (
     make_scheduler,
 )
 from polynet.options.enums import NetworkParams, Networks, Optimizers, ProblemTypes, Schedulers
+from polynet.options.search_grids import get_grid_search
 
 
 def filter_dataset_by_ids(dataset, ids):

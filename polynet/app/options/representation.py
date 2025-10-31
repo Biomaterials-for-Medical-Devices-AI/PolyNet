@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+
 from polynet.options.enums import MolecularDescriptors
 
 """In this file, we define the PlottingOptions dataclass, which is used to store the plotting

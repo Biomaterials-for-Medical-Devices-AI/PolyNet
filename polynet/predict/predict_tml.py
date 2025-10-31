@@ -1,10 +1,11 @@
 import pandas as pd
-from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes
+
 from polynet.options.col_names import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
+from polynet.options.enums import DataSets, ProblemTypes, Results, SplitTypes
 from polynet.utils import prepare_probs_df
 
 

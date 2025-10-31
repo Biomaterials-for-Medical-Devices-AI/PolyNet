@@ -11,10 +11,10 @@ from polynet.options.enums import (
     AtomFeatures,
     BondFeatures,
     DescriptorMergingMethods,
+    MolecularDescriptors,
     StringRepresentation,
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
-from polynet.options.enums import MolecularDescriptors
 
 
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):

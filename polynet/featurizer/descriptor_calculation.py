@@ -1,8 +1,8 @@
 import pandas as pd
-from polynet.options.enums import DescriptorMergingMethods
 from rdkit.Chem import Descriptors, MolFromSmiles
-from polynet.options.enums import MolecularDescriptors
+
 from polynet.featurizer.preprocess import get_data_index
+from polynet.options.enums import DescriptorMergingMethods, MolecularDescriptors
 from polynet.utils.chem_utils import PS
 
 

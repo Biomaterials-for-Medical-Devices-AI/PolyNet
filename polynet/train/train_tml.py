@@ -1,11 +1,12 @@
 from copy import deepcopy
+
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, StratifiedKFold
-from polynet.options.search_grids import get_grid_search
-from polynet.options.enums import ProblemTypes, TransformDescriptors
+
 from polynet.featurizer.preprocess import transform_dependent_variables
+from polynet.options.enums import ProblemTypes, TradtionalMLModels, TransformDescriptors
+from polynet.options.search_grids import get_grid_search
 from polynet.train.model_utils import generate_models, get_model
-from polynet.options.enums import TradtionalMLModels
 
 
 def train_tml_ensemble(
