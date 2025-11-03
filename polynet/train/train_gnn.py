@@ -284,7 +284,12 @@ def gnn_target_function(
         train_dataset = [dataset[i] for i in train_idx]
         val_dataset = [dataset[i] for i in val_idx]
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=len(train_dataset) % batch_size == 1,
+        )
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
         # Prepare model input kwargs
