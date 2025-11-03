@@ -95,7 +95,7 @@ def train_GNN_ensemble(
             else:
                 if gnn_arch not in assymetric_losses:
                     assymetric_losses[gnn_arch] = arch_params.pop(
-                        NetworkParams.AssymetricLossStrength
+                        NetworkParams.AssymetricLossStrength, None
                     )
                 if gnn_arch not in lrs:
                     lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
