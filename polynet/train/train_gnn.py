@@ -121,7 +121,12 @@ def train_GNN_ensemble(
             )
 
             # create loaders
-            train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+            train_loader = DataLoader(
+                train_set,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=len(train_set) % batch_size == 1,
+            )
             val_loader = DataLoader(val_set, shuffle=False)
             test_loader = DataLoader(test_set, shuffle=False)
 
