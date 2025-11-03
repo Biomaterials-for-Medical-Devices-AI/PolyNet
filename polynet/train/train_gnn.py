@@ -95,7 +95,7 @@ def train_GNN_ensemble(
             else:
                 if gnn_arch not in assymetric_losses:
                     assymetric_losses[gnn_arch] = arch_params.pop(
-                        NetworkParams.AssymetricLossStrength
+                        NetworkParams.AssymetricLossStrength, None
                     )
                 if gnn_arch not in lrs:
                     lrs[gnn_arch] = arch_params.pop(NetworkParams.LearningRate)
@@ -121,7 +121,12 @@ def train_GNN_ensemble(
             )
 
             # create loaders
-            train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+            train_loader = DataLoader(
+                train_set,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=len(train_set) % batch_size == 1,
+            )
             val_loader = DataLoader(val_set, shuffle=False)
             test_loader = DataLoader(test_set, shuffle=False)
 
@@ -279,7 +284,12 @@ def gnn_target_function(
         train_dataset = [dataset[i] for i in train_idx]
         val_dataset = [dataset[i] for i in val_idx]
 
-        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=batch_size,
+            shuffle=True,
+            drop_last=len(train_dataset) % batch_size == 1,
+        )
         val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
         # Prepare model input kwargs
