@@ -241,7 +241,7 @@ def ml_gnn_results_directory(experiment_path: Path) -> Path:
     return ml_results_parent_directory(experiment_path) / "GNN"
 
 
-def ml_gnn_results_file_path(experiment_path: Path, file_name: str) -> Path:
+def ml_results_file_path(experiment_path: Path) -> Path:
     """
     Return the path to the machine learning GNN results file in the experiment directory.
     Args:
@@ -249,7 +249,7 @@ def ml_gnn_results_file_path(experiment_path: Path, file_name: str) -> Path:
         file_name (str): The name of the results file.
     Returns:
     """
-    return ml_gnn_results_directory(experiment_path) / file_name
+    return ml_results_parent_directory(experiment_path) / "predictions.csv"
 
 
 def model_dir(experiment_path: Path) -> Path:

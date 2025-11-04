@@ -20,7 +20,7 @@ from polynet.app.options.file_paths import (
     plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
-    ml_gnn_results_file_path,
+    ml_results_file_path,
     ml_results_parent_directory,
     representation_file_path,
     representation_options_path,
@@ -282,12 +282,7 @@ def train_models(
         predictions = tml_predictions_df.copy()
         metrics = metrics_tml
 
-    save_data(
-        data=predictions,
-        data_path=ml_gnn_results_file_path(
-            experiment_path=experiment_path, file_name="predictions.csv"
-        ),
-    )
+    save_data(data=predictions, data_path=ml_results_file_path(experiment_path=experiment_path))
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=4)
