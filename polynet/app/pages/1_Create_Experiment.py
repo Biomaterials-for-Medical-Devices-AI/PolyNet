@@ -36,7 +36,7 @@ def save_experiment(df):
     )
 
     create_experiment(
-        save_dir=polynet_experiments_base_dir()
+        experiment_path=polynet_experiments_base_dir()
         / st.session_state[CreateExperimentStateKeys.ExperimentName],
         data_options=data_options,
     )
