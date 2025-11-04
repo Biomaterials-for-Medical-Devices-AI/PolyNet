@@ -252,14 +252,14 @@ def ml_gnn_results_file_path(experiment_path: Path, file_name: str) -> Path:
     return ml_gnn_results_directory(experiment_path) / file_name
 
 
-def gnn_model_dir(experiment_path: Path) -> Path:
+def model_dir(experiment_path: Path) -> Path:
     """
     Return the path to the GNN model directory in the experiment directory.
     Args:
         experiment_path (Path): The path to the experiment directory.
     Returns:
     """
-    return ml_gnn_results_directory(experiment_path) / "models"
+    return ml_results_parent_directory(experiment_path) / "models"
 
 
 def plots_directory(experiment_path: Path) -> Path:

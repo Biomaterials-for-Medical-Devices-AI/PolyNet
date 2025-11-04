@@ -15,7 +15,7 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_model_dir,
+    model_dir,
     gnn_model_metrics_file_path,
     plots_directory,
     gnn_raw_data_file,
@@ -114,8 +114,8 @@ def train_models(
     plots_dir = plots_directory(experiment_path=experiment_path)
     plots_dir.mkdir(parents=True)
     # directory for models
-    gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
-    gnn_models_dir.mkdir(parents=True, exist_ok=True)
+    models_dir = model_dir(experiment_path=experiment_path)
+    models_dir.mkdir(parents=True, exist_ok=True)
     metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
 
     # check if user selected tml models to train
@@ -158,11 +158,11 @@ def train_models(
         )
 
         for model_name, model in tml_models.items():
-            save_path = gnn_models_dir / f"{model_name}.joblib"
+            save_path = models_dir / f"{model_name}.joblib"
             save_tml_model(model, save_path)
         if scalers:
             for scaler_name, scaler in scalers.items():
-                save_path = gnn_models_dir / f"{scaler_name}.pkl"
+                save_path = models_dir / f"{scaler_name}.pkl"
                 save_tml_model(scaler, save_path)
 
         # generate predictions df
@@ -224,7 +224,7 @@ def train_models(
         )
 
         for model_name, model in gnn_models.items():
-            save_path = gnn_models_dir / f"{model_name}.pt"
+            save_path = models_dir / f"{model_name}.pt"
             save_gnn_model(model, save_path)
 
         plot_learning_curves(gnn_models, save_path=plots_dir)
