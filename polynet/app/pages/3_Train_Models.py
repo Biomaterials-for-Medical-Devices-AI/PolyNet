@@ -16,7 +16,7 @@ from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     model_dir,
-    gnn_model_metrics_file_path,
+    model_metrics_file_path,
     plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
@@ -116,7 +116,7 @@ def train_models(
     # directory for models
     models_dir = model_dir(experiment_path=experiment_path)
     models_dir.mkdir(parents=True, exist_ok=True)
-    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+    metrics_path = model_metrics_file_path(experiment_path=experiment_path)
 
     # check if user selected tml models to train
     if tml_models:

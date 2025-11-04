@@ -272,9 +272,9 @@ def plots_directory(experiment_path: Path) -> Path:
     return ml_results_parent_directory(experiment_path) / "plots"
 
 
-def gnn_model_metrics_file_path(experiment_path: Path) -> Path:
+def model_metrics_file_path(experiment_path: Path) -> Path:
 
-    return ml_gnn_results_directory(experiment_path) / "metrics.json"
+    return ml_results_parent_directory(experiment_path) / "metrics.json"
 
 
 def prediction_results_parent_path(experiment_path: Path) -> Path:
