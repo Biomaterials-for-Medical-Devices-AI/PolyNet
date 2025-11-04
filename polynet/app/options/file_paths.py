@@ -15,6 +15,11 @@ def polynet_experiments_base_dir() -> Path:
     return Path.home() / "PolyNetExperiments"
 
 
+def experiment_path(experiment_name: str) -> Path:
+
+    return polynet_experiments_base_dir() / experiment_name
+
+
 def data_file_path(file_name: str, experiment_path: Path) -> Path:
     """
     Return the path to the data file in the experiment directory.
