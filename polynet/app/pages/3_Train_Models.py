@@ -17,14 +17,13 @@ from polynet.app.options.file_paths import (
     general_options_path,
     gnn_model_dir,
     gnn_model_metrics_file_path,
-    gnn_plots_directory,
+    plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
     ml_gnn_results_file_path,
     ml_results_parent_directory,
     representation_file_path,
     representation_options_path,
-    tml_model_dir,
     train_gnn_model_options_path,
     train_tml_model_options_path,
     polynet_experiment_path,
@@ -112,7 +111,7 @@ def train_models(
     )
 
     # Create directory to save plots
-    plots_dir = gnn_plots_directory(experiment_path=experiment_path)
+    plots_dir = plots_directory(experiment_path=experiment_path)
     plots_dir.mkdir(parents=True)
     # directory for models
     gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
@@ -175,9 +174,6 @@ def train_models(
             problem_type=data_options.problem_type,
             target_variable_name=data_options.target_variable_name,
         )
-
-        tml_models_dir = tml_model_dir(experiment_path=experiment_path)
-        tml_models_dir.mkdir(parents=True)
 
         metrics_tml = get_metrics(
             predictions=tml_predictions_df,

@@ -241,16 +241,6 @@ def ml_gnn_results_directory(experiment_path: Path) -> Path:
     return ml_results_parent_directory(experiment_path) / "GNN"
 
 
-def ml_tml_results_directory(experiment_path: Path) -> Path:
-    """
-    Return the path to the machine learning TML results directory in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return ml_results_parent_directory(experiment_path) / "TML"
-
-
 def ml_gnn_results_file_path(experiment_path: Path, file_name: str) -> Path:
     """
     Return the path to the machine learning GNN results file in the experiment directory.
@@ -272,24 +262,14 @@ def gnn_model_dir(experiment_path: Path) -> Path:
     return ml_gnn_results_directory(experiment_path) / "models"
 
 
-def tml_model_dir(experiment_path: Path) -> Path:
-    """
-    Return the path to the TML model directory in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return ml_tml_results_directory(experiment_path) / "models"
-
-
-def gnn_plots_directory(experiment_path: Path) -> Path:
+def plots_directory(experiment_path: Path) -> Path:
     """
     Return the path to the GNN plots directory in the experiment directory.
     Args:
         experiment_path (Path): The path to the experiment directory.
     Returns:
     """
-    return ml_gnn_results_directory(experiment_path) / "plots"
+    return ml_results_parent_directory(experiment_path) / "plots"
 
 
 def gnn_model_metrics_file_path(experiment_path: Path) -> Path:
