@@ -15,7 +15,7 @@ def polynet_experiments_base_dir() -> Path:
     return Path.home() / "PolyNetExperiments"
 
 
-def experiment_path(experiment_name: str) -> Path:
+def polynet_experiment_path(experiment_name: str) -> Path:
 
     return polynet_experiments_base_dir() / experiment_name
 
