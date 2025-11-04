@@ -231,16 +231,6 @@ def ml_results_parent_directory(experiment_path: Path) -> Path:
     return experiment_path / "ml_results"
 
 
-def ml_gnn_results_directory(experiment_path: Path) -> Path:
-    """
-    Return the path to the machine learning GNN results directory in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return ml_results_parent_directory(experiment_path) / "GNN"
-
-
 def ml_results_file_path(experiment_path: Path) -> Path:
     """
     Return the path to the machine learning GNN results file in the experiment directory.
