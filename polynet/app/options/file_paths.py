@@ -16,6 +16,15 @@ def polynet_experiments_base_dir() -> Path:
 
 
 def polynet_experiment_path(experiment_name: str) -> Path:
+    """
+    Returns the path to an experiment given the experiment name.
+
+    Args:
+        experiment_name: the name of the experiment
+
+    Returns:
+        PAth: the path to the experiment.
+    """
 
     return polynet_experiments_base_dir() / experiment_name
 
