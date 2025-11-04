@@ -22,12 +22,12 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_path,
     ml_gnn_results_file_path,
     ml_results_parent_directory,
-    polynet_experiments_base_dir,
     representation_file_path,
     representation_options_path,
     tml_model_dir,
     train_gnn_model_options_path,
     train_tml_model_options_path,
+    polynet_experiment_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions
@@ -62,7 +62,7 @@ def train_models(
 ):
 
     # paths for options and experiments
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
     tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
@@ -315,27 +315,21 @@ experiment_name = experiment_selector(choices)
 
 if experiment_name:
 
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
 
-    path_to_data_opts = data_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    path_to_data_opts = data_options_path(experiment_path=experiment_path)
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataOptions)
 
-    path_to_representation_opts = representation_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    path_to_representation_opts = representation_options_path(experiment_path=experiment_path)
     representation_opts = load_options(
         path=path_to_representation_opts, options_class=RepresentationOptions
     )
 
-    train_gnn_options = train_gnn_model_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
 
     if train_gnn_options.exists():
-        st.error(
+        st.warning(
             "GNN model options already exist for this experiment. "
             "You can modify the settings below, but be aware that this will overwrite the existing results."
         )
