@@ -149,9 +149,7 @@ def display_model_results(experiment_path, expanded):
 
     with st.expander("Model Results", expanded=expanded):
 
-        predictions_path = ml_results_file_path(
-            experiment_path=experiment_path, file_name="predictions.csv"
-        )
+        predictions_path = ml_results_file_path(experiment_path=experiment_path)
 
         if predictions_path.exists():
             predictions = pd.read_csv(predictions_path, index_col=0)
