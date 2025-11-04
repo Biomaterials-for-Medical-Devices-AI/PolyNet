@@ -176,7 +176,7 @@ experiment_name = experiment_selector(choices)
 
 if experiment_name:
 
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
 
     representation_opts = representation_options_path(experiment_path=experiment_path)
 
