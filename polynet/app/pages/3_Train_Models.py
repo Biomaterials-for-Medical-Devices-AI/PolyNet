@@ -22,13 +22,10 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_path,
     ml_gnn_results_file_path,
     ml_results_parent_directory,
-    ml_tml_results_file_path,
     polynet_experiments_base_dir,
     representation_file_path,
     representation_options_path,
     tml_model_dir,
-    tml_model_metrics_file_path,
-    tml_plots_directory,
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
