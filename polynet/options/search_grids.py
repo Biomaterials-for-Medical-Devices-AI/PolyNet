@@ -94,27 +94,27 @@ def get_grid_search(
             return SVM_GRID
 
         case Networks.GCN:
-            GCN_GRID["seed"] = [random_seed]
+            GCN_GRID[NetworkParams.Seed] = [random_seed]
             return {**GCN_GRID, **GNN_SHARED_GRID}
 
         case Networks.GraphSAGE:
-            GraphSAGE_GRID["seed"] = [random_seed]
+            GraphSAGE_GRID[NetworkParams.Seed] = [random_seed]
             return {**GraphSAGE_GRID, **GNN_SHARED_GRID}
 
         case Networks.TransformerGNN:
-            TransformerGNN_GRID["seed"] = [random_seed]
+            TransformerGNN_GRID[NetworkParams.Seed] = [random_seed]
             return {**TransformerGNN_GRID, **GNN_SHARED_GRID}
 
         case Networks.GAT:
-            GAT_GRID["seed"] = [random_seed]
+            GAT_GRID[NetworkParams.Seed] = [random_seed]
             return {**GAT_GRID, **GNN_SHARED_GRID}
 
         case Networks.MPNN:
-            MPNN_GRID = {"seed": [random_seed]}
+            MPNN_GRID = {NetworkParams.Seed: [random_seed]}
             return {**MPNN_GRID, **GNN_SHARED_GRID}
 
         case Networks.CGGNN:
-            CGGNN_GRID = {"seed": [random_seed]}
+            CGGNN_GRID = {NetworkParams.Seed: [random_seed]}
             return {**CGGNN_GRID, **GNN_SHARED_GRID}
 
         case _:
