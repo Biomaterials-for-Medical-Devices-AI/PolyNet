@@ -48,6 +48,7 @@ class NetworkParams(StrEnum):
     LearningRate = "learning_rate"
     BatchSize = "batch_size"
     AssymetricLossStrength = "assymetric_loss_strength"
+    Seed = "seed"
 
 
 class ExplainAlgorithms(StrEnum):
