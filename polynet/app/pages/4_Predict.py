@@ -15,14 +15,14 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_model_dir,
+    model_dir,
     gnn_predictions_file,
     gnn_predictions_file_path,
     gnn_predictions_metrics_file_path,
     gnn_predictions_plots_directory,
     gnn_raw_data_predict_file,
     gnn_raw_data_predict_path,
-    ml_gnn_results_file_path,
+    ml_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
@@ -34,20 +34,20 @@ from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
 from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options
-from polynet.app.services.descriptors import build_vector_representation
+from polynet.featurizer.descriptor_calculation import build_vector_representation
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import (
-    calculate_metrics,
     load_models_from_experiment,
     load_scalers_from_experiment,
 )
 from polynet.app.services.predict_model import predict_unseen_gnn, predict_unseen_tml
 from polynet.app.utils import create_directory
 from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.col_names import get_predicted_label_column_name, get_true_label_column_name
+from polynet.options.col_names import get_true_label_column_name
 from polynet.options.enums import ProblemTypes, Results, TransformDescriptors
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
+from polynet.train.evaluate_model import calculate_metrics
 
 
 def predict(
@@ -325,13 +325,8 @@ if experiment_name:
 
     display_model_results(experiment_path=experiment_path, expanded=False)
 
-    predictions_path = predictions_path = ml_gnn_results_file_path(
-        experiment_path=experiment_path, file_name="predictions.csv"
-    )
-    predictions = pd.read_csv(
-        ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv"),
-        index_col=0,
-    )
+    predictions_path = ml_results_file_path(experiment_path=experiment_path)
+    predictions = pd.read_csv(predictions_path, index_col=0)
 
     csv_file = st.file_uploader(
         "Upload a CSV file with SMILES strings for prediction",
@@ -436,7 +431,7 @@ if experiment_name:
                         )
                     )
 
-        gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
+        gnn_models_dir = model_dir(experiment_path=experiment_path)
 
         if path_to_train_gnn_options.exists():
             gnn_models = [
