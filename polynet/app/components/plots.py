@@ -4,9 +4,9 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.options.file_paths import (
+    ml_results_file_path,
     model_metrics_file_path,
     plots_directory,
-    ml_results_file_path,
 )
 
 

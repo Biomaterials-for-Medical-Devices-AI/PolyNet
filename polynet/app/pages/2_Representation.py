@@ -11,9 +11,9 @@ from polynet.app.components.forms.representation import (
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
-    polynet_experiment_path,
     gnn_raw_data_file,
     gnn_raw_data_path,
+    polynet_experiment_path,
     polynet_experiments_base_dir,
     representation_file,
     representation_file_path,
