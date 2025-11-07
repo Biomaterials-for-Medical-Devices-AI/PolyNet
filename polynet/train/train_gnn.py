@@ -2,6 +2,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import ray
 from ray import tune
 from ray.air import session
@@ -359,6 +360,19 @@ def gnn_hyp_opt(
     Runs Ray Tune hyperparameter optimization with early stopping.
     """
 
+    hop_results_path = Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}")
+
+    config = get_grid_search(
+        model_name=gnn_arch, problem_type=problem_type, random_seed=random_seed
+    )
+
+    gnn_hop_results_path = hop_results_path / gnn_arch / f"{gnn_arch}.csv"
+    if gnn_hop_results_path.exists():
+        best_config = load_best_config(
+            hop_results_path=hop_results_path, gnn_arch=gnn_arch, config=config
+        )
+        return best_config
+
     # --- Configure early stopping via ASHA ---
     asha_scheduler = ASHAScheduler(
         time_attr="epoch",
@@ -385,10 +399,6 @@ def gnn_hyp_opt(
         metric_columns=metric_cols,
     )
 
-    config = get_grid_search(
-        model_name=gnn_arch, problem_type=problem_type, random_seed=random_seed
-    )
-
     for key, value in config.items():
         if isinstance(value, list):
             config[key] = tune.choice(value)
@@ -407,8 +417,6 @@ def gnn_hyp_opt(
 
     # --- Run Ray Tune ---
     ray.init(ignore_reinit_error=True, include_dashboard=False)
-
-    hop_results_path = Path(exp_path / "gnn_hyp_opt" / f"iteration_{iteration}")
 
     results = tune.run(
         tune.with_parameters(
@@ -436,5 +444,54 @@ def gnn_hyp_opt(
     all_runs_df.to_csv(hop_results_path / gnn_arch / f"{gnn_arch}.csv", index=False)
 
     ray.shutdown()
+
+    return best_config
+
+
+import pandas as pd
+import numpy as np
+
+
+def load_best_config(hop_results_path, gnn_arch, config):
+    """
+    Loads the best configuration for a given GNN architecture based on the lowest validation loss.
+
+    Args:
+        hop_results_path (Path): Base path to the hop results.
+        gnn_arch (str): The name of the GNN architecture.
+        config (dict): A dictionary whose keys correspond to hyperparameter names.
+
+    Returns:
+        dict or None: Dictionary with the best configuration parameters if CSV exists, else None.
+    """
+    gnn_hop_results_path = hop_results_path / gnn_arch / f"{gnn_arch}.csv"
+    print(f"Checking results at: {gnn_hop_results_path}")
+
+    if not gnn_hop_results_path.exists():
+        print("Results file not found.")
+        return None
+
+    results_df = pd.read_csv(gnn_hop_results_path)
+
+    if "val_loss" not in results_df.columns:
+        raise KeyError(f"'val_loss' column not found in {gnn_hop_results_path}")
+
+    best_result = results_df.loc[results_df["val_loss"].idxmin()]
+
+    best_config = {}
+    for param in config.keys():
+        col_name = f"config/{param}"
+        if col_name in results_df.columns:
+            value = best_result[col_name]
+
+            # --- Universal type cleanup ---
+            if isinstance(value, (np.generic,)):  # catches np.int64, np.float64, etc.
+                value = value.item()  # convert to native Python type
+            elif pd.isna(value):
+                value = None  # handle NaN if present
+
+            best_config[param] = value
+        else:
+            print(f"Warning: Column '{col_name}' not found in CSV. Skipping this param.")
 
     return best_config
