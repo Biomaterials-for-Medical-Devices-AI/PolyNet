@@ -35,7 +35,7 @@ def get_experiments(base_dir: Path | None = None) -> list[str]:
     return sorted(list(experiments))
 
 
-def create_experiment(save_dir: Path, data_options: DataOptions):
+def create_experiment(experiment_path: Path, data_options: DataOptions):
     """Create an experiment on disk with it's global plotting options,
     execution options and data options saved as `json` files.
 
@@ -45,8 +45,8 @@ def create_experiment(save_dir: Path, data_options: DataOptions):
         execution_options (ExecutionOptions): The execution options to save.
         data_options (DataOptions): The data options to save.
     """
-    create_directory(save_dir)
+    create_directory(experiment_path)
     # plot_file_path = plot_options_path(save_dir)
     # save_options(plot_file_path, plotting_options)
-    data_file_path = data_options_path(save_dir)
-    save_options(data_file_path, data_options)
+    data_file_path = data_options_path(experiment_path)
+    save_options(path=data_file_path, options=data_options)

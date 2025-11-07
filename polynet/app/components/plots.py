@@ -4,9 +4,9 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.options.file_paths import (
-    gnn_model_metrics_file_path,
-    gnn_plots_directory,
-    ml_gnn_results_file_path,
+    ml_results_file_path,
+    model_metrics_file_path,
+    plots_directory,
 )
 
 
@@ -149,15 +149,13 @@ def display_model_results(experiment_path, expanded):
 
     with st.expander("Model Results", expanded=expanded):
 
-        predictions_path = ml_gnn_results_file_path(
-            experiment_path=experiment_path, file_name="predictions.csv"
-        )
+        predictions_path = ml_results_file_path(experiment_path=experiment_path)
 
         if predictions_path.exists():
             predictions = pd.read_csv(predictions_path, index_col=0)
             display_predictions(predictions)
 
-        metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+        metrics_path = model_metrics_file_path(experiment_path=experiment_path)
         if metrics_path.exists():
             with open(metrics_path, "rb") as f:
                 # Load the metrics dictionary from the file
@@ -165,6 +163,6 @@ def display_model_results(experiment_path, expanded):
             display_model_metrics(metrics_dict)
             display_mean_std_model_metrics(metrics_dict)
 
-        plots_path = gnn_plots_directory(experiment_path=experiment_path)
+        plots_path = plots_directory(experiment_path=experiment_path)
         if plots_path.exists():
             display_plots(plots_path)

@@ -4,7 +4,7 @@ import joblib
 import pandas as pd
 from torch import load, save
 
-from polynet.app.options.file_paths import gnn_model_dir, representation_file
+from polynet.app.options.file_paths import model_dir, representation_file
 from polynet.app.options.representation import RepresentationOptions
 from polynet.featurizer.preprocess import sanitise_df
 from polynet.options.enums import MolecularDescriptors
@@ -142,7 +142,7 @@ def load_models_from_experiment(experiment_path: str, model_names: list) -> dict
         dict: Dictionary containing model names as keys and loaded models as values.
     """
 
-    gnn_models_path = gnn_model_dir(experiment_path)
+    gnn_models_path = model_dir(experiment_path)
     models = {}
 
     for model_name in model_names:
@@ -168,7 +168,7 @@ def load_scalers_from_experiment(experiment_path: str, model_names: list) -> dic
         dict: Dictionary containing model names as keys and loaded models as values.
     """
 
-    gnn_models_path = gnn_model_dir(experiment_path)
+    gnn_models_path = model_dir(experiment_path)
     scaler = {}
 
     for model_name in model_names:

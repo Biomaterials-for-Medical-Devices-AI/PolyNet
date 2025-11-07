@@ -13,6 +13,7 @@ from polynet.app.options.file_paths import (
     data_options_path,
     gnn_raw_data_file,
     gnn_raw_data_path,
+    polynet_experiment_path,
     polynet_experiments_base_dir,
     representation_file,
     representation_file_path,
@@ -71,7 +72,7 @@ def parse_representation_options(
         polybert_fp=calculate_polybert_fps,
     )
 
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
 
     representation_opts_path = representation_options_path(experiment_path=experiment_path)
 
@@ -175,7 +176,7 @@ experiment_name = experiment_selector(choices)
 
 if experiment_name:
 
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
 
     representation_opts = representation_options_path(experiment_path=experiment_path)
 

@@ -15,20 +15,16 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_model_dir,
-    gnn_model_metrics_file_path,
-    gnn_plots_directory,
     gnn_raw_data_file,
     gnn_raw_data_path,
-    ml_gnn_results_file_path,
+    ml_results_file_path,
     ml_results_parent_directory,
-    ml_tml_results_file_path,
-    polynet_experiments_base_dir,
+    model_dir,
+    model_metrics_file_path,
+    plots_directory,
+    polynet_experiment_path,
     representation_file_path,
     representation_options_path,
-    tml_model_dir,
-    tml_model_metrics_file_path,
-    tml_plots_directory,
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
@@ -65,7 +61,7 @@ def train_models(
 ):
 
     # paths for options and experiments
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
     tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
@@ -115,12 +111,12 @@ def train_models(
     )
 
     # Create directory to save plots
-    plots_dir = gnn_plots_directory(experiment_path=experiment_path)
+    plots_dir = plots_directory(experiment_path=experiment_path)
     plots_dir.mkdir(parents=True)
     # directory for models
-    gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
-    gnn_models_dir.mkdir(parents=True, exist_ok=True)
-    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+    models_dir = model_dir(experiment_path=experiment_path)
+    models_dir.mkdir(parents=True, exist_ok=True)
+    metrics_path = model_metrics_file_path(experiment_path=experiment_path)
 
     # check if user selected tml models to train
     if tml_models:
@@ -162,11 +158,11 @@ def train_models(
         )
 
         for model_name, model in tml_models.items():
-            save_path = gnn_models_dir / f"{model_name}.joblib"
+            save_path = models_dir / f"{model_name}.joblib"
             save_tml_model(model, save_path)
         if scalers:
             for scaler_name, scaler in scalers.items():
-                save_path = gnn_models_dir / f"{scaler_name}.pkl"
+                save_path = models_dir / f"{scaler_name}.pkl"
                 save_tml_model(scaler, save_path)
 
         # generate predictions df
@@ -178,9 +174,6 @@ def train_models(
             problem_type=data_options.problem_type,
             target_variable_name=data_options.target_variable_name,
         )
-
-        tml_models_dir = tml_model_dir(experiment_path=experiment_path)
-        tml_models_dir.mkdir(parents=True)
 
         metrics_tml = get_metrics(
             predictions=tml_predictions_df,
@@ -231,7 +224,7 @@ def train_models(
         )
 
         for model_name, model in gnn_models.items():
-            save_path = gnn_models_dir / f"{model_name}.pt"
+            save_path = models_dir / f"{model_name}.pt"
             save_gnn_model(model, save_path)
 
         plot_learning_curves(gnn_models, save_path=plots_dir)
@@ -289,12 +282,7 @@ def train_models(
         predictions = tml_predictions_df.copy()
         metrics = metrics_tml
 
-    save_data(
-        data=predictions,
-        data_path=ml_gnn_results_file_path(
-            experiment_path=experiment_path, file_name="predictions.csv"
-        ),
-    )
+    save_data(data=predictions, data_path=ml_results_file_path(experiment_path=experiment_path))
 
     with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=4)
@@ -318,27 +306,21 @@ experiment_name = experiment_selector(choices)
 
 if experiment_name:
 
-    experiment_path = polynet_experiments_base_dir() / experiment_name
+    experiment_path = polynet_experiment_path(experiment_name=experiment_name)
 
-    path_to_data_opts = data_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    path_to_data_opts = data_options_path(experiment_path=experiment_path)
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataOptions)
 
-    path_to_representation_opts = representation_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    path_to_representation_opts = representation_options_path(experiment_path=experiment_path)
     representation_opts = load_options(
         path=path_to_representation_opts, options_class=RepresentationOptions
     )
 
-    train_gnn_options = train_gnn_model_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
-    )
+    train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
 
     if train_gnn_options.exists():
-        st.error(
+        st.warning(
             "GNN model options already exist for this experiment. "
             "You can modify the settings below, but be aware that this will overwrite the existing results."
         )
