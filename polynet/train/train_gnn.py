@@ -448,10 +448,6 @@ def gnn_hyp_opt(
     return best_config
 
 
-import pandas as pd
-import numpy as np
-
-
 def load_best_config(hop_results_path, gnn_arch, config):
     """
     Loads the best configuration for a given GNN architecture based on the lowest validation loss.
