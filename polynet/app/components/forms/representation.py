@@ -227,29 +227,6 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 )
                 st.stop()
 
-            if DescriptorMergingMethods.WeightedAverage == merging_methods and len(
-                potential_weighting_factors
-            ) >= len(smiles_cols):
-
-                for col in smiles_cols:
-                    weight_col = st.selectbox(
-                        label=f"Select weighting factor for molecules in column {col}",
-                        options=potential_weighting_factors,
-                        key=f"{DescriptorCalculationStateKeys.WeightingFactor}_{col}",
-                        index=None,
-                        help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
-                    )
-
-                    if weight_col:
-                        mol_weights_col[col] = weight_col
-                        potential_weighting_factors.remove(weight_col)
-
-            elif len(potential_weighting_factors) < len(smiles_cols):
-                st.error(
-                    "Not enough numerical columns to use as weighting factors for all the SMILES columns. Please ensure that the dataset contains enough numerical columns to use as weighting factors."
-                )
-                merging_methods = None
-
             if not mol_weights_col and DescriptorMergingMethods.WeightedAverage == merging_methods:
                 st.warning(
                     "No weighting factors selected for the SMILES columns. The numerical representations won't undergo weighted average."
