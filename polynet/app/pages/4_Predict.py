@@ -10,7 +10,11 @@ from polynet.app.components.forms.analyse_results import (
     confusion_matrix_plot_form,
     parity_plot_form,
 )
-from polynet.app.components.plots import display_mean_std_model_metrics, display_model_results
+from polynet.app.components.plots import (
+    display_mean_std_model_metrics,
+    display_model_results,
+    display_unseen_predictions,
+)
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -265,7 +269,7 @@ def predict(
             if model not in metrics[number]:
                 metrics[number][model] = {}
 
-            metrics[number][model][dataset_name] = calculate_metrics(
+            metrics[number][model][dataset_name.split(".")[0]] = calculate_metrics(
                 y_true=predictions[label_col_name],
                 y_pred=predictions[col],
                 y_probs=predictions[probs_cols] if probs_cols else None,
@@ -349,6 +353,7 @@ if experiment_name:
         st.stop()
 
     display_model_results(experiment_path=experiment_path, expanded=False)
+    display_unseen_predictions(experiment_path=experiment_path)
 
     predictions_path = ml_results_file_path(experiment_path=experiment_path)
     predictions = pd.read_csv(predictions_path, index_col=0)
