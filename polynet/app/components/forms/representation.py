@@ -17,6 +17,46 @@ from polynet.options.enums import (
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
+def select_weight_factor(requires_weights: bool, data_options: DataOptions, df: pd.DataFrame):
+
+    mol_weights_col = {}
+
+    if requires_weights:
+        smiles_cols = data_options.smiles_cols
+        target_col = data_options.target_variable_col
+        id_col = data_options.id_col
+        descriptors_df = st.session_state.get(DescriptorCalculationStateKeys.DescriptorsDF, [])
+
+        potential_weighting_factors = df.drop(
+            columns=[target_col] + smiles_cols + [id_col] + descriptors_df, errors="ignore"
+        )
+        potential_weighting_factors = keep_only_numerical_columns(
+            df=potential_weighting_factors
+        ).columns.tolist()
+
+        if len(potential_weighting_factors) >= len(smiles_cols):
+
+            for col in smiles_cols:
+                weight_col = st.selectbox(
+                    label=f"Select weighting factor for molecules in column {col}",
+                    options=potential_weighting_factors,
+                    key=f"{DescriptorCalculationStateKeys.WeightingFactor}_{col}",
+                    index=None,
+                    help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
+                )
+
+                if weight_col:
+                    mol_weights_col[col] = weight_col
+                    potential_weighting_factors.remove(weight_col)
+
+        else:
+            st.error(
+                "Not enough numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
+            )
+
+    return mol_weights_col
+
+
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):
 
     with st.expander("Molecular Descriptors", expanded=False):
@@ -35,7 +75,6 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
         ).columns.tolist()
 
         potential_weighting_factors = potential_descriptors.copy()
-        mol_weights_col = {}
 
         st.markdown("### Calculate RDKit Molecular Descriptors")
 
@@ -64,6 +103,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             key=DescriptorCalculationStateKeys.DescriptorsRDKit,
             help="Choose which RDKit descriptors to compute for the molecules.",
         )
+        st.info(f"You have selected {len((selected_descriptors))} RDKit descriptors.")
 
         if data_options.string_representation == StringRepresentation.Smiles:
             disabled = True
@@ -100,7 +140,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             descriptors_df = st.multiselect(
                 "Select descriptors to use:",
                 options=potential_descriptors,
-                default=None,  # Preselect first 5 descriptors
+                default=None,
                 key=DescriptorCalculationStateKeys.DescriptorsDF,
                 help="Choose which molecular descriptors from your data to use for the analysis.",
             )
@@ -186,47 +226,16 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 )
                 st.stop()
 
-            if DescriptorMergingMethods.WeightedAverage == merging_methods and len(
-                potential_weighting_factors
-            ) >= len(smiles_cols):
-
-                for col in smiles_cols:
-                    weight_col = st.selectbox(
-                        label=f"Select weighting factor for molecules in column {col}",
-                        options=potential_weighting_factors,
-                        key=f"{DescriptorCalculationStateKeys.WeightingFactor}_{col}",
-                        index=None,
-                        help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
-                    )
-
-                    if weight_col:
-                        mol_weights_col[col] = weight_col
-                        potential_weighting_factors.remove(weight_col)
-
-            elif len(potential_weighting_factors) < len(smiles_cols):
-                st.error(
-                    "Not enough numerical columns to use as weighting factors for all the SMILES columns. Please ensure that the dataset contains enough numerical columns to use as weighting factors."
-                )
-                merging_methods = None
-
-            if not mol_weights_col and DescriptorMergingMethods.WeightedAverage == merging_methods:
-                st.warning(
-                    "No weighting factors selected for the SMILES columns. The numerical representations won't undergo weighted average."
-                )
-                merging_methods = None
-
             if DescriptorMergingMethods.Concatenate == merging_methods:
                 st.warning(
                     "Concatenation should only be used if the role of the molecules is different in the property to model, for example solute and solvent for solubility."
                 )
-        else:
-            mol_weights_col = {}
 
     descriptors_dict = {}
     descriptors_dict[MolecularDescriptors.RDKit] = selected_descriptors
     descriptors_dict[MolecularDescriptors.DataFrame] = descriptors_df
 
-    return descriptors_dict, mol_weights_col
+    return descriptors_dict
 
 
 def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict, dict]:
@@ -236,7 +245,6 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
     node_feats_config = {}
     edge_feats_config = {}
-    mol_weights_col = {}
 
     with st.expander("Graph Representation", expanded=False):
 
@@ -347,7 +355,7 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"**Total number of node features selected:** {total_num_node_feats}")
+            st.info(f"**Total number of node features selected:** {total_num_node_feats}")
 
         st.markdown("#### Bond Properties")
 
@@ -449,7 +457,7 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"**Total number of edge features selected:** {total_num_edge_feats}")
+            st.info(f"**Total number of edge features selected:** {total_num_edge_feats}")
 
         if not selected_atomic_properties and not selected_bond_properties:
             st.warning(
@@ -460,8 +468,6 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
         smiles_cols = data_opts.smiles_cols
 
         if len(smiles_cols) > 1:
-            target_col = data_opts.target_variable_col
-            id_col = data_opts.id_col
 
             st.markdown(
                 """
@@ -473,35 +479,11 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                 """
             )
 
-            if st.checkbox(
+            st.checkbox(
                 "Use weighting factors for graph representation",
-                value=False,
+                value=True,
                 key=DescriptorCalculationStateKeys.GraphWeightingFactor,
                 help="If checked, the numerical representations of the molecules will be weighted by a factor before merging them into a single graph representation.",
-            ):
+            )
 
-                potential_weighting_factors = df.drop(
-                    columns=[target_col] + smiles_cols + [id_col], errors="ignore"
-                )
-                potential_weighting_factors = keep_only_numerical_columns(
-                    df=potential_weighting_factors
-                ).columns.tolist()
-
-                if potential_weighting_factors:
-                    for col in smiles_cols:
-                        weight_col = st.selectbox(
-                            label=f"Select weighting factor for molecules in column {col}",
-                            options=potential_weighting_factors,
-                            index=None,
-                            key=f"{DescriptorCalculationStateKeys.GraphWeightingFactor}_{col}",
-                            help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
-                        )
-                        if weight_col:
-                            mol_weights_col[col] = weight_col
-                            potential_weighting_factors.remove(weight_col)
-                else:
-                    st.warning(
-                        "No numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
-                    )
-
-        return node_feats_config, edge_feats_config, mol_weights_col
+        return node_feats_config, edge_feats_config
