@@ -17,6 +17,45 @@ from polynet.options.enums import (
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
+def select_weight_factor(def_value: bool, data_options: DataOptions, df: pd.DataFrame):
+
+    mol_weights_col = {}
+
+    if st.checkbox("Set molecular representation weighting factors", value=def_value):
+        smiles_cols = data_options.smiles_cols
+        target_col = data_options.target_variable_col
+        id_col = data_options.id_col
+
+        potential_weighting_factors = df.drop(
+            columns=[target_col] + smiles_cols + [id_col], errors="ignore"
+        )
+        potential_weighting_factors = keep_only_numerical_columns(
+            df=potential_weighting_factors
+        ).columns.tolist()
+
+        if potential_weighting_factors:
+
+            for col in smiles_cols:
+                weight_col = st.selectbox(
+                    label=f"Select weighting factor for molecules in column {col}",
+                    options=potential_weighting_factors,
+                    key=f"{DescriptorCalculationStateKeys.WeightingFactor}_{col}",
+                    index=None,
+                    help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
+                )
+
+                if weight_col:
+                    mol_weights_col[col] = weight_col
+                    potential_weighting_factors.remove(weight_col)
+
+        else:
+            st.warning(
+                "No numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
+            )
+
+    return mol_weights_col
+
+
 def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):
 
     with st.expander("Molecular Descriptors", expanded=False):
@@ -64,6 +103,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             key=DescriptorCalculationStateKeys.DescriptorsRDKit,
             help="Choose which RDKit descriptors to compute for the molecules.",
         )
+        st.info(f"You have selected {len((selected_descriptors))} RDKit descriptors.")
 
         if data_options.string_representation == StringRepresentation.Smiles:
             disabled = True
