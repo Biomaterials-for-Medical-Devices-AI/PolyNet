@@ -75,7 +75,6 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
         ).columns.tolist()
 
         potential_weighting_factors = potential_descriptors.copy()
-        mol_weights_col = {}
 
         st.markdown("### Calculate RDKit Molecular Descriptors")
 
@@ -227,24 +226,16 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 )
                 st.stop()
 
-            if not mol_weights_col and DescriptorMergingMethods.WeightedAverage == merging_methods:
-                st.warning(
-                    "No weighting factors selected for the SMILES columns. The numerical representations won't undergo weighted average."
-                )
-                merging_methods = None
-
             if DescriptorMergingMethods.Concatenate == merging_methods:
                 st.warning(
                     "Concatenation should only be used if the role of the molecules is different in the property to model, for example solute and solvent for solubility."
                 )
-        else:
-            mol_weights_col = {}
 
     descriptors_dict = {}
     descriptors_dict[MolecularDescriptors.RDKit] = selected_descriptors
     descriptors_dict[MolecularDescriptors.DataFrame] = descriptors_df
 
-    return descriptors_dict, mol_weights_col
+    return descriptors_dict
 
 
 def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict, dict]:
