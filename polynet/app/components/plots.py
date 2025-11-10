@@ -8,6 +8,7 @@ from polynet.app.options.file_paths import (
     ml_results_file_path,
     model_metrics_file_path,
     plots_directory,
+    unseen_predictions_parent_path,
 )
 
 
@@ -169,3 +170,14 @@ def display_model_results(
         plots_path = plots_directory(experiment_path=experiment_path)
         if plots_path.exists():
             display_plots(plots_path)
+
+
+def display_unseen_predictions(experiment_path: Path):
+    unseen_results_path = unseen_predictions_parent_path(experiment_path=experiment_path)
+
+    subdirs = [p for p in unseen_results_path.iterdir() if p.is_dir()]
+
+    for path in subdirs:
+        experiment = str(path).split("/")[-1]
+
+        display_model_results(experiment_path=path, expanded=False, expander_str=experiment)
