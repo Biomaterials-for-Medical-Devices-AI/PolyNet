@@ -7,6 +7,7 @@ from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
     graph_representation,
     molecular_descriptor_representation,
+    select_weight_factor,
 )
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
@@ -194,22 +195,30 @@ if experiment_name:
 
     st.write(data.describe())
 
-    molecular_descriptors, descriptor_weights = molecular_descriptor_representation(
-        df=data, data_options=data_opts
+    molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
+    descriptors_weighted = (
+        st.session_state[DescriptorCalculationStateKeys.MergeDescriptorsApproach]
+        == DescriptorMergingMethods.WeightedAverage
     )
 
-    atomic_properties, bond_properties, graph_weights = graph_representation(
-        data_opts=data_opts, df=data
+    atomic_properties, bond_properties = graph_representation(data_opts=data_opts, df=data)
+    graphs_weighted = st.session_state[DescriptorCalculationStateKeys.GraphWeightingFactor]
+
+    requires_weights = descriptors_weighted or graphs_weighted
+
+    weights = select_weight_factor(
+        requires_weights=requires_weights, data_options=data_opts, df=data
     )
 
-    if (descriptor_weights) and (graph_weights) and (not descriptor_weights == graph_weights):
-
+    if requires_weights and not weights:
+        disabled = True
         st.error(
-            "The weights from the molecular descriptors and the weights from the graph representation are not equal. Please check your settings."
+            "To create the representation you require, we need the input of weighting columns for your molecules."
         )
-        st.stop()
+    else:
+        disabled = False
 
-    if st.button("Apply Representation Settings"):
+    if st.button("Apply Representation Settings", disabled=disabled):
         parse_representation_options(
             experiment_name=experiment_name,
             node_feats=atomic_properties,
@@ -217,5 +226,5 @@ if experiment_name:
             molecular_descriptors=molecular_descriptors,
             data=data,
             data_options=data_opts,
-            weights_col=graph_weights,
+            weights_col=weights,
         )
