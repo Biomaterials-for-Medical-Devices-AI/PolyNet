@@ -143,12 +143,10 @@ def unseen_predictions_experiment_parent_path(file_name: str, experiment_path: P
 
 def unseen_predictions_data_path(file_name: str, experiment_path: Path) -> Path:
 
-    return (
-        unseen_predictions_experiment_parent_path(
-            file_name=file_name, experiment_path=experiment_path
-        )
-        / "representation"
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+    return representation_parent_directory(experiment_path=experiment_path)
 
 
 def unseen_gnn_raw_data_path(file_name: str, experiment_path: Path) -> Path:
@@ -163,11 +161,11 @@ def unseen_gnn_raw_data_path(file_name: str, experiment_path: Path) -> Path:
         Path: The path to the raw data file for prediction.
     """
 
-    return (
-        unseen_predictions_data_path(file_name=file_name, experiment_path=experiment_path)
-        / "GNN"
-        / "raw"
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return gnn_raw_data_path(experiment_path=experiment_path)
 
 
 def unseen_gnn_raw_data_file(file_name: str, experiment_path: Path) -> Path:
@@ -181,19 +179,20 @@ def unseen_gnn_raw_data_file(file_name: str, experiment_path: Path) -> Path:
     Returns:
      Path: The path to the raw data file for prediction.
     """
-    return (
-        unseen_gnn_raw_data_path(file_name=file_name, experiment_path=experiment_path) / file_name
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return gnn_raw_data_file(file_name=file_name, experiment_path=experiment_path)
 
 
 def unseen_predictions_ml_results_path(file_name: str, experiment_path: Path) -> Path:
 
-    return (
-        unseen_predictions_experiment_parent_path(
-            file_name=file_name, experiment_path=experiment_path
-        )
-        / "ml_results"
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return ml_results_parent_directory(experiment_path=experiment_path)
 
 
 def ml_predictions_metrics_file_path(file_name: str, experiment_path: Path) -> Path:
@@ -203,10 +202,11 @@ def ml_predictions_metrics_file_path(file_name: str, experiment_path: Path) -> P
         experiment_path (Path): The path to the experiment directory.
     Returns:
     """
-    return (
-        unseen_predictions_ml_results_path(file_name=file_name, experiment_path=experiment_path)
-        / "metrics.json"
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return model_metrics_file_path(experiment_path=experiment_path)
 
 
 def ml_predictions_file_path(file_name: str, experiment_path: Path) -> Path:
@@ -216,10 +216,11 @@ def ml_predictions_file_path(file_name: str, experiment_path: Path) -> Path:
         experiment_path (Path): The path to the experiment directory.
     Returns:
     """
-    return (
-        unseen_predictions_ml_results_path(file_name=file_name, experiment_path=experiment_path)
-        / "predictions.csv"
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return ml_results_file_path(experiment_path=experiment_path)
 
 
 def representation_file_path(experiment_path: Path) -> Path:
