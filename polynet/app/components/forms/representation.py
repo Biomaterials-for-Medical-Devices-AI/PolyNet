@@ -34,7 +34,7 @@ def select_weight_factor(def_value: bool, data_options: DataOptions, df: pd.Data
             df=potential_weighting_factors
         ).columns.tolist()
 
-        if potential_weighting_factors:
+        if len(potential_weighting_factors) >= len(smiles_cols):
 
             for col in smiles_cols:
                 weight_col = st.selectbox(
@@ -50,8 +50,8 @@ def select_weight_factor(def_value: bool, data_options: DataOptions, df: pd.Data
                     potential_weighting_factors.remove(weight_col)
 
         else:
-            st.warning(
-                "No numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
+            st.error(
+                "Not enough numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
             )
 
     return mol_weights_col
