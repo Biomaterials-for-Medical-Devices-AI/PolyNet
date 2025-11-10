@@ -115,7 +115,7 @@ def gnn_raw_data_path(experiment_path: Path) -> Path:
         Path: The path to the raw data directory.
     """
 
-    return gnn_data_path(experiment_path) / "training" / "raw"
+    return gnn_data_path(experiment_path) / "raw"
 
 
 def gnn_raw_data_file(file_name: str, experiment_path: Path):
@@ -132,7 +132,24 @@ def gnn_raw_data_file(file_name: str, experiment_path: Path):
     return gnn_raw_data_path(experiment_path) / file_name
 
 
-def gnn_raw_data_predict_path(file_name: str, experiment_path: Path) -> Path:
+def unseen_predictions_parent_path(experiment_path: Path) -> Path:
+    return experiment_path / "unseen_predictions"
+
+
+def unseen_predictions_experiment_parent_path(file_name: str, experiment_path: Path) -> Path:
+    file_name_no_ext = file_name.split(".")[0]
+    return unseen_predictions_parent_path(experiment_path) / file_name_no_ext
+
+
+def unseen_predictions_data_path(file_name: str, experiment_path: Path) -> Path:
+
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
+    return representation_parent_directory(experiment_path=experiment_path)
+
+
+def unseen_gnn_raw_data_path(file_name: str, experiment_path: Path) -> Path:
     """
     Return the path to the raw data file for a GNN experiment's prediction.
     The path will be to a `csv` file called `raw_data.csv`
@@ -144,12 +161,14 @@ def gnn_raw_data_predict_path(file_name: str, experiment_path: Path) -> Path:
         Path: The path to the raw data file for prediction.
     """
 
-    file_name_no_ext = file_name.split(".")[0]
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
 
-    return gnn_data_path(experiment_path) / "predict" / file_name_no_ext / "raw"
+    return gnn_raw_data_path(experiment_path=experiment_path)
 
 
-def gnn_raw_data_predict_file(file_name: str, experiment_path: Path) -> Path:
+def unseen_gnn_raw_data_file(file_name: str, experiment_path: Path) -> Path:
     """
     Return the path to the raw data file for a GNN experiment's prediction.
     The path will be to a `csv` file called `raw_data.csv`
@@ -160,9 +179,48 @@ def gnn_raw_data_predict_file(file_name: str, experiment_path: Path) -> Path:
     Returns:
      Path: The path to the raw data file for prediction.
     """
-    return (
-        gnn_raw_data_predict_path(file_name=file_name, experiment_path=experiment_path) / file_name
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
     )
+
+    return gnn_raw_data_file(file_name=file_name, experiment_path=experiment_path)
+
+
+def unseen_predictions_ml_results_path(file_name: str, experiment_path: Path) -> Path:
+
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
+
+    return ml_results_parent_directory(experiment_path=experiment_path)
+
+
+def ml_predictions_metrics_file_path(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN predictions metrics file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
+
+    return model_metrics_file_path(experiment_path=experiment_path)
+
+
+def ml_predictions_file_path(file_name: str, experiment_path: Path) -> Path:
+    """
+    Return the path to the GNN predictions metrics file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
+
+    return ml_results_file_path(experiment_path=experiment_path)
 
 
 def representation_file_path(experiment_path: Path) -> Path:
@@ -265,58 +323,6 @@ def plots_directory(experiment_path: Path) -> Path:
 def model_metrics_file_path(experiment_path: Path) -> Path:
 
     return ml_results_parent_directory(experiment_path) / "metrics.json"
-
-
-def prediction_results_parent_path(experiment_path: Path) -> Path:
-    """
-    Return the path to the prediction results directory in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return experiment_path / "ml_predictions"
-
-
-def gnn_predictions_file_path(experiment_path: Path) -> Path:
-    """
-    Return the path to the machine learning GNN predictions file in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-        file_name (str): The name of the predictions file.
-    Returns:
-    """
-    return prediction_results_parent_path(experiment_path) / "GNN"
-
-
-def gnn_predictions_file(experiment_path: Path) -> Path:
-    """
-    Return the path to the machine learning GNN predictions file in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-        file_name (str): The name of the predictions file.
-    Returns:
-    """
-    return prediction_results_parent_path(experiment_path) / "predictions.csv"
-
-
-def gnn_predictions_plots_directory(experiment_path: Path) -> Path:
-    """
-    Return the path to the GNN predictions plots directory in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return prediction_results_parent_path(experiment_path) / "plots"
-
-
-def gnn_predictions_metrics_file_path(experiment_path: Path) -> Path:
-    """
-    Return the path to the GNN predictions metrics file in the experiment directory.
-    Args:
-        experiment_path (Path): The path to the experiment directory.
-    Returns:
-    """
-    return prediction_results_parent_path(experiment_path) / "metrics.json"
 
 
 def explanation_parent_directory(experiment_path: Path) -> Path:

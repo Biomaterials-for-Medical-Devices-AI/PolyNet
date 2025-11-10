@@ -10,17 +10,21 @@ from polynet.app.components.forms.analyse_results import (
     confusion_matrix_plot_form,
     parity_plot_form,
 )
-from polynet.app.components.plots import display_mean_std_model_metrics, display_model_results
+from polynet.app.components.plots import (
+    display_mean_std_model_metrics,
+    display_model_results,
+    display_unseen_predictions,
+)
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_predictions_file,
-    gnn_predictions_file_path,
-    gnn_predictions_metrics_file_path,
-    gnn_predictions_plots_directory,
-    gnn_raw_data_predict_file,
-    gnn_raw_data_predict_path,
+    ml_predictions_metrics_file_path,
+    ml_predictions_file_path,
+    unseen_predictions_experiment_parent_path,
+    unseen_gnn_raw_data_file,
+    unseen_predictions_ml_results_path,
+    unseen_gnn_raw_data_path,
     ml_results_file_path,
     model_dir,
     polynet_experiments_base_dir,
@@ -61,20 +65,19 @@ def predict(
 
     dataset_name = st.session_state[PredictPageStateKeys.PredictData].name
 
-    # save data and remove old results
-    path_to_data = gnn_raw_data_predict_path(
-        experiment_path=experiment_path, file_name=dataset_name
+    predictions_parent_dir = unseen_predictions_experiment_parent_path(
+        file_name=dataset_name, experiment_path=experiment_path
     )
-    if path_to_data.exists():
-        rmtree(path_to_data)
+
+    if predictions_parent_dir.exists():
+        rmtree(predictions_parent_dir)
+    create_directory(predictions_parent_dir)
+
+    # save data and remove old results
+    path_to_data = unseen_gnn_raw_data_path(experiment_path=experiment_path, file_name=dataset_name)
     create_directory(path_to_data)
 
-    file_path = gnn_raw_data_predict_file(experiment_path=experiment_path, file_name=dataset_name)
-    predictions_dir = gnn_predictions_file_path(experiment_path=experiment_path)
-
-    if predictions_dir.exists():
-        rmtree(predictions_dir)
-    create_directory(predictions_dir)
+    file_path = unseen_gnn_raw_data_file(experiment_path=experiment_path, file_name=dataset_name)
 
     if data_options.id_col in df.columns:
         df = df.set_index(data_options.id_col, drop=True)
@@ -102,7 +105,16 @@ def predict(
     if tml_models:
         # calculate descriptors
         descriptor_dfs = build_vector_representation(
-            representation_opts=representation_options, data_options=data_options, data=df
+            molecular_descriptors=representation_options.molecular_descriptors,
+            smiles_cols=data_options.smiles_cols,
+            id_col=data_options.id_col,
+            descriptor_merging_approach=representation_options.smiles_merge_approach,
+            target_col=data_options.target_variable_col,
+            weights_col=representation_options.weights_col,
+            data=df,
+            rdkit_independent=representation_options.rdkit_independent,
+            df_descriptors_independent=representation_options.df_descriptors_independent,
+            mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
         )
 
         for df_name, df in descriptor_dfs.items():
@@ -184,7 +196,7 @@ def predict(
                 if len(gnn_cols) < 2:
                     continue
                 # get the predicitons for a given architecture
-                gnn_df = predictions_gnn[gnn_cols]
+                gnn_df = predictions_gnn[gnn_cols].copy()
                 # get majority vote
                 ensemble_prediction, _ = mode(gnn_df.values, axis=1, keepdims=False)
                 # append the voting prediction to list of ensmble predictions
@@ -197,7 +209,18 @@ def predict(
                 )
 
         elif data_options.problem_type == ProblemTypes.Regression:
-            pass
+            for gnn_arch, gnn_cols in ensemble_cols.items():
+                if len(gnn_cols) < 2:
+                    continue
+                # get the predictions for a given architecture
+                gnn_df = predictions_gnn[gnn_cols].copy()
+                # get ensemble predictions
+                ensemble_prediction = gnn_df.mean(axis=0)
+                ensemble_preds.append(
+                    ensemble_prediction,
+                    index=gnn_df.index,
+                    name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                )
 
         if ensemble_preds:
             # concat all ensemble predictions into a single DF
@@ -246,14 +269,18 @@ def predict(
             if model not in metrics[number]:
                 metrics[number][model] = {}
 
-            metrics[number][model][dataset_name] = calculate_metrics(
+            metrics[number][model][dataset_name.split(".")[0]] = calculate_metrics(
                 y_true=predictions[label_col_name],
                 y_pred=predictions[col],
                 y_probs=predictions[probs_cols] if probs_cols else None,
                 problem_type=data_options.problem_type,
             )
 
-        metrics_path = gnn_predictions_metrics_file_path(experiment_path)
+        results_path = unseen_predictions_ml_results_path(
+            file_name=dataset_name, experiment_path=experiment_path
+        )
+        results_path.mkdir()
+        metrics_path = ml_predictions_metrics_file_path(dataset_name, experiment_path)
 
         with open(metrics_path, "w") as f:
             json.dump(metrics, f, indent=4)
@@ -262,7 +289,9 @@ def predict(
 
     st.subheader("Predictions")
     st.dataframe(predictions)
-    predictions.to_csv(gnn_predictions_file(experiment_path=experiment_path))
+    predictions.to_csv(
+        ml_predictions_file_path(file_name=dataset_name, experiment_path=experiment_path)
+    )
 
 
 st.header("Predict with Trained GNN Models")
@@ -324,6 +353,7 @@ if experiment_name:
         st.stop()
 
     display_model_results(experiment_path=experiment_path, expanded=False)
+    display_unseen_predictions(experiment_path=experiment_path)
 
     predictions_path = ml_results_file_path(experiment_path=experiment_path)
     predictions = pd.read_csv(predictions_path, index_col=0)
@@ -337,7 +367,7 @@ if experiment_name:
 
     if csv_file:
 
-        path_to_data = gnn_raw_data_predict_path(
+        path_to_data = unseen_predictions_experiment_parent_path(
             experiment_path=experiment_path, file_name=csv_file.name
         )
 

@@ -1,3 +1,4 @@
+from pathlib import Path
 import json
 
 import pandas as pd
@@ -7,6 +8,7 @@ from polynet.app.options.file_paths import (
     ml_results_file_path,
     model_metrics_file_path,
     plots_directory,
+    unseen_predictions_parent_path,
 )
 
 
@@ -25,7 +27,7 @@ from collections import defaultdict
 import re
 
 
-def display_plots(plots_path):
+def display_plots(plots_path: Path):
     """
     Organize and display plots from a directory with the following hierarchy:
     - Model name
@@ -69,7 +71,7 @@ def display_plots(plots_path):
                 st.image(plot_path, use_container_width=True)
 
 
-def display_model_metrics(metrics_dict):
+def display_model_metrics(metrics_dict: dict):
     """
     Display model performance metrics in a Streamlit dataframe.
 
@@ -104,7 +106,7 @@ def display_model_metrics(metrics_dict):
     st.dataframe(df)
 
 
-def display_mean_std_model_metrics(metrics_dict):
+def display_mean_std_model_metrics(metrics_dict: dict):
     """
     Display the mean ± std of model performance metrics per model per set across iterations.
     If only one value exists, std is omitted.
@@ -145,9 +147,11 @@ def display_mean_std_model_metrics(metrics_dict):
     st.dataframe(final_df)
 
 
-def display_model_results(experiment_path, expanded):
+def display_model_results(
+    experiment_path: Path, expanded: bool, expander_str: str = "Model Results"
+):
 
-    with st.expander("Model Results", expanded=expanded):
+    with st.expander(expander_str, expanded=expanded):
 
         predictions_path = ml_results_file_path(experiment_path=experiment_path)
 
@@ -166,3 +170,14 @@ def display_model_results(experiment_path, expanded):
         plots_path = plots_directory(experiment_path=experiment_path)
         if plots_path.exists():
             display_plots(plots_path)
+
+
+def display_unseen_predictions(experiment_path: Path):
+    unseen_results_path = unseen_predictions_parent_path(experiment_path=experiment_path)
+
+    subdirs = [p for p in unseen_results_path.iterdir() if p.is_dir()]
+
+    for path in subdirs:
+        experiment = str(path).split("/")[-1]
+
+        display_model_results(experiment_path=path, expanded=False, expander_str=experiment)
