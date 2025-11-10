@@ -132,15 +132,21 @@ def gnn_raw_data_file(file_name: str, experiment_path: Path):
     return gnn_raw_data_path(experiment_path) / file_name
 
 
-def unseen_predictions_parent_path(file_name: str, experiment_path: Path) -> Path:
+def unseen_predictions_parent_path(experiment_path: Path) -> Path:
+    return experiment_path / "unseen_predictions"
+
+
+def unseen_predictions_experiment_parent_path(file_name: str, experiment_path: Path) -> Path:
     file_name_no_ext = file_name.split(".")[0]
-    return experiment_path / "unseen_predictions" / file_name_no_ext
+    return unseen_predictions_parent_path(experiment_path) / file_name_no_ext
 
 
 def unseen_predictions_data_path(file_name: str, experiment_path: Path) -> Path:
 
     return (
-        unseen_predictions_parent_path(file_name=file_name, experiment_path=experiment_path)
+        unseen_predictions_experiment_parent_path(
+            file_name=file_name, experiment_path=experiment_path
+        )
         / "representation"
     )
 
@@ -183,7 +189,9 @@ def unseen_gnn_raw_data_file(file_name: str, experiment_path: Path) -> Path:
 def unseen_predictions_ml_results_path(file_name: str, experiment_path: Path) -> Path:
 
     return (
-        unseen_predictions_parent_path(file_name=file_name, experiment_path=experiment_path)
+        unseen_predictions_experiment_parent_path(
+            file_name=file_name, experiment_path=experiment_path
+        )
         / "ml_results"
     )
 

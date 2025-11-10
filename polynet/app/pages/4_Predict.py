@@ -17,7 +17,7 @@ from polynet.app.options.file_paths import (
     general_options_path,
     ml_predictions_metrics_file_path,
     ml_predictions_file_path,
-    unseen_predictions_parent_path,
+    unseen_predictions_experiment_parent_path,
     unseen_gnn_raw_data_file,
     unseen_predictions_ml_results_path,
     unseen_gnn_raw_data_path,
@@ -61,7 +61,7 @@ def predict(
 
     dataset_name = st.session_state[PredictPageStateKeys.PredictData].name
 
-    predictions_parent_dir = unseen_predictions_parent_path(
+    predictions_parent_dir = unseen_predictions_experiment_parent_path(
         file_name=dataset_name, experiment_path=experiment_path
     )
 
@@ -362,7 +362,7 @@ if experiment_name:
 
     if csv_file:
 
-        path_to_data = unseen_predictions_parent_path(
+        path_to_data = unseen_predictions_experiment_parent_path(
             experiment_path=experiment_path, file_name=csv_file.name
         )
 
