@@ -468,8 +468,6 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
         smiles_cols = data_opts.smiles_cols
 
         if len(smiles_cols) > 1:
-            target_col = data_opts.target_variable_col
-            id_col = data_opts.id_col
 
             st.markdown(
                 """
@@ -483,7 +481,7 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
             st.checkbox(
                 "Use weighting factors for graph representation",
-                value=False,
+                value=True,
                 key=DescriptorCalculationStateKeys.GraphWeightingFactor,
                 help="If checked, the numerical representations of the molecules will be weighted by a factor before merging them into a single graph representation.",
             )
