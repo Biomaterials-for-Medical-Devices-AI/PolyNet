@@ -17,11 +17,11 @@ from polynet.options.enums import (
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
-def select_weight_factor(def_value: bool, data_options: DataOptions, df: pd.DataFrame):
+def select_weight_factor(requires_weights: bool, data_options: DataOptions, df: pd.DataFrame):
 
     mol_weights_col = {}
 
-    if st.checkbox("Set molecular representation weighting factors", value=def_value):
+    if requires_weights:
         smiles_cols = data_options.smiles_cols
         target_col = data_options.target_variable_col
         id_col = data_options.id_col
@@ -355,7 +355,7 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"**Total number of node features selected:** {total_num_node_feats}")
+            st.info(f"**Total number of node features selected:** {total_num_node_feats}")
 
         st.markdown("#### Bond Properties")
 
@@ -457,7 +457,7 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                         1  # For properties without options, count as one feature
                     )
 
-            st.markdown(f"**Total number of edge features selected:** {total_num_edge_feats}")
+            st.info(f"**Total number of edge features selected:** {total_num_edge_feats}")
 
         if not selected_atomic_properties and not selected_bond_properties:
             st.warning(
