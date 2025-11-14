@@ -20,6 +20,7 @@ from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
     ml_predictions_metrics_file_path,
+    ml_predictions_parent_path,
     ml_predictions_file_path,
     unseen_predictions_experiment_parent_path,
     unseen_gnn_raw_data_file,
@@ -215,11 +216,13 @@ def predict(
                 # get the predictions for a given architecture
                 gnn_df = predictions_gnn[gnn_cols].copy()
                 # get ensemble predictions
-                ensemble_prediction = gnn_df.mean(axis=0)
+                ensemble_prediction = gnn_df.mean(axis=1)
                 ensemble_preds.append(
-                    ensemble_prediction,
-                    index=gnn_df.index,
-                    name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                    pd.Series(
+                        ensemble_prediction,
+                        index=gnn_df.index,
+                        name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                    )
                 )
 
         if ensemble_preds:
@@ -289,6 +292,10 @@ def predict(
 
     st.subheader("Predictions")
     st.dataframe(predictions)
+    predictions_parent_path = ml_predictions_parent_path(
+        file_name=dataset_name, experiment_path=experiment_path
+    )
+    predictions_parent_path.mkdir()
     predictions.to_csv(
         ml_predictions_file_path(file_name=dataset_name, experiment_path=experiment_path)
     )
@@ -356,7 +363,7 @@ if experiment_name:
     display_unseen_predictions(experiment_path=experiment_path)
 
     predictions_path = ml_results_file_path(experiment_path=experiment_path)
-    predictions = pd.read_csv(predictions_path, index_col=0)
+    # predictions = pd.read_csv(predictions_path, index_col=0)
 
     csv_file = st.file_uploader(
         "Upload a CSV file with SMILES strings for prediction",
