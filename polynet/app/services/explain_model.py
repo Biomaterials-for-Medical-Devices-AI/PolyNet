@@ -160,9 +160,9 @@ def explain_model(
     explanation_file = explanation_json_file_path(experiment_path=experiment_path)
     if explanation_file.exists():
         with open(explanation_file) as f:
-            attrs_mol = json.load(f)
+            existing_explanations = json.load(f)
     else:
-        attrs_mol = None
+        existing_explanations = None
 
     if isinstance(explain_mols, str):
         explain_mols = [explain_mols]
@@ -173,16 +173,18 @@ def explain_model(
     # Calculate the node masks for the selected molecules
     node_masks = calculate_attributions(
         mols=mols,
-        attrs_mol=attrs_mol,
+        attrs_mol=existing_explanations.get(model._name, {}).get(str(model_number), {}),
         explain_algorithm=explain_algorithm,
         explainer=explainer,
         model_name=model._name,
         model_number=int(model_number),
     )
 
-    # Save the node masks to a JSON file
+    combined_explanations = deep_update(existing_explanations, node_masks)
+
+    # --- Save merged explanations ---
     with open(explanation_file, "w") as f:
-        json.dump(node_masks, f, indent=4)
+        json.dump(combined_explanations, f, indent=4)
 
     node_masks = node_masks[model._name][model_number]
 
@@ -256,7 +258,7 @@ def explain_model(
             masks_mol.append(masks[ia : ia + n_atoms])
             ia += n_atoms
 
-        container.write(f"Plotting molecule {mol.idx} with algorithm {explain_algorithm}")
+        container.info(f"Plotting molecule `{mol.idx}` with algorithm `{explain_algorithm}`")
 
         container.write(f"True label: `{predictions.get(mol.idx, {}).get(Results.Label, 'N/A')}`")
         container.write(
@@ -409,3 +411,13 @@ def plot_projection_embeddings(
         plt.gca().get_legend().remove()
 
     return fig
+
+
+def deep_update(original: dict, new: dict):
+    """Recursively update nested dictionaries."""
+    for key, value in new.items():
+        if isinstance(value, dict) and key in original and isinstance(original[key], dict):
+            deep_update(original[key], value)
+        else:
+            original[key] = value
+    return original
