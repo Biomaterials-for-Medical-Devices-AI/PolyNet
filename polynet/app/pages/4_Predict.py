@@ -19,19 +19,19 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
+    ml_predictions_file_path,
     ml_predictions_metrics_file_path,
     ml_predictions_parent_path,
-    ml_predictions_file_path,
-    unseen_predictions_experiment_parent_path,
-    unseen_gnn_raw_data_file,
-    unseen_predictions_ml_results_path,
-    unseen_gnn_raw_data_path,
     ml_results_file_path,
     model_dir,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
+    unseen_gnn_raw_data_file,
+    unseen_gnn_raw_data_path,
+    unseen_predictions_experiment_parent_path,
+    unseen_predictions_ml_results_path,
 )
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.representation import RepresentationOptions

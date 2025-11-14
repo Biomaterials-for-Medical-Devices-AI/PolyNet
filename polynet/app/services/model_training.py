@@ -2,8 +2,8 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from torch import load, save
 import torch
+from torch import load, save
 
 from polynet.app.options.file_paths import model_dir, representation_file
 from polynet.app.options.representation import RepresentationOptions

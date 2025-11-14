@@ -15,8 +15,8 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    model_metrics_file_path,
     ml_results_file_path,
+    model_metrics_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
