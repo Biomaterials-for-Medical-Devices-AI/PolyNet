@@ -175,6 +175,9 @@ def display_model_results(
 def display_unseen_predictions(experiment_path: Path):
     unseen_results_path = unseen_predictions_parent_path(experiment_path=experiment_path)
 
+    if not unseen_results_path.exists():
+        return
+
     subdirs = [p for p in unseen_results_path.iterdir() if p.is_dir()]
 
     for path in subdirs:
