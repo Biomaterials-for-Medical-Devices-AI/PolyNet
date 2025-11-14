@@ -536,11 +536,16 @@ def parity_plot_form(
         color_by_opts.append(iterator)
 
     trained_gnns = gnn_training_options.GNNConvolutionalLayers.keys()
+    models = [
+        col_name.split(" ")[0]
+        for col_name in predictions_df.columns
+        if Results.Predicted in col_name
+    ]
 
     model_name = st.multiselect(
         "Select the model to display parity plot",
-        options=trained_gnns,
-        default=list(trained_gnns)[0],
+        options=models,
+        default=models[0],
         key=AnalyseResultsStateKeys.PlotModels,
         help="Select the model for which you want to display the parity plot.",
     )

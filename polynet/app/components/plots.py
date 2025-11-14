@@ -1,5 +1,7 @@
-from pathlib import Path
+from collections import defaultdict
 import json
+from pathlib import Path
+import re
 
 import pandas as pd
 import streamlit as st
@@ -21,10 +23,6 @@ def display_predictions(predictions_df: pd.DataFrame):
     """
     st.write("### Predictions")
     st.write(predictions_df)
-
-
-from collections import defaultdict
-import re
 
 
 def display_plots(plots_path: Path):
@@ -174,6 +172,9 @@ def display_model_results(
 
 def display_unseen_predictions(experiment_path: Path):
     unseen_results_path = unseen_predictions_parent_path(experiment_path=experiment_path)
+
+    if not unseen_results_path.exists():
+        return
 
     subdirs = [p for p in unseen_results_path.iterdir() if p.is_dir()]
 

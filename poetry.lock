@@ -292,6 +292,31 @@ files = [
 ]
 
 [[package]]
+name = "captum"
+version = "0.8.0"
+description = "Model interpretability for PyTorch"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "captum-0.8.0-py3-none-any.whl", hash = "sha256:b0465431f5cbc666d86c14ee853ee6155e97460369238f85bd10a241b87eea47"},
+    {file = "captum-0.8.0.tar.gz", hash = "sha256:73f2e5a07ffe6ac6647a6f12cd2f67f0d8f717329f150ddf08ef73cba0858d26"},
+]
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "<2.0"
+packaging = "*"
+torch = ">=1.10"
+tqdm = "*"
+
+[package.extras]
+dev = ["annoy", "black", "flake8", "flask", "flask-compress", "ipython", "ipywidgets", "jupyter", "mypy (>=0.760)", "parameterized", "pytest", "pytest-cov", "scikit-learn", "sphinx", "sphinx-autodoc-typehints", "sphinxcontrib-katex", "ufmt", "usort (==1.0.2)"]
+insights = ["flask", "flask-compress", "ipython", "ipywidgets", "jupyter"]
+test = ["parameterized", "pytest", "pytest-cov"]
+tutorials = ["flask", "flask-compress", "ipython", "ipywidgets", "jupyter", "torchtext", "torchvision"]
+
+[[package]]
 name = "certifi"
 version = "2025.7.14"
 description = "Python package for providing Mozilla's CA Bundle."
@@ -4580,4 +4605,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.11"
-content-hash = "46adecfbed9b853e1b0db118f0286c06b84ad76ba0908cbc8880166cbf579349"
+content-hash = "e99f1a11325072c20aa1050b86a0ff01b245a19ffc3fc1ac416ef83fc095a9d8"

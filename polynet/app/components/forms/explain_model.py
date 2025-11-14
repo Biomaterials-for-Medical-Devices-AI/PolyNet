@@ -7,14 +7,14 @@ from torch_geometric.data import Dataset
 
 from polynet.app.options.data import DataOptions
 from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
-from polynet.app.services.descriptors import (
+from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
+from polynet.app.services.model_training import load_gnn_model
+from polynet.app.utils import extract_number
+from polynet.featurizer.descriptor_calculation import (
     calculate_rdkit_df_dict,
     get_unique_smiles,
     merge_weighted,
 )
-from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
-from polynet.app.services.model_training import load_gnn_model
-from polynet.app.utils import extract_number
 from polynet.options.col_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.options.enums import (
     DataSets,
@@ -102,6 +102,7 @@ def embedding_projection(
         else:
             model_path = gnn_models_dir / model_name
             model = load_gnn_model(model_path)
+            st.info(f"Model `{model_name}` loaded")
 
         # get the name of the predicted col name for the model selected by the user
         predicted_col_name = get_predicted_label_column_name(

@@ -209,6 +209,13 @@ def ml_predictions_metrics_file_path(file_name: str, experiment_path: Path) -> P
     return model_metrics_file_path(experiment_path=experiment_path)
 
 
+def ml_predictions_parent_path(file_name: str, experiment_path: Path) -> Path:
+    experiment_path = unseen_predictions_experiment_parent_path(
+        file_name=file_name, experiment_path=experiment_path
+    )
+    return ml_results_parent_directory(experiment_path=experiment_path)
+
+
 def ml_predictions_file_path(file_name: str, experiment_path: Path) -> Path:
     """
     Return the path to the GNN predictions metrics file in the experiment directory.

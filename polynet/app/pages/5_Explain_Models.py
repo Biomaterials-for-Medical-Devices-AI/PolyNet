@@ -6,15 +6,15 @@ from polynet.app.components.forms.explain_model import (
     embedding_projection,
     explain_predictions_form,
 )
-from polynet.app.components.plots import display_model_results
+from polynet.app.components.plots import display_model_results, display_unseen_predictions
 from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_model_dir,
     gnn_raw_data_file,
     gnn_raw_data_path,
-    ml_gnn_results_file_path,
+    ml_results_file_path,
+    model_dir,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
@@ -86,6 +86,7 @@ if experiment_name:
 
     # display the modelling results
     display_model_results(experiment_path=experiment_path, expanded=False)
+    display_unseen_predictions(experiment_path=experiment_path)
 
     # load the graph dataset to run the explanations
     dataset = CustomPolymerGraph(
@@ -106,16 +107,13 @@ if experiment_name:
     )
 
     # load the predictions of the model
-    preds = pd.read_csv(
-        ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv"),
-        index_col=0,
-    )
+    preds = pd.read_csv(ml_results_file_path(experiment_path=experiment_path), index_col=0)
 
     # get the name of the iterator used for training
     iterator_col = get_iterator_name(general_experiment_options.split_type)
 
     # get the list of trained GNN models
-    gnn_models_dir = gnn_model_dir(experiment_path=experiment_path)
+    gnn_models_dir = model_dir(experiment_path=experiment_path)
     gnn_models = [
         model.name
         for model in gnn_models_dir.iterdir()

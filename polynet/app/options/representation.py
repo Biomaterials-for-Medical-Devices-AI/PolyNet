@@ -10,14 +10,14 @@ will then have the same style, such as font size, font family, colour scheme, et
 # TODO: remove the rdkit_descriptors, df_descriptors, and polybert_fp and just keep the molecular_descriptors dict
 @dataclass
 class RepresentationOptions:
-    molecular_descriptors: dict[MolecularDescriptors, list[str]]
-    rdkit_descriptors: list[str]
-    df_descriptors: list[str]
-    rdkit_independent: bool
-    df_descriptors_independent: bool
-    mix_rdkit_df_descriptors: bool
     smiles_merge_approach: list
     node_feats: dict
     edge_feats: dict
-    weights_col: dict[str, str] | None
+    molecular_descriptors: dict[MolecularDescriptors, list[str]]
+    rdkit_descriptors: list[str] = None
+    df_descriptors: list[str] = None
+    rdkit_independent: bool = True
+    df_descriptors_independent: bool = None
+    mix_rdkit_df_descriptors: bool = False
+    weights_col: dict[str, str] | None = None
     polybert_fp: bool = False
