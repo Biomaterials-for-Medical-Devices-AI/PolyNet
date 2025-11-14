@@ -1,5 +1,7 @@
+from collections import defaultdict
 import json
 from pathlib import Path
+import re
 
 import pandas as pd
 import streamlit as st
@@ -21,10 +23,6 @@ def display_predictions(predictions_df: pd.DataFrame):
     """
     st.write("### Predictions")
     st.write(predictions_df)
-
-
-from collections import defaultdict
-import re
 
 
 def display_plots(plots_path: Path):
