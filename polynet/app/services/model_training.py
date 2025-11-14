@@ -3,6 +3,7 @@ from pathlib import Path
 import joblib
 import pandas as pd
 from torch import load, save
+import torch
 
 from polynet.app.options.file_paths import model_dir, representation_file
 from polynet.app.options.representation import RepresentationOptions
@@ -40,7 +41,7 @@ def load_gnn_model(path):
     Returns:
         The loaded GNN model.
     """
-    return load(path, weights_only=False)
+    return load(path, weights_only=False, map_location=torch.device("cpu"))
 
 
 def load_tml_model(path):
