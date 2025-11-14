@@ -15,8 +15,8 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_model_metrics_file_path,
-    ml_gnn_results_file_path,
+    model_metrics_file_path,
+    ml_results_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
@@ -81,14 +81,9 @@ if experiment_name:
 
     display_model_results(experiment_path=experiment_path, expanded=False)
 
-    predictions_path = predictions_path = ml_gnn_results_file_path(
-        experiment_path=experiment_path, file_name="predictions.csv"
-    )
-    predictions = pd.read_csv(
-        ml_gnn_results_file_path(experiment_path=experiment_path, file_name="predictions.csv"),
-        index_col=0,
-    )
-    metrics_path = gnn_model_metrics_file_path(experiment_path=experiment_path)
+    predictions_path = predictions_path = ml_results_file_path(experiment_path=experiment_path)
+    predictions = pd.read_csv(predictions_path, index_col=0)
+    metrics_path = model_metrics_file_path(experiment_path=experiment_path)
     with open(metrics_path, "rb") as f:
         metrics = json.load(f)
 
