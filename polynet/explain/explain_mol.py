@@ -11,9 +11,10 @@ from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 from scipy.stats import gaussian_kde
 
 from polynet.utils.chem_utils import fragment_and_match
+from matplotlib import rcParams
 
 
-def get_fragment_importance(mols, node_masks, explain_algorithm):
+def get_fragment_importance(mols, node_masks, explain_algorithm, fragmentation_approach):
 
     frags_importances = {}
 
@@ -25,7 +26,7 @@ def get_fragment_importance(mols, node_masks, explain_algorithm):
 
         for smiles in mol.mols:
 
-            frags = fragment_and_match(smiles)
+            frags = fragment_and_match(smiles, fragmentation_approach)
 
             for frag_smiles, atom_indices in frags.items():
 
@@ -214,148 +215,126 @@ def plot_attribution_distribution(
     linewidth=0.7,
     show_averages=True,
 ):
-    """
-    Plot attribution distribution with KDE for multiple values per functional group.
 
-    Parameters:
-    -----------
-    attribution_dict : dict
-        Keys are functional groups (str), values are lists of attribution values
-    figsize : tuple, optional
-        Figure size (width, height)
-    neg_color : str, optional
-        Color for negative attributions (blue default)
-    pos_color : str, optional
-        Color for positive attributions (orange default)
-    kde_bandwidth : float, optional
-        Bandwidth for KDE smoothing (default 0.2)
-    linewidth : float, optional
-        Width of distribution lines (default 0.7)
-    show_averages : bool, optional
-        Whether to show average markers (default True)
+    # Publication quality settings
+    rcParams.update(
+        {
+            "font.size": 12,
+            "font.family": "sans-serif",
+            "axes.linewidth": 1.2,
+            "axes.labelsize": 14,
+            "axes.titleweight": "bold",
+            "axes.titlepad": 15,
+            "xtick.major.size": 4,
+            "ytick.major.size": 4,
+        }
+    )
 
-    Returns:
-    --------
-    matplotlib.figure.Figure
-    """
-
-    # Prepare data
     labels = list(attribution_dict.keys())
     values = list(attribution_dict.values())
 
-    # Create figure with adjusted layout
     fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.3)  # Make room for y-axis labels
+    fig.subplots_adjust(left=0.32, right=0.95)
 
-    # Calculate positions for each label
     y_pos = np.arange(len(labels))
+    ax.axvline(0, color="black", linewidth=1.2, linestyle="-", alpha=0.8, zorder=1)
 
-    # Plot zero line
-    ax.axvline(0, color="black", linewidth=0.8, linestyle="-", zorder=1)
-
-    # Plot each distribution
     verts_pos = []
     verts_neg = []
 
     for i, (label, vals) in enumerate(zip(labels, values)):
         vals = np.array(vals)
-
-        # Skip if no data
         if len(vals) == 0:
             continue
-
-        # Add small noise if all values are identical
         if len(vals) > 1 and np.allclose(vals, vals[0]):
-            vals = vals + np.random.normal(0, 1e-6, size=len(vals))
+            vals += np.random.normal(0, 1e-6, size=len(vals))
 
-        # Calculate average
         avg = np.mean(vals)
 
-        # Create KDE for positive values
+        # --- positive KDE
         pos_vals = vals[vals > 0]
         if len(pos_vals) > 1:
             try:
                 kde_pos = gaussian_kde(pos_vals, bw_method=kde_bandwidth)
-                x_pos = np.linspace(0, max(3, vals.max() * 1.5), 100)
-                density_pos = kde_pos(x_pos)
-                # Scale density for visualization
-                density_pos = density_pos / (density_pos.max() + 1e-8) * 0.4
-                # Create vertices for polygon
-                verts_pos.append(list(zip(x_pos, i + density_pos)) + [(0, i)])
+                x_pos = np.linspace(0, max(3, vals.max() * 1.4), 120)
+                dp = kde_pos(x_pos)
+                dp = dp / (dp.max() + 1e-8) * 0.45
+                verts_pos.append(list(zip(x_pos, i + dp)) + [(0, i)])
             except np.linalg.LinAlgError:
-                pass  # Skip if KDE fails
+                pass
 
-        # Create KDE for negative values
+        # --- negative KDE
         neg_vals = vals[vals < 0]
         if len(neg_vals) > 1:
             try:
                 kde_neg = gaussian_kde(neg_vals, bw_method=kde_bandwidth)
-                x_neg = np.linspace(min(-3, vals.min() * 1.5), 0, 100)
-                density_neg = kde_neg(x_neg)
-                # Scale density for visualization
-                density_neg = density_neg / (density_neg.max() + 1e-8) * 0.4
-                # Create vertices for polygon
-                verts_neg.append(list(zip(x_neg, i - density_neg)) + [(0, i)])
+                x_neg = np.linspace(min(-3, vals.min() * 1.4), 0, 120)
+                dn = kde_neg(x_neg)
+                dn = dn / (dn.max() + 1e-8) * 0.45
+                verts_neg.append(list(zip(x_neg, i - dn)) + [(0, i)])
             except np.linalg.LinAlgError:
-                pass  # Skip if KDE fails
+                pass
 
-    # Plot positive distributions (orange)
+    # --- Slight transparency gradient
+    alpha_fill = 0.6
+    edge_alpha = 0.9
+
     if verts_pos:
         poly_pos = PolyCollection(
             verts_pos,
             facecolors=pos_color,
             edgecolors=pos_color,
-            linewidths=linewidth,
-            alpha=0.7,
-            zorder=2,
+            linewidths=1,
+            alpha=alpha_fill,
+            zorder=3,
         )
         ax.add_collection(poly_pos)
 
-    # Plot negative distributions (blue)
     if verts_neg:
         poly_neg = PolyCollection(
             verts_neg,
             facecolors=neg_color,
             edgecolors=neg_color,
-            linewidths=linewidth,
-            alpha=0.7,
+            linewidths=1,
+            alpha=alpha_fill,
             zorder=3,
         )
         ax.add_collection(poly_neg)
 
-    # Add average markers if requested
+    # --- averages
     if show_averages:
         for i, vals in enumerate(values):
-            if len(vals) > 0:
-                avg = np.mean(np.array(vals))  # Ensure we use original values for average
+            if len(vals):
+                avg = np.mean(vals)
                 color = pos_color if avg > 0 else neg_color
-                ax.plot(avg, i, "o", color=color, markersize=8, markeredgecolor="white", zorder=4)
-                # Add average value text
+
+                ax.scatter(avg, i, s=70, color=color, edgecolors="black", linewidths=0.8, zorder=5)
                 ax.text(
-                    avg + 0.1 * np.sign(avg),
+                    avg + 0.12 * np.sign(avg),
                     i,
                     f"{avg:.2f}",
+                    fontsize=11,
                     va="center",
                     ha="left" if avg > 0 else "right",
-                    fontsize=9,
-                    zorder=5,
+                    weight="bold",
                 )
 
-    # Customize axes
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels)
-    ax.set_xlabel("Attribution", fontsize=12)
-    ax.set_title("Attribution Distribution", fontsize=14, pad=20)
+    ax.set_yticklabels(labels, fontsize=12)
+    ax.set_xlabel("Attribution", fontsize=14)
+    ax.set_title("Attribution Distributions by Functional Group")
 
-    # Set symmetrical x-limits if needed
-    xlim = max(3, np.abs(ax.get_xlim()).max())
-    ax.set_xlim(-xlim, xlim)
+    # Symmetric bounds around zero
+    limit = max(3, np.abs(ax.get_xlim()).max())
+    ax.set_xlim(-limit, limit)
 
-    # Add grid lines
-    ax.grid(True, axis="x", linestyle="--", alpha=0.5)
+    ax.grid(True, axis="x", linestyle="--", alpha=0.3, linewidth=0.8, zorder=0)
 
-    # Custom spines
+    # remove spines
     for spine in ["top", "right"]:
         ax.spines[spine].set_visible(False)
+
+    ax.spines["bottom"].set_linewidth(1.2)
+    ax.spines["left"].set_linewidth(1.2)
 
     return fig

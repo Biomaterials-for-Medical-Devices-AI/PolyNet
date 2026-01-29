@@ -12,6 +12,10 @@ from polynet.options.enums import AtomFeatures, BondFeatures, StringRepresentati
 from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
 from polynet.utils.psmiles import PolymerSmiles
 
+from rdkit.Chem.Scaffolds import MurckoScaffold
+
+from polynet.options.enums import FragmentationMethods
+
 
 class PS(PolymerSmiles):
     def __init__(self, psmiles, deactivate_warnings=True):
@@ -114,38 +118,105 @@ def sanitize_fragment(frag):
     return editable.GetMol()
 
 
-def fragment_and_match(smiles):
+def fragment_and_match(
+    smiles, fragmentation_approach: FragmentationMethods = FragmentationMethods.BRICS
+):
     """
-    BRICS-decomposes a molecule and matches cleaned fragments back to the original.
+    Fragment a molecule using the chosen method and return mapping to atom indices.
 
-    Parameters:
-        smiles (str): SMILES string of the molecule.
+    Parameters
+    ----------
+    smiles : str
+    mode : str, one of ["brics", "functional_groups", "murcko"]
 
-    Returns:
-        dict: {fragment_smiles: [list of atom index lists in original mol]}
+    Returns
+    -------
+    dict
+        {fragment_smiles : [ [atom indices], ... ] }
     """
+
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
-        raise ValueError("Invalid SMILES provided.")
+        raise ValueError("Invalid SMILES input.")
 
-    # Get BRICS fragments with dummy atoms
-    raw_frags = list(BRICS.BRICSDecompose(mol, returnMols=True))
+    match fragmentation_approach:
 
+        case FragmentationMethods.BRICS:
+            frags = _fragments_brics(mol)
+
+        # case "functional_groups":
+        #     frags = _fragments_functional_groups(mol)
+
+        case FragmentationMethods.MurckoScaffold:
+            frags = _fragments_murcko(mol)
+
+        case _:
+            raise ValueError(f"Unknown fragmentation mode: {fragmentation_approach}")
+
+    # ----- match fragments back to original -----
     matches = {}
-    for raw_frag in raw_frags:
-        frag = sanitize_fragment(raw_frag)
+
+    for frag in frags:
         try:
             Chem.SanitizeMol(frag)
-        except Exception as e:
-            print(f"Error sanitizing fragment: {Chem.MolToSmiles(raw_frag)}. Exception: {e}")
+        except:
             continue
 
-        substruct_matches = mol.GetSubstructMatches(frag, uniquify=True)
-        if substruct_matches:
-            frag_smiles = Chem.MolToSmiles(frag)
-            matches[frag_smiles] = [list(match) for match in substruct_matches]
+        m = mol.GetSubstructMatches(frag, uniquify=True)
+        if m:
+            smi = Chem.MolToSmiles(frag)
+            matches[smi] = [list(x) for x in m]
 
     return matches
+
+
+def _fragments_brics(mol):
+    raw = list(BRICS.BRICSDecompose(mol, returnMols=True))
+    out = []
+
+    for frag in raw:
+        frag = Chem.Mol(frag)  # clone
+        # remove dummy atoms *after* sanitization
+        for a in reversed([a.GetIdx() for a in frag.GetAtoms() if a.GetAtomicNum() == 0]):
+            frag = Chem.RWMol(frag)
+            frag.RemoveAtom(a)
+            frag = frag.GetMol()
+        Chem.SanitizeMol(frag)
+        out.append(frag)
+
+    return out
+
+
+# def _fragments_functional_groups(mol):
+
+#     frags = []
+#     fg_smarts = GetFunctionalGroupSmarts()
+
+#     for name, smarts in fg_smarts.items():
+#         patt = Chem.MolFromSmarts(smarts)
+#         if patt is None:
+#             continue
+
+#         if mol.HasSubstructMatch(patt):
+#             frags.append(patt)
+
+#     return frags
+
+
+def _fragments_murcko(mol):
+    scaffold = MurckoScaffold.GetScaffoldForMol(mol)
+
+    if scaffold is None:
+        return []
+
+    frags = [scaffold]
+
+    # optionally include sidechains and ring systems
+    ring = MurckoScaffold.MakeScaffoldGeneric(scaffold)
+    if ring:
+        frags.append(ring)
+
+    return frags
 
 
 def count_atom_property_frequency(

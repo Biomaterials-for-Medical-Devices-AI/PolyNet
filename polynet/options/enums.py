@@ -195,6 +195,13 @@ class ImportanceNormalisationMethods(StrEnum):
     NoNormalisation = "No Normalisation"
 
 
+class FragmentationMethods(StrEnum):
+    MurckoScaffold = "Murcko Scaffold"
+    BRICS = "BRICS"
+    FunctionalGroups = "Functional Groups"
+    Recap = "RECAP"
+
+
 class DimensionalityReduction(StrEnum):
     tSNE = "t-SNE"
     Perplexity = "perplexity"
