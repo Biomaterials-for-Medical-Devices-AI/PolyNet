@@ -529,7 +529,7 @@ def split_data_form(problem_type: ProblemTypes):
 
     st.slider(
         "Select the test split ratio",
-        min_value=0.1,
+        min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.TestSize,
@@ -537,7 +537,7 @@ def split_data_form(problem_type: ProblemTypes):
 
     st.slider(
         "Select the validation split ratio",
-        min_value=0.0,
+        min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.ValidationSize,
