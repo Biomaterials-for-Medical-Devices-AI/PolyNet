@@ -442,7 +442,7 @@ def GNN_shared_params_form(
             apply_weighting = st.selectbox(
                 "Select when you would like to apply the weighting to the graph",
                 options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
-                index=0,
+                index=1,
                 key=TrainGNNStateKeys.GNNMonomerWeighting + network.value if network else "",
             )
         else:
@@ -453,7 +453,7 @@ def GNN_shared_params_form(
         if problem_type == ProblemTypes.Classification:
             if st.checkbox(
                 "Apply asymmetric loss function",
-                value=True,
+                value=False,
                 key=TrainGNNStateKeys.AsymmetricLoss + network.value if network else "",
             ):
                 assym_loss_strength = st.slider(
