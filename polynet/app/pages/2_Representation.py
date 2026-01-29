@@ -197,12 +197,17 @@ if experiment_name:
 
     molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
     descriptors_weighted = (
-        st.session_state[DescriptorCalculationStateKeys.MergeDescriptorsApproach]
+        st.session_state.get(
+            DescriptorCalculationStateKeys.MergeDescriptorsApproach,
+            DescriptorMergingMethods.NoMerging,
+        )
         == DescriptorMergingMethods.WeightedAverage
     )
 
     atomic_properties, bond_properties = graph_representation(data_opts=data_opts, df=data)
-    graphs_weighted = st.session_state[DescriptorCalculationStateKeys.GraphWeightingFactor]
+    graphs_weighted = st.session_state.get(
+        DescriptorCalculationStateKeys.GraphWeightingFactor, False
+    )
 
     requires_weights = descriptors_weighted or graphs_weighted
 
