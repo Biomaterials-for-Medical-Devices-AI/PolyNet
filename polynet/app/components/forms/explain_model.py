@@ -52,10 +52,10 @@ def explain_mols_widget(
         explain_mols = None
 
     if not mols_to_explain or st.checkbox(
-        "Manually select points to show in projection plot", key=ManuallySelectStateKey
+        "Manually select points to show in explanation plot", key=ManuallySelectStateKey
     ):
         mols_to_plot = st.multiselect(
-            "Select the molecules you would like to see in the projection plot",
+            "Select the molecules you would like to see in the explanation plot",
             options=data.index,
             default=explain_mols,
             key=MolsStateKey,
@@ -212,6 +212,7 @@ def embedding_projection(
                 reduction_method=reduction_method,
                 reduction_parameters=reduction_params,
                 colormap=colour_map,
+                label_name=colour_projection_by,
             )
 
 
@@ -230,17 +231,22 @@ def explain_predictions_form(
         "Explain model predictions", value=True, key=ExplainModelStateKeys.ExplainModels
     ):
 
-        model = st.selectbox(
+        models = st.multiselect(
             "Select a GNN Model to Explain",
             options=sorted(gnn_models),
             key=ExplainModelStateKeys.ExplainModel,
         )
 
-        if model:
-            model_path = gnn_models_dir / model
-            gnn_model = load_gnn_model(model_path)
-            gnn_model_name = gnn_model._name
-            number = extract_number(model)
+        models_dict = {}
+
+        if models:
+            for model in models:
+                model_path = gnn_models_dir / model
+                number = extract_number(model)
+                gnn_model = load_gnn_model(model_path)
+                gnn_model_name = gnn_model._name
+                models_dict[f"{gnn_model_name}_{number}"] = gnn_model
+
             preds = preds.loc[preds[iterator_col] == number]
 
         else:
@@ -263,7 +269,7 @@ def explain_predictions_form(
         )
 
         plot_mols = st.multiselect(
-            "Select Polymers ID to Plot",
+            "Select Polymers ID to Plot in local explanations",
             options=sorted(explain_mol),
             key=ExplainModelStateKeys.PlotIDSelector,
             default=None,
@@ -304,7 +310,7 @@ def explain_predictions_form(
         explain_algorithm = st.selectbox(
             "Select Explainability Algorithm",
             options=[
-                ExplainAlgorithms.GNNExplainer,
+                # ExplainAlgorithms.GNNExplainer,
                 ExplainAlgorithms.IntegratedGradients,
                 ExplainAlgorithms.Saliency,
                 ExplainAlgorithms.InputXGradients,
@@ -327,14 +333,14 @@ def explain_predictions_form(
             neg_color = st.color_picker(
                 "Select Negative Color",
                 key=ExplainModelStateKeys.NegColorPlots,
-                value="#40bcde",  # Default red color
+                value="#40bcde",  # Default blue color
             )
 
         with cols[1]:
             pos_color = st.color_picker(
                 "Select Positive Color",
                 key=ExplainModelStateKeys.PosColorPlots,
-                value="#e64747",  # Default green color
+                value="#e64747",  # Default red color
             )
 
         cutoff = st.select_slider(
@@ -344,7 +350,7 @@ def explain_predictions_form(
             key=ExplainModelStateKeys.CutoffSelector,
         )
 
-        normalisation_type = st.selectbox(
+        normalisation_type = st.radio(
             "Select Normalisation Type",
             options=[
                 ImportanceNormalisationMethods.Local,
@@ -353,11 +359,19 @@ def explain_predictions_form(
             ],
             key=ExplainModelStateKeys.NormalisationMethodSelector,
             index=1,
+            horizontal=True,
+        )
+
+        fragmentation_approach = st.radio(
+            "Select a fragmentation approach to obtain importance scores",
+            options=["brics", "murcko"],
+            index=0,
+            horizontal=True,
         )
 
         if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
             explain_model(
-                model=gnn_model,
+                models=models_dict,
                 model_number=number,
                 experiment_path=experiment_path,
                 dataset=dataset,
@@ -373,4 +387,5 @@ def explain_predictions_form(
                 predictions=preds_dict,
                 node_features=node_feats,
                 explain_feature=explain_feat,
+                fragmentation_approach=fragmentation_approach,
             )
