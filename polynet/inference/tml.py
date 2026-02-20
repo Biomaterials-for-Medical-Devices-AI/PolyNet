@@ -93,8 +93,8 @@ def get_predictions_df_tml(
 
     for model_name, model in models.items():
         # model_name format: "{algo}-{df_name}_{iteration}"
-        ml_model, iteration = model_name.split("_", 1)
-        ml_algorithm, df_name = ml_model.split("-", 1)
+        ml_model, iteration = model_name.rsplit("_", 1)
+        ml_algorithm, df_name = ml_model.rsplit("-", 1)
 
         predicted_col = get_predicted_label_column_name(display_name, ml_model)
 
@@ -111,8 +111,8 @@ def get_predictions_df_tml(
 
             split_df = pd.DataFrame(
                 {
-                    ResultColumn.Index: df.index,
-                    ResultColumn.Set: set_label,
+                    ResultColumn.INDEX: df.index,
+                    ResultColumn.SET: set_label,
                     label_col: y_true.values,
                     predicted_col: y_pred,
                 }
@@ -129,13 +129,13 @@ def get_predictions_df_tml(
 
         predictions_df = pd.concat(split_dfs, ignore_index=True)
         predictions_df[iterator] = iteration
-        predictions_df = predictions_df[~predictions_df[ResultColumn.Index].duplicated(keep="last")]
+        predictions_df = predictions_df[~predictions_df[ResultColumn.INDEX].duplicated(keep="last")]
 
         per_model_dfs.append((iteration, predictions_df))
 
-    predictions = assemble_predictions(per_model_dfs, iterator, ResultColumn.Index)
+    predictions = assemble_predictions(per_model_dfs, iterator, ResultColumn.INDEX)
 
-    meta_cols = [ResultColumn.Index, ResultColumn.Set, iterator, label_col]
+    meta_cols = [ResultColumn.INDEX, ResultColumn.SET, iterator, label_col]
     pred_cols = [col for col in predictions.columns if col not in meta_cols]
 
     return predictions[meta_cols + pred_cols]

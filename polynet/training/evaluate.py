@@ -112,7 +112,7 @@ def plot_results(
         algorithm, iteration = model_log.split("_")
 
         test_df = predictions.loc[
-            (predictions[iterator] == iteration) & (predictions[ResultColumn.Set] == DataSet.Test)
+            (predictions[iterator] == iteration) & (predictions[ResultColumn.SET] == DataSet.Test)
         ]
 
         result_cols = [col for col in test_df.columns if algorithm in col]

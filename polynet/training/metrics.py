@@ -24,8 +24,9 @@ from math import sqrt
 import numpy as np
 import pandas as pd
 import torch
-from imblearn.metrics import geometric_mean_score as gmean
-from imblearn.metrics import specificity_score
+
+# from imblearn.metrics import geometric_mean_score as gmean
+# from imblearn.metrics import specificity_score
 from sklearn.metrics import (
     accuracy_score,
     f1_score,
@@ -133,13 +134,13 @@ def calculate_metrics(
             EvaluationMetric.Accuracy: accuracy_score(y_true, y_pred),
             EvaluationMetric.Precision: precision_score(y_true, y_pred),
             EvaluationMetric.Recall: recall_score(y_true, y_pred),
-            EvaluationMetric.Specificity: specificity_score(y_true, y_pred),
+            # EvaluationMetric.Specificity: specificity_score(y_true, y_pred),
             EvaluationMetric.AUROC: (
                 roc_auc_score(y_true=y_true, y_score=y_probs) if y_probs is not None else None
             ),
             EvaluationMetric.MCC: mcc(y_true, y_pred),
             EvaluationMetric.F1Score: f1_score(y_true, y_pred),
-            EvaluationMetric.GScore: gmean(y_true, y_pred),
+            # EvaluationMetric.GScore: gmean(y_true, y_pred),
         }
 
     return {
@@ -192,7 +193,9 @@ def get_metrics(
     metrics: dict = {}
 
     for model_log in trained_models:
-        algorithm, iteration = model_log.split("_")
+        input(model_log)
+        algorithm, iteration = model_log.rsplit("_", 1)
+        input(f"{algorithm}\n{iteration}")
 
         if iteration not in metrics:
             metrics[iteration] = {}
@@ -203,8 +206,8 @@ def get_metrics(
 
         metrics[iteration][algorithm] = {}
 
-        for dataset_split in iteration_df[ResultColumn.Set].unique():
-            split_df = iteration_df.loc[iteration_df[ResultColumn.Set] == dataset_split]
+        for dataset_split in iteration_df[ResultColumn.SET].unique():
+            split_df = iteration_df.loc[iteration_df[ResultColumn.SET] == dataset_split]
 
             metrics[iteration][algorithm][dataset_split] = calculate_metrics(
                 y_true=split_df[label_col],
