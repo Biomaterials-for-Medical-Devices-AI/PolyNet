@@ -129,7 +129,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
         data_df = pd.read_csv(self.raw_paths[0])
 
         for index, row in tqdm(data_df.iterrows(), total=len(data_df), desc="Processing graphs"):
-            graph = self._build_polymer_graph(row, data_df)
+            graph = self._build_polymer_graph(row, data_df, index)
             if graph is None:
                 continue
             torch.save(graph, self._graph_filepath(index))
@@ -138,7 +138,9 @@ class CustomPolymerGraph(PolymerGraphDataset):
     # Graph construction
     # ------------------------------------------------------------------
 
-    def _build_polymer_graph(self, row: pd.Series, data_df: pd.DataFrame) -> Data | None:
+    def _build_polymer_graph(
+        self, row: pd.Series, data_df: pd.DataFrame, index: int
+    ) -> Data | None:
         """
         Build a single PyG ``Data`` object for one polymer row.
 
@@ -197,7 +199,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
         if self.target_col is not None and self.target_col in data_df.columns:
             y = torch.tensor(row[self.target_col], dtype=torch.float32)
 
-        sample_id = row[self.id_col] if self.id_col is not None else None
+        sample_id = row[self.id_col] if self.id_col is not None else index
 
         return Data(
             x=accumulated_node_feats,
