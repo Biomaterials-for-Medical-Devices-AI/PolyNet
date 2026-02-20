@@ -111,8 +111,8 @@ def get_predictions_df_gnn(
 
             split_df = pd.DataFrame(
                 {
-                    ResultColumn.Index: sample_ids,
-                    ResultColumn.Set: set_label,
+                    ResultColumn.INDEX: sample_ids,
+                    ResultColumn.SET: set_label,
                     label_col: y_true,
                     predicted_col: y_pred,
                 }
@@ -131,14 +131,14 @@ def get_predictions_df_gnn(
         predictions_df[iterator] = iteration
         # Keep the last occurrence when the same sample appears in
         # multiple splits (can happen with LOO and overlapping sets)
-        predictions_df = predictions_df[~predictions_df[ResultColumn.Index].duplicated(keep="last")]
+        predictions_df = predictions_df[~predictions_df[ResultColumn.INDEX].duplicated(keep="last")]
 
         per_model_dfs.append((iteration, predictions_df))
 
-    predictions = assemble_predictions(per_model_dfs, iterator, ResultColumn.Index)
+    predictions = assemble_predictions(per_model_dfs, iterator, ResultColumn.INDEX)
 
     # Reorder: metadata columns first, then all prediction columns
-    meta_cols = [ResultColumn.Index, ResultColumn.Set, iterator, label_col]
+    meta_cols = [ResultColumn.INDEX, ResultColumn.SET, iterator, label_col]
     pred_cols = [col for col in predictions.columns if col not in meta_cols]
 
     return predictions[meta_cols + pred_cols]
