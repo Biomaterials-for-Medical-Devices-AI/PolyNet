@@ -8,9 +8,10 @@ from polynet.options.enums import ApplyWeightingToGraph, Networks, Pooling, Prob
 
 
 class GAT(BaseNetwork):
+
     def __init__(
         self,
-        NumHeads: int,
+        num_heads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -42,7 +43,7 @@ class GAT(BaseNetwork):
 
         # Set class variables
         self._name = Networks.GAT
-        self.num_heads = NumHeads
+        self.num_heads = num_heads
 
         # Convolutions
         self.conv_layers = nn.ModuleList([])
@@ -80,9 +81,10 @@ class GAT(BaseNetwork):
 
 
 class GATClassifier(GAT, BaseNetworkClassifier):
+
     def __init__(
         self,
-        NumHeads: int,
+        num_heads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -97,7 +99,7 @@ class GATClassifier(GAT, BaseNetworkClassifier):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            NumHeads=NumHeads,
+            num_heads=num_heads,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
@@ -114,9 +116,10 @@ class GATClassifier(GAT, BaseNetworkClassifier):
 
 
 class GATRegressor(GAT):
+
     def __init__(
         self,
-        NumHeads: int,
+        num_heads: int,
         n_node_features: int,
         n_edge_features: int,
         pooling: str = Pooling.GlobalMeanPool,
@@ -131,7 +134,7 @@ class GATRegressor(GAT):
     ):
         # Call the constructor of the parent class (BaseNetwork)
         super().__init__(
-            NumHeads=NumHeads,
+            num_heads=num_heads,
             n_node_features=n_node_features,
             n_edge_features=n_edge_features,
             pooling=pooling,
