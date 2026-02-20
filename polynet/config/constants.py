@@ -49,3 +49,13 @@ class FeatureKey:
     OPTIONS: str = "options"
     DEFAULT: str = "default"
     DESCRIPTION: str = "description"
+
+
+class DataSet:
+    """
+    Standard dataset labels used in the 'Set' column of results DataFrames.
+    """
+
+    Training: str = "Training"
+    Validation: str = "Validation"
+    Test: str = "Test"
