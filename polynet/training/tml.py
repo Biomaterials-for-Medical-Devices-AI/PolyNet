@@ -188,7 +188,8 @@ def train_tml_ensemble(
         seed = random_seed + i
 
         # TML does not use a separate validation set — merge val into train
-        combined_train_idxs = train_idxs + (val_idxs or [])
+        val_idxs = pd.Index(val_idxs) if val_idxs is not None else pd.Index([])
+        combined_train_idxs = train_idxs.append(val_idxs)
 
         for df_name, df in dataframes.items():
             log_name = f"{df_name}_{iteration}"
