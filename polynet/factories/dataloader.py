@@ -70,6 +70,7 @@ from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
 from polynet.config.enums import SplitMethod, SplitType
+from polynet.data.preprocessing import class_balancer
 
 
 # ---------------------------------------------------------------------------
@@ -194,14 +195,10 @@ def _train_val_test_indices(
     test_ratio: float,
     target_variable_col: str,
     split_method: SplitMethod,
-    train_set_balance: float,
+    train_set_balance: float | None,
     random_seed: int,
 ) -> tuple[list[list[int]], list[list[int]], list[list[int]]]:
     """Compute indices for TrainValTest with bootstrap repetitions."""
-    # Deferred import — class_balancer will live in polynet.data.preprocessing
-    # once that module is implemented. The deferred import avoids a hard
-    # dependency on the data module during the factories refactor.
-    from polynet.data.preprocessing import class_balancer
 
     train_data_idxs: list[list[int]] = []
     val_data_idxs: list[list[int]] = []
@@ -221,7 +218,7 @@ def _train_val_test_indices(
         )
 
         # Step 2: optional class balancing on training data
-        if train_set_balance < 1.0:
+        if train_set_balance is not None and train_set_balance < 1.0:
             train_data = class_balancer(
                 data=train_data,
                 target=target_variable_col,
@@ -237,9 +234,9 @@ def _train_val_test_indices(
             stratify=train_data[target_variable_col] if use_stratify else None,
         )
 
-        train_data_idxs.append(train_data.index.tolist())
-        val_data_idxs.append(val_data.index.tolist())
-        test_data_idxs.append(test_data.index.tolist())
+        train_data_idxs.append(train_data.index)
+        val_data_idxs.append(val_data.index)
+        test_data_idxs.append(test_data.index)
 
     return train_data_idxs, val_data_idxs, test_data_idxs
 
