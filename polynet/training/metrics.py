@@ -130,17 +130,28 @@ def calculate_metrics(
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
 
     if problem_type == ProblemType.Classification:
+        y_score = _prepare_auc_scores(y_true, y_probs)
+
+        auroc = None
+        if y_score is not None:
+            if np.asarray(y_score).ndim == 1:
+                auroc = roc_auc_score(y_true=y_true, y_score=y_score)
+            else:
+                # multiclass
+                auroc = roc_auc_score(
+                    y_true=y_true,
+                    y_score=y_score,
+                    multi_class="ovr",  # or "ovo"
+                    average="macro",  # or "weighted"
+                )
+
         return {
             EvaluationMetric.Accuracy: accuracy_score(y_true, y_pred),
             EvaluationMetric.Precision: precision_score(y_true, y_pred),
             EvaluationMetric.Recall: recall_score(y_true, y_pred),
-            # EvaluationMetric.Specificity: specificity_score(y_true, y_pred),
-            EvaluationMetric.AUROC: (
-                roc_auc_score(y_true=y_true, y_score=y_probs) if y_probs is not None else None
-            ),
+            EvaluationMetric.AUROC: auroc,
             EvaluationMetric.MCC: mcc(y_true, y_pred),
             EvaluationMetric.F1Score: f1_score(y_true, y_pred),
-            # EvaluationMetric.GScore: gmean(y_true, y_pred),
         }
 
     return {
@@ -193,9 +204,7 @@ def get_metrics(
     metrics: dict = {}
 
     for model_log in trained_models:
-        input(model_log)
         algorithm, iteration = model_log.rsplit("_", 1)
-        input(f"{algorithm}\n{iteration}")
 
         if iteration not in metrics:
             metrics[iteration] = {}
@@ -219,3 +228,49 @@ def get_metrics(
             )
 
     return metrics
+
+
+def _prepare_auc_scores(y_true, y_probs):
+    """
+    Returns y_score suitable for roc_auc_score:
+      - binary: (n_samples,)
+      - multiclass: (n_samples, n_classes)
+    """
+    if y_probs is None:
+        return None
+
+    # Convert to ndarray
+    if isinstance(y_probs, pd.DataFrame):
+        cols = list(y_probs.columns)
+        probs = y_probs.to_numpy()
+    else:
+        cols = None
+        probs = np.asarray(y_probs)
+
+    # If already 1D, done
+    if probs.ndim == 1:
+        return probs
+
+    # If it's (n_samples, 1), squeeze
+    if probs.ndim == 2 and probs.shape[1] == 1:
+        return probs[:, 0]
+
+    # If binary probs are provided as (n_samples, 2), select positive class column
+    if probs.ndim == 2 and probs.shape[1] == 2:
+        # Prefer column that looks like class "1" if we have names
+        if cols is not None:
+            # heuristic: pick the column whose name ends with/contains "1"
+            # adjust this to your naming scheme if you have one
+            for i, c in enumerate(cols):
+                if (
+                    str(c).endswith("1")
+                    or str(c).endswith("_1")
+                    or "class_1" in str(c)
+                    or "prob_1" in str(c)
+                ):
+                    return probs[:, i]
+        # fallback: second column
+        return probs[:, 1]
+
+    # Multiclass: keep full matrix
+    return probs
