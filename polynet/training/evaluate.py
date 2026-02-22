@@ -53,7 +53,11 @@ def plot_learning_curves(models: dict, save_path: Path) -> None:
     save_path.mkdir(parents=True, exist_ok=True)
 
     for model_name, model in models.items():
-        if model.losses is None:
+        if not hasattr(model, "losses"):
+            logger.debug(f"Skipping learning curve for '{model_name}' — no losses attribute.")
+            continue
+
+        elif model.losses is None:
             logger.debug(f"Skipping learning curve for '{model_name}' — no losses recorded.")
             continue
 
@@ -109,7 +113,7 @@ def plot_results(
     label_col = get_true_label_column_name(target_variable_name)
 
     for model_log in ml_algorithms:
-        algorithm, iteration = model_log.split("_")
+        algorithm, iteration = model_log.rsplit("_", 1)
 
         test_df = predictions.loc[
             (predictions[iterator] == iteration) & (predictions[ResultColumn.SET] == DataSet.Test)
