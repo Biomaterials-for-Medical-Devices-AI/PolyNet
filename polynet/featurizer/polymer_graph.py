@@ -55,6 +55,20 @@ from polynet.featurizer.graph import PolymerGraphDataset
 logger = logging.getLogger(__name__)
 
 
+node_feat_def = {
+    "GetAtomicNum": {"allowable_vals": [8, 9, 6, 7], "wildcard": True},
+    "GetTotalNumHs": {"allowable_vals": [0, 1, 2, 3], "wildcard": False},
+    "GetTotalDegree": {"allowable_vals": [1, 2, 3, 4], "wildcard": False},
+    "GetImplicitValence": {"allowable_vals": [0, 1, 2, 3], "wildcard": False},
+    "GetIsAromatic": {},
+}
+
+edge_feat_def = {
+    "GetBondTypeAsDouble": {"allowable_vals": [1.0, 2.0, 1.5], "wildcard": False},
+    "GetIsAromatic": {},
+}
+
+
 class CustomPolymerGraph(PolymerGraphDataset):
     """
     Polymer graph dataset with user-defined atom and bond feature sets.
@@ -99,8 +113,8 @@ class CustomPolymerGraph(PolymerGraphDataset):
         target_col: str | None = None,
         id_col: str | None = None,
         weights_col: dict[str, str] | None = None,
-        node_feats: dict[AtomFeature, dict] | None = None,
-        edge_feats: dict[BondFeature, dict] | None = None,
+        node_feats: dict[AtomFeature, dict] | None = node_feat_def,
+        edge_feats: dict[BondFeature, dict] | None = edge_feat_def,
     ) -> None:
         self.weights_col = weights_col
         self.node_feats = node_feats or {}
