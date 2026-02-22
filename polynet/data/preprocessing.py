@@ -226,33 +226,52 @@ def transform_features(
 # ---------------------------------------------------------------------------
 
 
-def sanitise_df(df: pd.DataFrame, descriptors: list[str], target_variable_col: str) -> pd.DataFrame:
+def sanitise_df(
+    df: pd.DataFrame,
+    smiles_cols: list[str],
+    target_variable_col: str,
+    weights_cols: list[str] | None = None,
+) -> pd.DataFrame:
     """
-    Subset a DataFrame to the selected descriptor columns and target,
-    dropping any columns that contain NaN values.
+    Remove SMILES and optional weight columns, and ensure the target
+    column is the last column in the DataFrame.
 
     Parameters
     ----------
     df:
         Full dataset DataFrame.
-    descriptors:
-        List of descriptor column names to retain.
+    smiles_cols:
+        Column names containing SMILES strings to remove.
     target_variable_col:
-        Name of the target column to retain.
+        Name of the target column.
+    weights_cols:
+        Optional list of weight column names to remove.
 
     Returns
     -------
     pd.DataFrame
-        A clean copy containing only the requested columns with no NaNs.
-
-    Notes
-    -----
-    Columns are dropped, not rows — a descriptor column containing a single
-    NaN is removed entirely. If row-wise dropping is preferred, apply
-    ``df.dropna(axis=0)`` after calling this function.
+        A cleaned copy of the DataFrame with target column last.
     """
-    cols = [c for c in descriptors if c in df.columns] + [target_variable_col]
-    return df[cols].dropna(axis=1).copy()
+    df_clean = df.copy()
+
+    # Columns to remove
+    cols_to_drop = list(smiles_cols)
+
+    if weights_cols is not None:
+        cols_to_drop.extend(weights_cols)
+
+    # Drop only columns that exist (avoid KeyError)
+    cols_to_drop = [c for c in cols_to_drop if c in df_clean.columns]
+    df_clean = df_clean.drop(columns=cols_to_drop)
+
+    if target_variable_col not in df_clean.columns:
+        raise ValueError(f"Target column '{target_variable_col}' not found after sanitisation.")
+
+    # Move target column to the end
+    cols = [c for c in df_clean.columns if c != target_variable_col]
+    cols.append(target_variable_col)
+
+    return df_clean[cols]
 
 
 def get_data_index(
