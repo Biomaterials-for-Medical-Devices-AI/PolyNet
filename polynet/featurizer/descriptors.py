@@ -126,6 +126,8 @@ def build_vector_representation(
     data_index = get_data_index(data, id_col, smiles_cols, weights_col, target_col)
     unique_smiles = _get_unique_smiles(data, smiles_cols)
 
+    descriptors = {}
+
     # --- RDKit descriptors ---
     rdkit_descriptors_df: pd.DataFrame | None = None
     rdkit_desc_list = molecular_descriptors.get(MolecularDescriptor.RDKit, [])
@@ -135,9 +137,10 @@ def build_vector_representation(
         rdkit_descriptors_df = _merge(
             rdkit_df_dict, data, weights_col, data_index, merging_approach
         )
+        descriptors[MolecularDescriptor.RDKit] = rdkit_descriptors_df
 
     if not rdkit_independent:
-        rdkit_descriptors_df = None
+        descriptors[MolecularDescriptor.RDKit] = None
 
     # --- DataFrame descriptors ---
     df_desc_cols = molecular_descriptors.get(MolecularDescriptor.DataFrame, [])
@@ -146,13 +149,14 @@ def build_vector_representation(
     if df_desc_cols and df_descriptors_independent:
         descriptors_df = data[df_desc_cols].copy()
         df_descriptors_df = pd.concat([data_index, descriptors_df], axis=1)
+        descriptors[MolecularDescriptor.DataFrame] = df_descriptors_df
 
     # --- Mixed RDKit + DataFrame ---
     mixed_df: pd.DataFrame | None = None
     if mix_rdkit_df_descriptors and rdkit_descriptors_df is not None and df_desc_cols:
         descriptors_df = data[df_desc_cols].copy()
         mixed_df = pd.concat([rdkit_descriptors_df, descriptors_df], axis=1)
-
+        descriptors[MolecularDescriptor.RDKit_DataFrame] = mixed_df
     # --- PolyBERT ---
     if molecular_descriptors.get(MolecularDescriptor.PolyBERT):
         warnings.warn(
@@ -162,11 +166,7 @@ def build_vector_representation(
             stacklevel=2,
         )
 
-    return {
-        MolecularDescriptor.RDKit: rdkit_descriptors_df,
-        MolecularDescriptor.DataFrame: df_descriptors_df,
-        MolecularDescriptor.RDKit_DataFrame: mixed_df,
-    }
+    return descriptors
 
 
 # ---------------------------------------------------------------------------
