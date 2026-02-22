@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 _CAPTUM_REGISTRY: dict[ExplainAlgorithm, type | None] = {
     ExplainAlgorithm.GNNExplainer: None,
     ExplainAlgorithm.ShapleyValueSampling: captum.attr.ShapleyValueSampling,
-    ExplainAlgorithm.InputXGradient: captum.attr.InputXGradient,
+    ExplainAlgorithm.InputXGradients: captum.attr.InputXGradient,
     ExplainAlgorithm.Saliency: captum.attr.Saliency,
     ExplainAlgorithm.IntegratedGradients: captum.attr.IntegratedGradients,
     ExplainAlgorithm.Deconvolution: captum.attr.Deconvolution,
