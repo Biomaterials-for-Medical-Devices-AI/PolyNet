@@ -101,6 +101,21 @@ def load_dataset(
     _validate_columns(df, smiles_cols, target_col, id_col)
     _validate_smiles_columns(df, smiles_cols)
 
+    if id_col is not None:
+        if df[id_col].isna().any():
+            logger.warning(
+                f"ID column '{id_col}' contains null values. "
+                "Rows with null IDs may cause issues downstream."
+            )
+
+        if not df[id_col].is_unique:
+            raise ValueError(
+                f"ID column '{id_col}' contains duplicate values. "
+                "IDs must be unique to be used as an index."
+            )
+
+        df = df.set_index(id_col, drop=True)
+
     if problem_type is not None:
         problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
         _validate_target_column(df, target_col, problem_type)
