@@ -129,7 +129,7 @@ def train_gnn_ensemble(
         )
 
         for gnn_arch, arch_params in gnn_conv_params.items():
-            arch_params = deepcopy(arch_params) or {}
+            arch_params = arch_params or {}
             is_hpo = not arch_params
 
             if is_hpo:
