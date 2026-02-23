@@ -23,6 +23,7 @@ from polynet.options.enums import (
     ImportanceNormalisationMethods,
     ProblemTypes,
     Results,
+    FragmentationMethods,
 )
 
 
@@ -364,7 +365,7 @@ def explain_predictions_form(
 
         fragmentation_approach = st.radio(
             "Select a fragmentation approach to obtain importance scores",
-            options=["brics", "murcko"],
+            options=[FragmentationMethods.BRICS, FragmentationMethods.MurckoScaffold],
             index=0,
             horizontal=True,
         )

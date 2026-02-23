@@ -14,7 +14,7 @@ from polynet.utils.psmiles import PolymerSmiles
 
 from rdkit.Chem.Scaffolds import MurckoScaffold
 
-from polynet.options.enums import FragmentationMethods
+from polynet.config.enums import FragmentationMethod
 
 
 class PS(PolymerSmiles):
@@ -119,7 +119,7 @@ def sanitize_fragment(frag):
 
 
 def fragment_and_match(
-    smiles, fragmentation_approach: FragmentationMethods = FragmentationMethods.BRICS
+    smiles, fragmentation_approach: FragmentationMethod = FragmentationMethod.BRICS
 ):
     """
     Fragment a molecule using the chosen method and return mapping to atom indices.
@@ -141,13 +141,13 @@ def fragment_and_match(
 
     match fragmentation_approach:
 
-        case FragmentationMethods.BRICS:
+        case FragmentationMethod.BRICS:
             frags = _fragments_brics(mol)
 
         # case "functional_groups":
         #     frags = _fragments_functional_groups(mol)
 
-        case FragmentationMethods.MurckoScaffold:
+        case FragmentationMethod.MurckoScaffold:
             frags = _fragments_murcko(mol)
 
         case _:
