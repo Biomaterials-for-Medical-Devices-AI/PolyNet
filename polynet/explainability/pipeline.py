@@ -111,7 +111,7 @@ def run_explanation(
     explain_feature: str = "All Features",
     normalisation: ImportanceNormalisationMethod | str = ImportanceNormalisationMethod.Local,
     cutoff: float = 0.1,
-    fragmentation_approach: FragmentationMethod | str = FragmentationMethod.BRICS,
+    fragmentation_method: FragmentationMethod | str = FragmentationMethod.BRICS,
 ) -> ExplanationResult:
     """
     Compute GNN attributions and return structured explanation results.
@@ -220,7 +220,7 @@ def run_explanation(
         mols=mols,
         node_masks=merged_masks,
         algorithm=algorithm,
-        fragmentation_approach=fragmentation_approach,
+        fragmentation_method=fragmentation_method,
     )
 
     # --- Per-atom weight normalisation ---
