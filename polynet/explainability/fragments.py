@@ -22,7 +22,7 @@ import logging
 import numpy as np
 from rdkit import Chem
 
-from polynet.config.enums import ExplainAlgorithm, FragmentationApproach
+from polynet.config.enums import ExplainAlgorithm, FragmentationMethod
 from polynet.utils.chem_utils import fragment_and_match
 
 logger = logging.getLogger(__name__)
@@ -32,7 +32,7 @@ def get_fragment_importance(
     mols: list,
     node_masks: dict,
     algorithm: ExplainAlgorithm | str,
-    fragmentation_approach: FragmentationApproach | str,
+    fragmentation_method: FragmentationMethod | str,
 ) -> dict[str, list[float]]:
     """
     Aggregate per-atom attributions to fragment-level importance scores.
@@ -74,7 +74,7 @@ def get_fragment_importance(
 
     for mol in mols:
         mol_idx = mol.idx
-        frag_importance = node_masks[mol_idx][algorithm.value]
+        frag_importance = np.asarray(node_masks[mol_idx][algorithm.value])
         atom_offset = 0
 
         for smiles in mol.mols:
@@ -84,7 +84,7 @@ def get_fragment_importance(
                 atom_offset += 0
                 continue
 
-            frags = fragment_and_match(smiles, fragmentation_approach)
+            frags = fragment_and_match(smiles, fragmentation_method)
 
             for frag_smiles, atom_indices_list in frags.items():
                 if len(frag_smiles) < 3:
