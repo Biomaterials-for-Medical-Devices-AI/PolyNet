@@ -1,0 +1,141 @@
+log_results_dir: './results/isFluoPA2'
+
+data:
+  file_path: '/Users/ed_aguilar/Documents/Github/PolyNet/datasets/bacteria_copolymers/raw'
+  file_name: 'copolymers.csv'
+  smiles_cols: ['smiles_monomer_1', 'smiles_monomer_2']
+  id_col: 'id'
+  target_variable_col: 'isFluo_PA'
+  target_variable_name: 'isFluo PA'
+  problem_type: 'classification'
+  number_classes: 2
+  class_names: {
+    "0": AntiBiofilm,
+    "1": ProBiofilm
+  }
+
+experiment:
+  split_type: 'train_val_test'
+  n_bootstrap_iterations: 5
+  val_ratio: 0.2
+  test_ratio: 0.2
+  split_method: 'Stratified'
+  train_set_balance: 0.6
+  random_seed: 1
+
+representation:
+  "molecular_descriptors": {
+    "rdkit":
+      [
+          "qed",
+          "Chi1n",
+          "VSA_EState8",
+          "PEOE_VSA9",
+          "MolLogP",
+          "BertzCT",
+          "EState_VSA4",
+          "FpDensityMorgan2",
+          "MinAbsEStateIndex",
+          "TPSA",
+          "MaxEStateIndex",
+          "EState_VSA2",
+          "VSA_EState4"
+      ]
+    }
+  merging_approach: 'Weighted Average'
+  graph_representation: 'polyGCN+edge_feats'
+  weights_col: {
+        "smiles_monomer_1": "ratio_1",
+        "smiles_monomer_2": "ratio_2"
+    }
+
+TML_training:
+  train_TML : True
+  TMLModels : {
+     "Logistic Regression": {
+            "penalty": "l1",
+            "C": 100,
+            "fit_intercept": true,
+            "solver": "liblinear"
+        }
+  }
+  transform_features: 'Standard Scaler'
+
+
+GNN_training:
+  train_GNN: True
+  "GNNConvolutionalLayers": {
+      "GCN": {
+          "improved": true,
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      },
+      "GraphSAGE": {
+          "bias": true,
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      },
+      "TransformerConvGNN": {
+          "NumHeads": 2,
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      },
+      "GAT": {
+          "NumHeads": 2,
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      },
+      "MPNN": {
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      },
+      "CGGNN": {
+          "assymetric_loss_strength": null,
+          "n_convolutions": 1,
+          "embedding_dim": 64,
+          "pooling": "GlobalMaxPool",
+          "readout_layers": 2,
+          "dropout": 0.01,
+          "learning_rate": 0.01,
+          "batch_size": 32,
+          "apply_weighting_to_graph": "Before Pooling"
+      }
+  }
+  "HyperparameterOptimisation": false,
+  "ShareGNNParameters": true,
+  "TrainGNNModel": true
