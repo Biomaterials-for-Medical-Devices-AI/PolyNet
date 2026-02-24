@@ -3,21 +3,21 @@ from rdkit.Chem import Descriptors
 import streamlit as st
 
 from polynet.app.options.allowable_sets import atom_properties, bond_features
-from polynet.app.options.data import DataOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.utils import keep_only_numerical_columns
-from polynet.options.enums import (
-    AtomBondDescriptorDictKeys,
-    AtomFeatures,
-    BondFeatures,
-    DescriptorMergingMethods,
-    MolecularDescriptors,
+from polynet.config.enums import (
+    AtomBondDescriptorDictKey,
+    AtomFeature,
+    BondFeature,
+    DescriptorMergingMethod,
+    MolecularDescriptor,
     StringRepresentation,
 )
+from polynet.config.schemas.data import DataConfig
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
-def select_weight_factor(requires_weights: bool, data_options: DataOptions, df: pd.DataFrame):
+def select_weight_factor(requires_weights: bool, data_options: DataConfig, df: pd.DataFrame):
 
     mol_weights_col = {}
 
@@ -57,7 +57,9 @@ def select_weight_factor(requires_weights: bool, data_options: DataOptions, df: 
     return mol_weights_col
 
 
-def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOptions):
+def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConfig):
+
+    descriptors_dict = {}
 
     with st.expander("Molecular Descriptors", expanded=False):
 
@@ -104,10 +106,12 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
             help="Choose which RDKit descriptors to compute for the molecules.",
         )
         st.info(f"You have selected {len((selected_descriptors))} RDKit descriptors.")
+        if selected_descriptors:
+            descriptors_dict[MolecularDescriptor.RDKit] = selected_descriptors
 
-        if data_options.string_representation == StringRepresentation.Smiles:
+        if data_options.string_representation == StringRepresentation.SMILES:
             disabled = True
-        elif data_options.string_representation == StringRepresentation.PSmiles:
+        elif data_options.string_representation == StringRepresentation.PSMILES:
             disabled = False
 
         st.markdown("### polyBERT fingerprint")
@@ -149,6 +153,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 potential_weighting_factors = [
                     column for column in potential_weighting_factors if column not in descriptors_df
                 ]
+                descriptors_dict[MolecularDescriptor.DataFrame] = descriptors_df
 
         else:
             st.warning(
@@ -212,10 +217,10 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 label="Select merging approach of descriptors for multiple SMILES columns",
                 options=[
                     # DescriptorMergingMethods.Average,
-                    DescriptorMergingMethods.WeightedAverage,
-                    DescriptorMergingMethods.Concatenate,
+                    DescriptorMergingMethod.WeightedAverage,
+                    DescriptorMergingMethod.Concatenate,
                 ],
-                default=DescriptorMergingMethods.WeightedAverage,
+                default=DescriptorMergingMethod.WeightedAverage,
                 key=DescriptorCalculationStateKeys.MergeDescriptorsApproach,
                 help="Choose how to merge the SMILES columns for the molecular representation. The selected approach will determine how the numerical representations of the molecules are combined.",
             )
@@ -226,19 +231,15 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataOpti
                 )
                 st.stop()
 
-            if DescriptorMergingMethods.Concatenate == merging_methods:
+            if DescriptorMergingMethod.Concatenate == merging_methods:
                 st.warning(
                     "Concatenation should only be used if the role of the molecules is different in the property to model, for example solute and solvent for solubility."
                 )
 
-    descriptors_dict = {}
-    descriptors_dict[MolecularDescriptors.RDKit] = selected_descriptors
-    descriptors_dict[MolecularDescriptors.DataFrame] = descriptors_df
-
     return descriptors_dict
 
 
-def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict, dict]:
+def graph_representation(data_opts: DataConfig, df: pd.DataFrame) -> tuple[dict, dict]:
 
     atomic_properties = sorted(atom_properties.keys())
     bond_properties = sorted(bond_features.keys())
@@ -264,11 +265,11 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
             default_atomic_properties = atomic_properties
         else:
             default_atomic_properties = [
-                AtomFeatures.GetAtomicNum,
-                AtomFeatures.GetTotalNumHs,
-                AtomFeatures.GetTotalDegree,
-                AtomFeatures.GetImplicitValence,
-                AtomFeatures.GetIsAromatic,
+                AtomFeature.GetAtomicNum,
+                AtomFeature.GetTotalNumHs,
+                AtomFeature.GetTotalDegree,
+                AtomFeature.GetImplicitValence,
+                AtomFeature.GetIsAromatic,
             ]
 
         selected_atomic_properties = st.multiselect(
@@ -322,12 +323,12 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     prop_defaults = [
                         val
                         for val in prop_defaults
-                        if val in atom_properties[prop][AtomBondDescriptorDictKeys.Options]
+                        if val in atom_properties[prop][AtomBondDescriptorDictKey.Options]
                     ]
 
                     selected_allowed_atom_properties = st.segmented_control(
                         label=f"Select allowable values for the property `{prop}`",
-                        options=atom_properties[prop][AtomBondDescriptorDictKeys.Options],
+                        options=atom_properties[prop][AtomBondDescriptorDictKey.Options],
                         default=prop_defaults,
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.AtomProperties}_{prop}",
@@ -335,17 +336,17 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     )
 
                     node_feats_config[prop][
-                        AtomBondDescriptorDictKeys.AllowableVals
+                        AtomBondDescriptorDictKey.AllowableVals
                     ] = selected_allowed_atom_properties
 
                     total_num_node_feats += len(selected_allowed_atom_properties)
 
-                    node_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard] = st.toggle(
+                    node_feats_config[prop][AtomBondDescriptorDictKey.Wildcard] = st.toggle(
                         label=f"Include wildcard placeholders for `{prop}`",
                         key=f"{DescriptorCalculationStateKeys.AtomProperties}_wildcard_{prop}",
                         help=f"Toggle to include wildcard placeholders for the `{prop}` property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
                     )
-                    if node_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard]:
+                    if node_feats_config[prop][AtomBondDescriptorDictKey.Wildcard]:
                         total_num_node_feats += 1
                 else:
                     st.write(
@@ -366,9 +367,9 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
 
         else:
             default_bond_properties = [
-                BondFeatures.GetBondTypeAsDouble,
-                BondFeatures.GetIsAromatic,
-                BondFeatures.GetStereo,
+                BondFeature.GetBondTypeAsDouble,
+                BondFeature.GetIsAromatic,
+                BondFeature.GetStereo,
             ]
 
         selected_bond_properties = st.multiselect(
@@ -422,12 +423,12 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     prop_defaults = [
                         val
                         for val in prop_defaults
-                        if val in bond_features[prop][AtomBondDescriptorDictKeys.Options]
+                        if val in bond_features[prop][AtomBondDescriptorDictKey.Options]
                     ]
 
                     selected_allowed_bond_properties = st.segmented_control(
                         label=f"Select allowable values for the property `{prop}`",
-                        options=bond_features[prop][AtomBondDescriptorDictKeys.Options],
+                        options=bond_features[prop][AtomBondDescriptorDictKey.Options],
                         default=prop_defaults,
                         selection_mode="multi",
                         key=f"{DescriptorCalculationStateKeys.BondProperties}_{prop}",
@@ -435,18 +436,18 @@ def graph_representation(data_opts: DataOptions, df: pd.DataFrame) -> tuple[dict
                     )
 
                     edge_feats_config[prop][
-                        AtomBondDescriptorDictKeys.AllowableVals
+                        AtomBondDescriptorDictKey.AllowableVals
                     ] = selected_allowed_bond_properties
 
                     total_num_edge_feats += len(selected_allowed_bond_properties)
 
-                    edge_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard] = st.toggle(
+                    edge_feats_config[prop][AtomBondDescriptorDictKey.Wildcard] = st.toggle(
                         label=f"Include wildcard placeholders for `{prop}`",
                         key=f"{DescriptorCalculationStateKeys.BondProperties}_wildcard_{prop}",
                         help=f"Toggle to include wildcard placeholders for the `{prop}` property in the graph representation. This effectively encodes all none allowable values as a single placeholder, which can be useful for certain types of analyses.",
                     )
 
-                    if edge_feats_config[prop][AtomBondDescriptorDictKeys.Wildcard]:
+                    if edge_feats_config[prop][AtomBondDescriptorDictKey.Wildcard]:
                         total_num_edge_feats += 1
 
                 else:
