@@ -80,9 +80,9 @@ def select_data_form():
         ):
             for col in smiles_cols:
 
-                if str_representation == StringRepresentation.Smiles:
+                if str_representation == StringRepresentation.SMILES:
                     df[col] = df[col].apply(canonicalise_smiles)
-                elif str_representation == StringRepresentation.PSmiles:
+                elif str_representation == StringRepresentation.PSMILES:
                     df[col] = df[col].apply(canonicalise_psmiles)
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
