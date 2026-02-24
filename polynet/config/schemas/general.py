@@ -45,11 +45,11 @@ class GeneralConfig(PolynetBaseModel):
     split_method: SplitMethod = Field(
         default=SplitMethod.Random, description="Sample assignment method."
     )
-    train_set_balance: float = Field(
+    train_set_balance: float | None = Field(
         default=1.0,
         gt=0.0,
         le=1.0,
-        description="Fraction of training set retained after balancing.",
+        description="Ratio of labels in binary classification after balancing.",
     )
     test_ratio: float = Field(..., gt=0.0, lt=1.0, description="Fraction of data for the test set.")
     val_ratio: float = Field(
