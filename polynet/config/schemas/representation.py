@@ -68,7 +68,7 @@ class RepresentationConfig(PolynetBaseModel):
         model to be available.
     """
 
-    smiles_merge_approach: list[DescriptorMergingMethod] = Field(
+    smiles_merge_approach: DescriptorMergingMethod = Field(
         ..., min_length=1, description="Ordered merging strategies for multi-SMILES polymers."
     )
     node_features: dict[AtomFeature, dict] = Field(
