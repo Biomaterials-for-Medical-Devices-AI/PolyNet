@@ -124,7 +124,7 @@ def build_vector_representation(
         )
 
     data_index = get_data_index(data, id_col, smiles_cols, weights_col, target_col)
-    unique_smiles = _get_unique_smiles(data, smiles_cols)
+    unique_smiles = get_unique_smiles(data, smiles_cols)
 
     descriptors = {}
 
@@ -133,7 +133,7 @@ def build_vector_representation(
     rdkit_desc_list = molecular_descriptors.get(MolecularDescriptor.RDKit, [])
 
     if rdkit_desc_list and (rdkit_independent or mix_rdkit_df_descriptors):
-        rdkit_df_dict = _calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_desc_list)
+        rdkit_df_dict = calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_desc_list)
         rdkit_descriptors_df = _merge(
             rdkit_df_dict, data, weights_col, data_index, merging_approach
         )
@@ -265,7 +265,8 @@ def get_polybert_fingerprints(psmiles_list: list[str]) -> dict[str, list[float]]
 # ---------------------------------------------------------------------------
 
 
-def _get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
+# TODO check if new function name with no underscore is adequate in this file
+def get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
     """Return all unique SMILES strings across all SMILES columns."""
     unique: list[str] = []
     for col in smiles_cols:
@@ -273,7 +274,8 @@ def _get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
     return list(dict.fromkeys(unique))  # preserve order, deduplicate
 
 
-def _calculate_rdkit_df_dict(
+# TODO check if new function name with no underscore is adequate in this file
+def calculate_rdkit_df_dict(
     unique_smiles: list[str],
     data: pd.DataFrame,
     smiles_cols: list[str],
@@ -304,7 +306,7 @@ def _merge(
     """Dispatch to the correct merging function."""
     match merging_approach:
         case DescriptorMergingMethod.WeightedAverage:
-            return _merge_weighted(df_dict, data, weights_col, data_index)
+            return merge_weighted(df_dict, data, weights_col, data_index)
         case DescriptorMergingMethod.Average:
             return _merge_average(df_dict, data_index)
         case DescriptorMergingMethod.Concatenate:
@@ -318,7 +320,8 @@ def _merge(
             )
 
 
-def _merge_weighted(
+# TODO check if new function name with no underscore is adequate in this file
+def merge_weighted(
     df_dict: dict[str, pd.DataFrame],
     data: pd.DataFrame,
     weights_col: dict[str, str],
