@@ -46,10 +46,12 @@ from polynet.app.services.model_training import (
 )
 from polynet.app.services.predict_model import predict_unseen_gnn, predict_unseen_tml
 from polynet.app.utils import create_directory
-from polynet.featurizer.descriptor_calculation import build_vector_representation
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.col_names import get_true_label_column_name
-from polynet.options.enums import ProblemTypes, Results, TransformDescriptors
+from polynet.featurizer.descriptors import build_vector_representation
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
+from polynet.config.enums import ProblemType, TransformDescriptor
+from polynet.config.constants import ResultColumn
+from polynet.config.column_names import get_true_label_column_name
+
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.train.evaluate_model import calculate_metrics
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
@@ -98,7 +100,7 @@ def predict(
 
     id_df = id_df.rename(
         columns={
-            data_options.id_col: Results.Index.value,
+            data_options.id_col: ResultColumn.INDEX,
             data_options.target_variable_col: true_label_name,
         }
     )
@@ -129,7 +131,7 @@ def predict(
             experiment_path=experiment_path, model_names=tml_models
         )
 
-        if train_tml_options.TransformFeatures != TransformDescriptors.NoTransformation:
+        if train_tml_options.TransformFeatures != TransformDescriptor.NoTransformation:
             scalers = load_scalers_from_experiment(
                 experiment_path=experiment_path, model_names=tml_models
             )
@@ -172,11 +174,11 @@ def predict(
         gnn_cols = []
         for col in cols:
             # get the column names that contain predicitons of GNN models (can be same architecture different seed/bootstraps)
-            if Results.Predicted in col:
+            if ResultColumn.PREDICTED in col:
                 gnn_cols.append(col)
             # check which architecture was used
             gnn_arch = col.split(" ")[0]
-            if gnn_arch in analysed_arch or col == Results.Index.value:
+            if gnn_arch in analysed_arch or col == ResultColumn.INDEX:
                 continue
             # stores each unique GNN architecture used (not repeats)
             else:
@@ -185,14 +187,14 @@ def predict(
         ensemble_cols = {}
         for arch in analysed_arch:
             # get the columns with predictions of the same architecture
-            arch_cols = [col for col in cols if arch in col and Results.Predicted in col]
+            arch_cols = [col for col in cols if arch in col and ResultColumn.PREDICTED in col]
             # store the columns in a dictionary where the key is the architecture used
             ensemble_cols[arch] = arch_cols
         # add a key for ALL GNN models
         ensemble_cols["GNN"] = gnn_cols
 
         ensemble_preds = []
-        if data_options.problem_type == ProblemTypes.Classification:
+        if data_options.problem_type == ProblemType.Classification:
             for gnn_arch, gnn_cols in ensemble_cols.items():
                 if len(gnn_cols) < 2:
                     continue
@@ -205,11 +207,11 @@ def predict(
                     pd.Series(
                         ensemble_prediction,
                         index=gnn_df.index,
-                        name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                        name=f"{gnn_arch} Ensemble {ResultColumn.PREDICTED}",
                     )
                 )
 
-        elif data_options.problem_type == ProblemTypes.Regression:
+        elif data_options.problem_type == ProblemType.Regression:
             for gnn_arch, gnn_cols in ensemble_cols.items():
                 if len(gnn_cols) < 2:
                     continue
@@ -221,7 +223,7 @@ def predict(
                     pd.Series(
                         ensemble_prediction,
                         index=gnn_df.index,
-                        name=f"{gnn_arch} Ensemble {Results.Predicted}",
+                        name=f"{gnn_arch} Ensemble {ResultColumn.PREDICTED}",
                     )
                 )
 
@@ -231,7 +233,7 @@ def predict(
             # concat ensemble DF to the original predictions DF
             predictions_gnn = pd.concat([predictions_gnn, ensemble_preds], axis=1)
 
-        predictions_gnn = pd.merge(left=id_df, right=predictions_gnn, on=[Results.Index])
+        predictions_gnn = pd.merge(left=id_df, right=predictions_gnn, on=[ResultColumn.INDEX])
 
     if gnn_models and tml_models:
         predictions = pd.merge(left=predictions_tml, right=predictions_gnn, on=list(id_df.columns))
@@ -251,16 +253,16 @@ def predict(
 
         for col in predictions.columns[2:]:
 
-            if Results.Predicted.value in col and "Ensemble" not in col:
+            if ResultColumn.PREDICTED in col and "Ensemble" not in col:
                 split_name = col.split(" ")
                 model, number = split_name[0], split_name[1]
                 model_name = f"{model} {number}"
                 probs_cols = [
                     col_name
                     for col_name in predictions.columns[2:]
-                    if Results.Score.value in col_name and model_name in col_name
+                    if ResultColumn.SCORE in col_name and model_name in col_name
                 ]
-            elif Results.Predicted.value in col:
+            elif ResultColumn.PREDICTED in col:
                 split_name = col.split(" ")
                 model = split_name[0] + " " + split_name[1]
                 probs_cols = None
@@ -423,7 +425,7 @@ if experiment_name:
                 value=True,
                 help="If checked, the predictions will be compared with the target variable in the uploaded data.",
             ):
-                if data_options.problem_type == ProblemTypes.Classification:
+                if data_options.problem_type == ProblemType.Classification:
 
                     if pd.api.types.is_numeric_dtype(df[data_options.target_variable_col]):
                         unique_vals_target = df[data_options.target_variable_col].nunique()
@@ -447,7 +449,7 @@ if experiment_name:
                         )
                     )
 
-                elif data_options.problem_type == ProblemTypes.Regression:
+                elif data_options.problem_type == ProblemType.Regression:
 
                     if not pd.api.types.is_numeric_dtype(df[data_options.target_variable_col]):
                         st.error(
