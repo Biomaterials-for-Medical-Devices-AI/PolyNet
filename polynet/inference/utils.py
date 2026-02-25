@@ -23,28 +23,30 @@ def prepare_probs_df(probs: np.ndarray, target_variable_name: str, model_name: s
     """
     Build a DataFrame of per-class probability scores with standardised column names.
 
-    Parameters
-    ----------
-    probs:
-        Probability array of shape ``(n_samples, n_classes)``.
-    target_variable_name:
-        Name of the target property — used in column naming.
-    model_name:
-        Model identifier — used in column naming.
-
-    Returns
-    -------
-    pd.DataFrame
-        One column per class, named via ``get_score_column_name``.
-
-    Examples
-    --------
-    >>> probs = np.array([[0.3, 0.7], [0.6, 0.4]])
-    >>> df = prepare_probs_df(probs, "activity", "RandomForest")
-    >>> df.columns.tolist()
-    ['activity_RandomForest_class_0_score', 'activity_RandomForest_class_1_score']
+    Special case:
+      - If probs has exactly 2 classes (shape (n_samples, 2)), return only the
+        positive-class (class 1) probability column.
     """
-    n_classes = probs.shape[1] if probs.ndim == 2 else 1
+    probs = np.asarray(probs)
+
+    # Binary probabilities provided as (n_samples, 2): keep only class 1
+    if probs.ndim == 2 and probs.shape[1] == 2:
+        col = get_score_column_name(
+            target_variable_name=target_variable_name, model_name=model_name, class_num=1
+        )
+        return pd.DataFrame({col: probs[:, 1]})
+
+    # Binary probabilities already as (n_samples,)
+    if probs.ndim == 1 or (probs.ndim == 2 and probs.shape[1] == 1):
+        col = get_score_column_name(
+            target_variable_name=target_variable_name,
+            model_name=model_name,
+            class_num=1,  # treat as positive-class score
+        )
+        return pd.DataFrame({col: probs.reshape(-1)})
+
+    # Multiclass: one column per class
+    n_classes = probs.shape[1]
     columns = [
         get_score_column_name(
             target_variable_name=target_variable_name, model_name=model_name, class_num=c
