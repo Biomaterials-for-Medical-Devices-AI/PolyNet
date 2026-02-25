@@ -37,12 +37,12 @@ from __future__ import annotations
 from typing import Any
 
 from polynet.config.enums import Network, ProblemType
-from polynet.models.CGGNN import CGGNNClassifier, CGGNNRegressor
-from polynet.models.GAT import GATClassifier, GATRegressor
-from polynet.models.GCN import GCNClassifier, GCNRegressor
-from polynet.models.MPNN import MPNNClassifier, MPNNRegressor
-from polynet.models.TransfomerGNN import TransformerGNNClassifier, TransformerGNNRegressor
-from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
+from polynet.models.gnn.cggnn import CGGNNClassifier, CGGNNRegressor
+from polynet.models.gnn.gat import GATClassifier, GATRegressor
+from polynet.models.gnn.gcn import GCNClassifier, GCNRegressor
+from polynet.models.gnn.mpnn import MPNNClassifier, MPNNRegressor
+from polynet.models.gnn.transformer import TransformerGNNClassifier, TransformerGNNRegressor
+from polynet.models.gnn.graphsage import GraphSAGEClassifier, GraphSAGERegressor
 
 
 # ---------------------------------------------------------------------------
@@ -54,8 +54,8 @@ from polynet.models.graphsage import GraphSageClassifier, GraphSageRegressor
 _NETWORK_REGISTRY: dict[tuple[Network, ProblemType], type] = {
     (Network.GCN, ProblemType.Classification): GCNClassifier,
     (Network.GCN, ProblemType.Regression): GCNRegressor,
-    (Network.GraphSAGE, ProblemType.Classification): GraphSageClassifier,
-    (Network.GraphSAGE, ProblemType.Regression): GraphSageRegressor,
+    (Network.GraphSAGE, ProblemType.Classification): GraphSAGEClassifier,
+    (Network.GraphSAGE, ProblemType.Regression): GraphSAGERegressor,
     (Network.GAT, ProblemType.Classification): GATClassifier,
     (Network.GAT, ProblemType.Regression): GATRegressor,
     (Network.TransformerGNN, ProblemType.Classification): TransformerGNNClassifier,
