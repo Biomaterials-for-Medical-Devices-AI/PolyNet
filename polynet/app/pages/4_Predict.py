@@ -6,10 +6,6 @@ from scipy.stats import mode
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
-from polynet.app.components.forms.analyse_results import (
-    confusion_matrix_plot_form,
-    parity_plot_form,
-)
 from polynet.app.components.plots import (
     display_mean_std_model_metrics,
     display_model_results,
@@ -54,10 +50,12 @@ from polynet.config.constants import ResultColumn
 from polynet.config.column_names import get_true_label_column_name
 
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.train.evaluate_model import calculate_metrics
+from polynet.training.metrics import calculate_metrics
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
 
 
+# TODO: refactor this page to spread functions in other modules
+# TODO: prepare results plots when given target variable for comparison
 def predict(
     experiment_path,
     df: pd.DataFrame,
@@ -109,13 +107,13 @@ def predict(
     if tml_models:
         # calculate descriptors
         descriptor_dfs = build_vector_representation(
+            data=df,
             molecular_descriptors=representation_options.molecular_descriptors,
             smiles_cols=data_options.smiles_cols,
             id_col=data_options.id_col,
-            descriptor_merging_approach=representation_options.smiles_merge_approach,
             target_col=data_options.target_variable_col,
+            merging_approach=representation_options.smiles_merge_approach,
             weights_col=representation_options.weights_col,
-            data=df,
             rdkit_independent=representation_options.rdkit_independent,
             df_descriptors_independent=representation_options.df_descriptors_independent,
             mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
@@ -132,7 +130,7 @@ def predict(
             experiment_path=experiment_path, model_names=tml_models
         )
 
-        if train_tml_options.TransformFeatures != TransformDescriptor.NoTransformation:
+        if train_tml_options.transform_features != TransformDescriptor.NoTransformation:
             scalers = load_scalers_from_experiment(
                 experiment_path=experiment_path, model_names=tml_models
             )
@@ -155,8 +153,8 @@ def predict(
             target_col=data_options.target_variable_col,
             id_col=data_options.id_col,
             weights_col=representation_options.weights_col,
-            node_feats=representation_options.node_feats,
-            edge_feats=representation_options.edge_feats,
+            node_feats=representation_options.node_features,
+            edge_feats=representation_options.edge_features,
         )
 
         # load the the selected gnn models
@@ -252,19 +250,19 @@ def predict(
         )
         metrics = {}
 
-        for col in predictions.columns[2:]:
+        for col in predictions.columns:
 
             if ResultColumn.PREDICTED in col and "Ensemble" not in col:
-                split_name = col.split(" ")
+                split_name = col.rsplit(" ", 3)
                 model, number = split_name[0], split_name[1]
                 model_name = f"{model} {number}"
                 probs_cols = [
                     col_name
-                    for col_name in predictions.columns[2:]
+                    for col_name in predictions.columns
                     if ResultColumn.SCORE in col_name and model_name in col_name
                 ]
             elif ResultColumn.PREDICTED in col:
-                split_name = col.split(" ")
+                split_name = col.rsplit(" ", 1)
                 model = split_name[0] + " " + split_name[1]
                 probs_cols = None
             else:
@@ -274,6 +272,8 @@ def predict(
                 metrics[number] = {}
             if model not in metrics[number]:
                 metrics[number][model] = {}
+
+            print(probs_cols)
 
             metrics[number][model][dataset_name.split(".")[0]] = calculate_metrics(
                 y_true=predictions[label_col_name],
@@ -298,7 +298,7 @@ def predict(
     predictions_parent_path = ml_predictions_parent_path(
         file_name=dataset_name, experiment_path=experiment_path
     )
-    predictions_parent_path.mkdir()
+    predictions_parent_path.mkdir(exist_ok=True)
     predictions.to_csv(
         ml_predictions_file_path(file_name=dataset_name, experiment_path=experiment_path)
     )
