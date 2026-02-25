@@ -15,7 +15,6 @@ from polynet.app.components.plots import (
     display_model_results,
     display_unseen_predictions,
 )
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -33,11 +32,13 @@ from polynet.app.options.file_paths import (
     unseen_predictions_experiment_parent_path,
     unseen_predictions_ml_results_path,
 )
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
+from polynet.config.schemas import DataConfig
+from polynet.config.schemas import GeneralConfig
+from polynet.config.schemas import RepresentationConfig
+from polynet.config.schemas import TrainGNNConfig
+from polynet.config.schemas import TrainTMLConfig
+
 from polynet.app.options.state_keys import PredictPageStateKeys
-from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import (
@@ -62,8 +63,8 @@ def predict(
     df: pd.DataFrame,
     tml_models: list[str],
     gnn_models: list[str],
-    data_options: DataOptions,
-    representation_options: RepresentationOptions,
+    data_options: DataConfig,
+    representation_options: RepresentationConfig,
 ):
 
     dataset_name = st.session_state[PredictPageStateKeys.PredictData].name
@@ -322,34 +323,34 @@ if experiment_name:
 
     # load data options
     path_to_data_opts = data_options_path(experiment_path=experiment_path)
-    data_options = load_options(path=path_to_data_opts, options_class=DataOptions)
+    data_options = load_options(path=path_to_data_opts, options_class=DataConfig)
     smiles_cols = data_options.smiles_cols
 
     # load representation options
     path_to_representation_opts = representation_options_path(experiment_path=experiment_path)
     representation_options = load_options(
-        path=path_to_representation_opts, options_class=RepresentationOptions
+        path=path_to_representation_opts, options_class=RepresentationConfig
     )
     weights_col = representation_options.weights_col
 
     # load general options
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
     general_experiment_options = load_options(
-        path=path_to_general_opts, options_class=GeneralConfigOptions
+        path=path_to_general_opts, options_class=GeneralConfig
     )
 
     # load tml options
     path_to_train_tml_options = train_tml_model_options_path(experiment_path=experiment_path)
     if path_to_train_tml_options.exists:
         train_tml_options = load_options(
-            path=path_to_train_tml_options, options_class=TrainTMLOptions
+            path=path_to_train_tml_options, options_class=TrainTMLConfig
         )
 
     # load train gnn options
     path_to_train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
     if path_to_train_gnn_options.exists():
         train_gnn_options = load_options(
-            path=path_to_train_gnn_options, options_class=TrainGNNOptions
+            path=path_to_train_gnn_options, options_class=TrainGNNConfig
         )
 
     if (
