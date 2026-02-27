@@ -7,12 +7,13 @@ from polynet.app.options.data import DataOptions
 from polynet.app.options.general_experiment import GeneralConfigOptions
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
 from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.options.col_names import (
+from polynet.config.column_names import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.options.enums import DataSets, Plots, ProblemTypes, Results
+from polynet.config.enums import DataSet, Plot, ProblemType
+from polynet.config.constants import ResultColumn
 from polynet.utils.plot_utils import (
     plot_bootstrap_boxplots,
     plot_confusion_matrix,
@@ -34,19 +35,19 @@ def compare_predictions_form(
 
     analyse_set = st.selectbox(
         "Select a set to analyse",
-        options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All sets"],
+        options=[DataSet.Training, DataSet.Validation, DataSet.Test, "All sets"],
         index=2,
         key="analyse_set",
     )
 
     if analyse_set != "All sets":
-        predictions_df = predictions_df.loc[predictions_df[Results.Set] == analyse_set]
+        predictions_df = predictions_df.loc[predictions_df[ResultColumn.SET] == analyse_set]
 
     label_col_name = get_true_label_column_name(target_variable_name=target_variable_name)
     true_vals = predictions_df[label_col_name].to_numpy()
 
     trained_models = [
-        col.split(" ")[0] for col in predictions_df.columns if Results.Predicted in col
+        col.split(" ")[0] for col in predictions_df.columns if ResultColumn.PREDICTED in col
     ]
     compare_models = st.multiselect(
         "Select models to test statistically difference in predictions", options=trained_models
@@ -62,13 +63,13 @@ def compare_predictions_form(
         ]
         predictions_array = predictions_df[predicted_cols].to_numpy().T
 
-        if data_options.problem_type == ProblemTypes.Classification:
+        if data_options.problem_type == ProblemType.Classification:
             p_matrix = mcnemar_pvalue_matrix(y_true=true_vals, predictions=predictions_array)
-        elif data_options.problem_type == ProblemTypes.Regression:
+        elif data_options.problem_type == ProblemType.Regression:
             p_matrix = regression_pvalue_matrix(y_true=true_vals, predictions=predictions_array)
 
         config = get_plot_customisation_form(
-            plot_type=Plots.MatrixPlot,
+            plot_type=Plot.MatrixPlot,
             data=None,
             data_options=data_options,
             color_by_opts=None,
@@ -86,7 +87,7 @@ def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
 
     analyse_set = st.selectbox(
         "Select a set to analyse",
-        options=[DataSets.Training, DataSets.Validation, DataSets.Test],
+        options=[DataSet.Training, DataSet.Validation, DataSet.Test],
         index=2,
         key="analyse_set_metrics",
     )
@@ -118,7 +119,7 @@ def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
 
         if plot_type == "P-value Matrix":
             config = get_plot_customisation_form(
-                plot_type=Plots.MatrixPlot,
+                plot_type=Plot.MatrixPlot,
                 data=None,
                 data_options=data_options,
                 color_by_opts=None,
@@ -129,7 +130,7 @@ def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
             plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=order, **config)
         elif plot_type == "Box Plot":
             config = get_plot_customisation_form(
-                plot_type=Plots.MetricsBoxPlot,
+                plot_type=Plot.MetricsBoxPlot,
                 data=None,
                 data_options=data_options,
                 color_by_opts=None,
@@ -185,7 +186,7 @@ def get_plot_customisation_form(
                 step=1,
                 key="plot_height" + plot_type,
             )
-            if plot_type not in [Plots.MatrixPlot, Plots.MetricsBoxPlot]:
+            if plot_type not in [Plot.MatrixPlot, Plot.MetricsBoxPlot]:
                 config["x_label"] = st.text_input(
                     "X-axis Label",
                     value=model_true_cols,
@@ -212,7 +213,7 @@ def get_plot_customisation_form(
                 key="plot_width" + plot_type,
             )
 
-            if plot_type not in [Plots.MatrixPlot, Plots.MetricsBoxPlot]:
+            if plot_type not in [Plot.MatrixPlot, Plot.MetricsBoxPlot]:
                 config["y_label"] = st.text_input(
                     "Y-axis Label",
                     value=model_pred_col,
@@ -237,7 +238,7 @@ def get_plot_customisation_form(
             help="Select the font size for the tick labels.",
         )
 
-        if plot_type == Plots.Parity.value:
+        if plot_type == Plot.Parity.value:
 
             config["grid"] = st.checkbox(
                 "Show Grid",
@@ -334,7 +335,7 @@ def get_plot_customisation_form(
                     help="Select a color for the points in the plot.",
                 )
 
-        elif plot_type == Plots.ConfusionMatrix.value:
+        elif plot_type == Plot.ConfusionMatrix.value:
             config["cmap"] = st.selectbox(
                 "Color Map",
                 options=["Blues", "Greens", "Oranges"],
@@ -362,7 +363,7 @@ def get_plot_customisation_form(
                 )
                 config["display_labels"].append(name)
 
-        elif plot_type == Plots.MatrixPlot:
+        elif plot_type == Plot.MatrixPlot:
 
             config["mask_upper_triangle"] = st.checkbox("Mask upper triangle")
 
@@ -377,7 +378,7 @@ def get_plot_customisation_form(
                     "Non-signifficant colour", value="#D73027", key="signifficant" + plot_type
                 )
 
-        elif plot_type == Plots.MetricsBoxPlot:
+        elif plot_type == Plot.MetricsBoxPlot:
 
             cols = st.columns(3)
 
@@ -463,9 +464,9 @@ def confusion_matrix_plot_form(
 
     set_name = st.multiselect(
         "Select the set to display parity plot",
-        options=predictions_df[Results.Set.value].unique(),
+        options=predictions_df[ResultColumn.SET.value].unique(),
         key=AnalyseResultsStateKeys.PlotSet,
-        default=[DataSets.Test.value],
+        default=[DataSet.Test.value],
         help="Select the set for which you want to display the parity plot.",
     )
 
@@ -481,8 +482,8 @@ def confusion_matrix_plot_form(
 
     plot_data = plot_data[
         (plot_data[iterator].isin(iteration))
-        & (plot_data[Results.Set.value].isin(set_name))
-        & (plot_data[Results.Model.value].isin(model_name))
+        & (plot_data[ResultColumn.SET.value].isin(set_name))
+        & (plot_data[ResultColumn.MODEL.value].isin(model_name))
     ]
 
     with st.expander("Show Data", expanded=False):
@@ -495,7 +496,7 @@ def confusion_matrix_plot_form(
         st.dataframe(plot_data)
 
     plot_config = get_plot_customisation_form(
-        plot_type=Plots.ConfusionMatrix.value,
+        plot_type=Plot.ConfusionMatrix.value,
         data=plot_data,
         data_options=data_options,
         color_by_opts=[None],
@@ -539,7 +540,7 @@ def parity_plot_form(
     models = [
         col_name.split(" ")[0]
         for col_name in predictions_df.columns
-        if Results.Predicted in col_name
+        if ResultColumn.PREDICTED in col_name
     ]
 
     model_name = st.multiselect(
@@ -551,7 +552,7 @@ def parity_plot_form(
     )
 
     if len(model_name) > 1:
-        color_by_opts.append(Results.Model.value)
+        color_by_opts.append(ResultColumn.MODEL.value)
 
     model_pred_cols = [
         get_predicted_label_column_name(
@@ -566,14 +567,14 @@ def parity_plot_form(
 
     set_name = st.multiselect(
         "Select the set to display parity plot",
-        options=predictions_df[Results.Set.value].unique(),
+        options=predictions_df[ResultColumn.SET.value].unique(),
         key=AnalyseResultsStateKeys.PlotSet,
-        default=[DataSets.Test.value],
+        default=[DataSet.Test.value],
         help="Select the set for which you want to display the parity plot.",
     )
 
     if len(set_name) > 1:
-        color_by_opts.append(Results.Set.value)
+        color_by_opts.append(ResultColumn.SET.value)
 
     plot_data = reshape_predictions(
         df=predictions_df,
@@ -587,8 +588,8 @@ def parity_plot_form(
 
     plot_data = plot_data[
         (plot_data[iterator].isin(iteration))
-        & (plot_data[Results.Set.value].isin(set_name))
-        & (plot_data[Results.Model.value].isin(model_name))
+        & (plot_data[ResultColumn.SET.value].isin(set_name))
+        & (plot_data[ResultColumn.MODEL.value].isin(model_name))
     ]
 
     with st.expander("Show Data", expanded=False):
@@ -601,7 +602,7 @@ def parity_plot_form(
         st.dataframe(plot_data)
 
     plot_config = get_plot_customisation_form(
-        plot_type=Plots.Parity.value,
+        plot_type=Plot.Parity.value,
         data=plot_data,
         data_options=data_options,
         color_by_opts=color_by_opts,
@@ -639,7 +640,7 @@ def reshape_predictions(
     )
 
     # Extract model name from the column name
-    melted_df[Results.Model.value] = melted_df["Prediction_Column"].apply(
+    melted_df[ResultColumn.MODEL.value] = melted_df["Prediction_Column"].apply(
         lambda col: extract_model_name_and_target(col, target_variable_name)
     )
 
