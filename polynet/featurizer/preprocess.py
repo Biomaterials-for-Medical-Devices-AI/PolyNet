@@ -1,22 +1,22 @@
 import pandas as pd
 from sklearn.preprocessing import MinMaxScaler, StandardScaler
 
-from polynet.options.enums import TransformDescriptors
+from polynet.config.enums import TransformDescriptor
 
 
 def transform_dependent_variables(
-    fit_data: pd.DataFrame, transform_data: pd.DataFrame, transform_type: TransformDescriptors
+    fit_data: pd.DataFrame, transform_data: pd.DataFrame, transform_type: TransformDescriptor
 ):
     """
     Transform the dependent variable based on the specified transformation type.
     """
-    if transform_type == TransformDescriptors.StandardScaler:
+    if transform_type == TransformDescriptor.StandardScaler:
 
         scaler = StandardScaler()
         scaler.fit(fit_data)
         transform_data = scaler.transform(transform_data)
 
-    elif transform_type == TransformDescriptors.MinMaxScaler:
+    elif transform_type == TransformDescriptor.MinMaxScaler:
 
         scaler = MinMaxScaler()
         scaler.fit(fit_data)

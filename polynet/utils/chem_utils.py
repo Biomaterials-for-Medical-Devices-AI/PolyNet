@@ -5,7 +5,7 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
 
-from polynet.options.enums import AtomFeatures, BondFeatures, StringRepresentation
+from polynet.config.enums import AtomFeature, BondFeature, StringRepresentation
 
 # from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
 # from psmiles import PolymerSmiles
@@ -220,7 +220,7 @@ def _fragments_murcko(mol):
 
 
 def count_atom_property_frequency(
-    df: pd.DataFrame, col_name: str, property: AtomFeatures
+    df: pd.DataFrame, col_name: str, property: AtomFeature
 ) -> pd.DataFrame:
     """
     Count how many molecules contain at least one atom with each unique property value.
@@ -256,7 +256,7 @@ def count_atom_property_frequency(
     return counts
 
 
-def count_bond_property_frequency(df: pd.DataFrame, col_name: str, property: BondFeatures) -> dict:
+def count_bond_property_frequency(df: pd.DataFrame, col_name: str, property: BondFeature) -> dict:
     """
     Count how many molecules contain at least one bond with each unique property value.
 
