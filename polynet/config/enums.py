@@ -50,14 +50,6 @@ class SplitMethod(StrEnum):
     Stratified = "stratified"
 
 
-class DataSet(StrEnum):
-    """Dataset partition labels."""
-
-    Training = "train"
-    Validation = "validation"
-    Test = "test"
-
-
 class IteratorType(StrEnum):
     """Labels for iterative training loops."""
 
