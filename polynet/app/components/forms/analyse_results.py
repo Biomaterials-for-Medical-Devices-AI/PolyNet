@@ -9,7 +9,7 @@ from polynet.config.column_names import (
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.config.constants import ResultColumn, DataSet
+from polynet.config.constants import DataSet, ResultColumn
 from polynet.config.enums import Plot, ProblemType
 from polynet.config.schemas import DataConfig, GeneralConfig, TrainGNNConfig
 from polynet.utils.plot_utils import (
