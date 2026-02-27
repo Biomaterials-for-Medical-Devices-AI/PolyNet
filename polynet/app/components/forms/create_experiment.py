@@ -86,12 +86,14 @@ def select_data_form():
                     df[col] = df[col].apply(canonicalise_psmiles)
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
-        st.selectbox(
+        id_col = st.selectbox(
             "Select column with the ID of each molecule",
             options=df.columns.tolist(),
             index=None,
             key=CreateExperimentStateKeys.IDCol,
         )
+        if id_col is None:
+            st.warning("An ID column to identify your polymers is highly recommended.")
 
         target_col = st.selectbox(
             "Select target column",
