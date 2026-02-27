@@ -16,16 +16,15 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 from torch_geometric.nn import global_add_pool as gap
 from torch_geometric.nn import global_max_pool as gmp
 from torch_geometric.nn import global_mean_pool as gmeanp
 from torch_geometric.seed import seed_everything
 
 from polynet.config.enums import ApplyWeightingToGraph, Pooling, ProblemType
-
 
 # ---------------------------------------------------------------------------
 # Pooling helpers

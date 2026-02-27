@@ -9,7 +9,6 @@ from polynet.app.components.forms.representation import (
     molecular_descriptor_representation,
     select_weight_factor,
 )
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     gnn_raw_data_file,
@@ -21,24 +20,25 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     representation_parent_directory,
 )
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
 from polynet.app.utils import create_directory
-from polynet.featurizer.descriptor_calculation import build_vector_representation
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import DescriptorMergingMethods, MolecularDescriptors
+from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
+from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.representation import RepresentationConfig
+from polynet.featurizer.descriptors import build_vector_representation
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 
 def parse_representation_options(
     experiment_name: str,
     node_feats: dict,
     edge_feats: dict,
-    molecular_descriptors: dict[MolecularDescriptors, list[str]],
+    molecular_descriptors: dict[MolecularDescriptor, list[str]],
     data: pd.DataFrame,
-    data_options: DataOptions,
+    data_options: DataConfig,
     weights_col: dict,
 ):
     """
@@ -48,27 +48,26 @@ def parse_representation_options(
 
     calculate_polybert_fps = st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False)
 
-    representation_options = RepresentationOptions(
+    representation_options = RepresentationConfig(
+        smiles_merge_approach=st.session_state.get(
+            DescriptorCalculationStateKeys.MergeDescriptorsApproach,
+            DescriptorMergingMethod.NoMerging,
+        ),
+        node_features=node_feats,
+        edge_features=edge_feats,
         molecular_descriptors=molecular_descriptors,
-        rdkit_descriptors=None,
-        df_descriptors=None,
+        # rdkit_descriptors=None,
+        # df_descriptors=None,
         rdkit_independent=st.session_state.get(
             DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
-            bool(molecular_descriptors[MolecularDescriptors.RDKit]),
+            bool(molecular_descriptors[MolecularDescriptor.RDKit]),
         ),
         df_descriptors_independent=st.session_state.get(
-            DescriptorCalculationStateKeys.IndependentDFDescriptors,
-            bool(molecular_descriptors[MolecularDescriptors.DataFrame]),
+            DescriptorCalculationStateKeys.IndependentDFDescriptors, False
         ),
         mix_rdkit_df_descriptors=st.session_state.get(
             DescriptorCalculationStateKeys.MergeDescriptors, False
         ),
-        smiles_merge_approach=st.session_state.get(
-            DescriptorCalculationStateKeys.MergeDescriptorsApproach,
-            DescriptorMergingMethods.NoMerging,
-        ),
-        node_feats=node_feats,
-        edge_feats=edge_feats,
         weights_col=weights_col,
         polybert_fp=calculate_polybert_fps,
     )
@@ -89,13 +88,13 @@ def parse_representation_options(
     if molecular_descriptors:
 
         descriptor_dfs = build_vector_representation(
+            data=data,
             molecular_descriptors=representation_options.molecular_descriptors,
             smiles_cols=data_options.smiles_cols,
             id_col=data_options.id_col,
-            descriptor_merging_approach=representation_options.smiles_merge_approach,
             target_col=data_options.target_variable_col,
+            merging_approach=representation_options.smiles_merge_approach,
             weights_col=representation_options.weights_col,
-            data=data,
             rdkit_independent=representation_options.rdkit_independent,
             df_descriptors_independent=representation_options.df_descriptors_independent,
             mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
@@ -129,12 +128,12 @@ def parse_representation_options(
         )
 
         dataset = CustomPolymerGraph(
-            filename=data_options.data_name,
             root=gnn_raw_data_path(experiment_path=experiment_path).parent,
+            filename=data_options.data_name,
             smiles_cols=data_options.smiles_cols,
+            weights_col=weights_col,
             target_col=data_options.target_variable_col,
             id_col=data_options.id_col,
-            weights_col=weights_col,
             node_feats=node_feats,
             edge_feats=edge_feats,
         )
@@ -189,7 +188,7 @@ if experiment_name:
 
     path_to_data_opts = data_options_path(experiment_path=experiment_path)
 
-    data_opts = load_options(path=path_to_data_opts, options_class=DataOptions)
+    data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
     data = pd.read_csv(data_opts.data_path)
 
@@ -199,9 +198,9 @@ if experiment_name:
     descriptors_weighted = (
         st.session_state.get(
             DescriptorCalculationStateKeys.MergeDescriptorsApproach,
-            DescriptorMergingMethods.NoMerging,
+            DescriptorMergingMethod.NoMerging,
         )
-        == DescriptorMergingMethods.WeightedAverage
+        == DescriptorMergingMethod.WeightedAverage
     )
 
     atomic_properties, bond_properties = graph_representation(data_opts=data_opts, df=data)

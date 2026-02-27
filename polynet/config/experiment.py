@@ -213,8 +213,9 @@ class ExperimentConfig(PolynetBaseModel):
         means plots and result tables will use raw class indices (0, 1, ...)
         rather than meaningful labels.
         """
-        from polynet.config.enums import ProblemType
         import warnings
+
+        from polynet.config.enums import ProblemType
 
         if self.data.problem_type == ProblemType.Classification and self.data.class_names is None:
             warnings.warn(

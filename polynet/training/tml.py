@@ -15,8 +15,8 @@ Public API
 
 from __future__ import annotations
 
-import logging
 from copy import deepcopy
+import logging
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
@@ -198,18 +198,16 @@ def train_tml_ensemble(
             test_df = df.loc[test_idxs].copy()
 
             if transform_type != TransformDescriptor.NoTransformation:
+
+                fit_features = train_df.iloc[:, :-1].copy()
                 X_train_scaled, scaler = transform_features(
-                    fit_data=train_df.iloc[:, :-1],
+                    fit_data=fit_features,
                     transform_data=train_df.iloc[:, :-1],
                     transform_type=transform_type,
                 )
                 train_df.iloc[:, :-1] = X_train_scaled
 
-                X_test_scaled, _ = transform_features(
-                    fit_data=train_df.iloc[:, :-1],
-                    transform_data=test_df.iloc[:, :-1],
-                    transform_type=transform_type,
-                )
+                X_test_scaled = scaler.transform(test_df.iloc[:, :-1])
                 test_df.iloc[:, :-1] = X_test_scaled
                 scalers[log_name] = scaler
 

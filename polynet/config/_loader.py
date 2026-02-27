@@ -31,11 +31,10 @@ Remapping responsibilities
 
 from __future__ import annotations
 
-import warnings
 from typing import Any
+import warnings
 
 from polynet.config.experiment import ExperimentConfig
-
 
 # ---------------------------------------------------------------------------
 # Enum value compatibility maps

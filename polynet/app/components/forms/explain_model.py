@@ -5,25 +5,24 @@ from rdkit.Chem import Descriptors
 import streamlit as st
 from torch_geometric.data import Dataset
 
-from polynet.app.options.data import DataOptions
 from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
 from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
 from polynet.app.services.model_training import load_gnn_model
 from polynet.app.utils import extract_number
-from polynet.featurizer.descriptor_calculation import (
+from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
+from polynet.config.constants import DataSet, ResultColumn
+from polynet.config.enums import (
+    DimensionalityReduction,
+    ExplainAlgorithm,
+    FragmentationMethod,
+    ImportanceNormalisationMethod,
+    ProblemType,
+)
+from polynet.config.schemas import DataConfig
+from polynet.featurizer.descriptors import (
     calculate_rdkit_df_dict,
     get_unique_smiles,
     merge_weighted,
-)
-from polynet.options.col_names import get_predicted_label_column_name, get_true_label_column_name
-from polynet.options.enums import (
-    DataSets,
-    DimensionalityReduction,
-    ExplainAlgorithms,
-    ImportanceNormalisationMethods,
-    ProblemTypes,
-    Results,
-    FragmentationMethods,
 )
 
 
@@ -36,17 +35,17 @@ def explain_mols_widget(
 
     mols_to_explain = st.pills(
         "Select a set to explain",
-        options=[DataSets.Training, DataSets.Validation, DataSets.Test, "All"],
+        options=[DataSet.Training, DataSet.Validation, DataSet.Test, "All"],
         key=SetStateKey,
         default=["All"],
     )
 
-    if mols_to_explain == DataSets.Training:
-        explain_mols = data.loc[data[Results.Set.value] == DataSets.Training].index
-    elif mols_to_explain == DataSets.Validation:
-        explain_mols = data.loc[data[Results.Set.value] == DataSets.Validation].index
-    elif mols_to_explain == DataSets.Test:
-        explain_mols = data.loc[data[Results.Set.value] == DataSets.Test].index
+    if mols_to_explain == DataSet.Training:
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Training].index
+    elif mols_to_explain == DataSet.Validation:
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Validation].index
+    elif mols_to_explain == DataSet.Test:
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Test].index
     elif mols_to_explain == "All":
         explain_mols = data.index
     else:
@@ -78,7 +77,7 @@ def embedding_projection(
     data: pd.DataFrame,
     preds: pd.DataFrame,
     dataset: Dataset,
-    data_options: DataOptions,
+    data_options: DataConfig,
     random_seed: int,
     weights_col: dict,
 ):
@@ -114,7 +113,7 @@ def embedding_projection(
 
         # filter the predictions to get only the predictions of the corresponding iteration and the corresponding model
         preds_projection = preds.loc[
-            preds[iterator_col] == iteration, [Results.Set.value, predicted_col_name]
+            preds[iterator_col] == iteration, [ResultColumn.SET, predicted_col_name]
         ]
 
         projection_data = pd.merge(
@@ -182,7 +181,7 @@ def embedding_projection(
 
         style_by = st.selectbox(
             "Select a column to style the projection plot by",
-            options=[None, data_options.target_variable_col, predicted_col_name, Results.Set.value],
+            options=[None, data_options.target_variable_col, predicted_col_name, ResultColumn.SET],
             key="style",
             index=3,
         )
@@ -222,7 +221,7 @@ def explain_predictions_form(
     gnn_models: list,
     gnn_models_dir: Path,
     iterator_col: str,
-    data_options: DataOptions,
+    data_options: DataConfig,
     data: pd.DataFrame,
     preds: pd.DataFrame,
     dataset: Dataset,
@@ -282,18 +281,18 @@ def explain_predictions_form(
         if plot_mols:
             for mol in plot_mols:
                 preds_dict[mol] = {}
-                if data_options.problem_type == ProblemTypes.Regression:
+                if data_options.problem_type == ProblemType.Regression:
                     predicted_vals = preds[[true_col_name, predicted_col_name]].loc[mol].astype(str)
-                    preds_dict[mol][Results.Predicted] = predicted_vals.loc[predicted_col_name]
-                    preds_dict[mol][Results.Label] = predicted_vals.loc[true_col_name]
-                elif data_options.problem_type == ProblemTypes.Classification:
+                    preds_dict[mol][ResultColumn.PREDICTED] = predicted_vals.loc[predicted_col_name]
+                    preds_dict[mol][ResultColumn.LABEL] = predicted_vals.loc[true_col_name]
+                elif data_options.problem_type == ProblemType.Classification:
                     predicted_vals = (
                         preds[[true_col_name, predicted_col_name]].loc[mol].astype(int).astype(str)
                     )
-                    preds_dict[mol][Results.Predicted] = class_names[
+                    preds_dict[mol][ResultColumn.PREDICTED] = class_names[
                         predicted_vals[predicted_col_name]
                     ]
-                    preds_dict[mol][Results.Label] = class_names[predicted_vals[true_col_name]]
+                    preds_dict[mol][ResultColumn.LABEL] = class_names[predicted_vals[true_col_name]]
 
         mol_names = {}
         if st.toggle("Set Monomer Name"):
@@ -312,12 +311,12 @@ def explain_predictions_form(
             "Select Explainability Algorithm",
             options=[
                 # ExplainAlgorithms.GNNExplainer,
-                ExplainAlgorithms.IntegratedGradients,
-                ExplainAlgorithms.Saliency,
-                ExplainAlgorithms.InputXGradients,
-                ExplainAlgorithms.Deconvolution,
-                ExplainAlgorithms.ShapleyValueSampling,
-                ExplainAlgorithms.GuidedBackprop,
+                ExplainAlgorithm.IntegratedGradients,
+                ExplainAlgorithm.Saliency,
+                ExplainAlgorithm.InputXGradients,
+                ExplainAlgorithm.Deconvolution,
+                ExplainAlgorithm.ShapleyValueSampling,
+                ExplainAlgorithm.GuidedBackprop,
             ],
             key=ExplainModelStateKeys.ExplainAlgorithm,
         )
@@ -354,9 +353,9 @@ def explain_predictions_form(
         normalisation_type = st.radio(
             "Select Normalisation Type",
             options=[
-                ImportanceNormalisationMethods.Local,
-                ImportanceNormalisationMethods.Global,
-                ImportanceNormalisationMethods.NoNormalisation,
+                ImportanceNormalisationMethod.Local,
+                ImportanceNormalisationMethod.Global,
+                ImportanceNormalisationMethod.NoNormalisation,
             ],
             key=ExplainModelStateKeys.NormalisationMethodSelector,
             index=1,
@@ -365,7 +364,7 @@ def explain_predictions_form(
 
         fragmentation_approach = st.radio(
             "Select a fragmentation approach to obtain importance scores",
-            options=[FragmentationMethods.BRICS, FragmentationMethods.MurckoScaffold],
+            options=[FragmentationMethod.BRICS, FragmentationMethod.MurckoScaffold],
             index=0,
             horizontal=True,
         )

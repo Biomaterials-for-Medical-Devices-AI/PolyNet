@@ -3,7 +3,7 @@ import streamlit as st
 
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
-from polynet.options.enums import ProblemTypes, StringRepresentation
+from polynet.config.enums import ProblemType, StringRepresentation
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import (
     canonicalise_psmiles,
@@ -80,18 +80,20 @@ def select_data_form():
         ):
             for col in smiles_cols:
 
-                if str_representation == StringRepresentation.Smiles:
+                if str_representation == StringRepresentation.SMILES:
                     df[col] = df[col].apply(canonicalise_smiles)
-                elif str_representation == StringRepresentation.PSmiles:
+                elif str_representation == StringRepresentation.PSMILES:
                     df[col] = df[col].apply(canonicalise_psmiles)
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
-        st.selectbox(
+        id_col = st.selectbox(
             "Select column with the ID of each molecule",
             options=df.columns.tolist(),
             index=None,
             key=CreateExperimentStateKeys.IDCol,
         )
+        if id_col is None:
+            st.warning("An ID column to identify your polymers is highly recommended.")
 
         target_col = st.selectbox(
             "Select target column",
@@ -106,10 +108,10 @@ def select_data_form():
             unique_vals_target = df[target_col].nunique()
             if unique_vals_target < 20:
                 st.warning("This looks like a classification problem is to be modeled.")
-                suggested_problem_type = ProblemTypes.Classification
+                suggested_problem_type = ProblemType.Classification
             else:
                 st.warning("This looks like a regression problem is to be modeled.")
-                suggested_problem_type = ProblemTypes.Regression
+                suggested_problem_type = ProblemType.Regression
         elif target_col is None:
             st.error("Please select a target variable.")
             return False
@@ -121,7 +123,7 @@ def select_data_form():
             return False
 
         if target_col:
-            problems = [ProblemTypes.Classification, ProblemTypes.Regression]
+            problems = [ProblemType.Classification, ProblemType.Regression]
             problem_type = st.selectbox(
                 "Select the problem type",
                 problems,
@@ -133,7 +135,7 @@ def select_data_form():
                 key=CreateExperimentStateKeys.ProblemType,
             )
 
-            if problem_type == ProblemTypes.Classification:
+            if problem_type == ProblemType.Classification:
                 n_classes = df[target_col].nunique()
             else:
                 n_classes = 1
@@ -160,7 +162,7 @@ def select_data_form():
                     help="This will be used to create the plots and log information.",
                 )
 
-                if problem_type == ProblemTypes.Classification:
+                if problem_type == ProblemType.Classification:
 
                     class_names = {}
 
@@ -176,7 +178,7 @@ def select_data_form():
 
                     st.markdown("**Label Distribution**")
 
-            if problem_type == ProblemTypes.Classification:
+            if problem_type == ProblemType.Classification:
 
                 fig = show_label_distribution(
                     data=df,
@@ -192,7 +194,7 @@ def select_data_form():
 
                 return df
 
-            elif problem_type == ProblemTypes.Regression:
+            elif problem_type == ProblemType.Regression:
 
                 st.markdown("**Continuous Distribution**")
                 st.pyplot(

@@ -20,8 +20,8 @@ Public API
 
 from __future__ import annotations
 
-import logging
 from copy import deepcopy
+import logging
 from pathlib import Path
 
 import torch

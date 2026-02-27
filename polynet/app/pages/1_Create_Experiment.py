@@ -2,10 +2,10 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.forms.create_experiment import select_data_form
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.app.services.experiments import create_experiment
+from polynet.config.schemas.data import DataConfig
 
 
 def save_experiment(df):
@@ -18,21 +18,21 @@ def save_experiment(df):
         / st.session_state[CreateExperimentStateKeys.ExperimentName],
     )
 
-    data_options = DataOptions(
+    data_options = DataConfig(
         data_name=dataset_name,
         data_path=str(path_to_data),
         smiles_cols=st.session_state[CreateExperimentStateKeys.SmilesCols],
         canonicalise_smiles=st.session_state[CreateExperimentStateKeys.CanonicaliseSMILES],
-        id_col=st.session_state[CreateExperimentStateKeys.IDCol],
         target_variable_col=st.session_state[CreateExperimentStateKeys.TargetVariableCol],
         problem_type=st.session_state[CreateExperimentStateKeys.ProblemType],
+        string_representation=st.session_state[CreateExperimentStateKeys.StringRepresentation],
+        id_col=st.session_state[CreateExperimentStateKeys.IDCol],
         num_classes=st.session_state[CreateExperimentStateKeys.NumClasses],
         target_variable_name=st.session_state[CreateExperimentStateKeys.TargetVariableName],
-        target_variable_units=st.session_state[CreateExperimentStateKeys.TargetVariableUnits],
-        string_representation=st.session_state[CreateExperimentStateKeys.StringRepresentation],
         class_names=st.session_state.get(
             CreateExperimentStateKeys.ClassNames, None
         ),  # Optional, can be None
+        target_variable_units=st.session_state[CreateExperimentStateKeys.TargetVariableUnits],
     )
 
     create_experiment(

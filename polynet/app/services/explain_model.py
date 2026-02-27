@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 from pathlib import Path
 
@@ -13,10 +14,9 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import streamlit as st
 import torch
+from torch.nn import Module
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
 from torch_geometric.loader import DataLoader
-from torch.nn import Module
-from collections import defaultdict
 
 from polynet.app.options.file_paths import (
     explanation_json_file_path,
@@ -24,21 +24,21 @@ from polynet.app.options.file_paths import (
     explanation_plots_path,
 )
 from polynet.app.utils import filter_dataset_by_ids
+from polynet.config.constants import ResultColumn
+from polynet.config.enums import (
+    AtomBondDescriptorDictKey,
+    DimensionalityReduction,
+    ExplainAlgorithm,
+    ImportanceNormalisationMethod,
+    ProblemType,
+)
 from polynet.explain.explain_mol import (
     get_fragment_importance,
     plot_attribution_distribution,
     plot_mols_with_numeric_weights,
     plot_mols_with_weights,
 )
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.enums import (
-    AtomBondDescriptorDictKeys,
-    DimensionalityReduction,
-    ExplainAlgorithms,
-    ImportanceNormalisationMethods,
-    ProblemTypes,
-    Results,
-)
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 # Define a softer blue and red
 
@@ -107,8 +107,8 @@ def explain_model(
     dataset: CustomPolymerGraph,
     explain_mols: list,
     plot_mols: list,
-    explain_algorithm: ExplainAlgorithms,
-    problem_type: ProblemTypes,
+    explain_algorithm: ExplainAlgorithm,
+    problem_type: ProblemType,
     neg_color: str = "#40bcde",
     pos_color: str = "#e64747",
     normalisation_type: str = "local",
@@ -124,27 +124,27 @@ def explain_model(
     cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
 
     # Set the problem type passed to the model config
-    if problem_type == ProblemTypes.Classification:
+    if problem_type == ProblemType.Classification:
         task = "multiclass_classification"
-    elif problem_type == ProblemTypes.Regression:
+    elif problem_type == ProblemType.Regression:
         task = "regression"
     # Create the model configuration for explainer
     model_config = ModelConfig(mode=task, task_level="graph", return_type="raw")
 
     # Initialize the explainer based on the selected algorithm
-    if explain_algorithm == ExplainAlgorithms.GNNExplainer:
+    if explain_algorithm == ExplainAlgorithm.GNNExplainer:
         algorithm = GNNExplainer(model=model, epochs=100, return_type="raw", explain_graph=True)
-    elif explain_algorithm == ExplainAlgorithms.ShapleyValueSampling:
+    elif explain_algorithm == ExplainAlgorithm.ShapleyValueSampling:
         algorithm = CaptumExplainer(attribution_method=captum.attr.ShapleyValueSampling)
-    elif explain_algorithm == ExplainAlgorithms.InputXGradients:
+    elif explain_algorithm == ExplainAlgorithm.InputXGradients:
         algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
-    elif explain_algorithm == ExplainAlgorithms.Saliency:
+    elif explain_algorithm == ExplainAlgorithm.Saliency:
         algorithm = CaptumExplainer(attribution_method=captum.attr.Saliency)
-    elif explain_algorithm == ExplainAlgorithms.IntegratedGradients:
+    elif explain_algorithm == ExplainAlgorithm.IntegratedGradients:
         algorithm = CaptumExplainer(attribution_method=captum.attr.IntegratedGradients)
-    elif explain_algorithm == ExplainAlgorithms.Deconvolution:
+    elif explain_algorithm == ExplainAlgorithm.Deconvolution:
         algorithm = CaptumExplainer(attribution_method=captum.attr.Deconvolution)
-    elif explain_algorithm == ExplainAlgorithms.GuidedBackprop:
+    elif explain_algorithm == ExplainAlgorithm.GuidedBackprop:
         algorithm = CaptumExplainer(attribution_method=captum.attr.GuidedBackprop)
     else:
         st.error(f"Unknown explain algorithm: {explain_algorithm}")
@@ -221,7 +221,7 @@ def explain_model(
             mask = mask[:, slicer_initial:slicer_final]
         node_masks[mol.idx][explain_algorithm] = mask
 
-    if normalisation_type == ImportanceNormalisationMethods.Global:
+    if normalisation_type == ImportanceNormalisationMethod.Global:
 
         max_val = None
 
@@ -254,9 +254,9 @@ def explain_model(
         names = mol_names.get(mol.idx, None)
         masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
 
-        if normalisation_type == ImportanceNormalisationMethods.Local:
+        if normalisation_type == ImportanceNormalisationMethod.Local:
             masks = masks / np.max(np.abs(masks))
-        elif normalisation_type == ImportanceNormalisationMethods.Global:
+        elif normalisation_type == ImportanceNormalisationMethod.Global:
             masks = masks / max_val
         else:
             pass
@@ -274,9 +274,11 @@ def explain_model(
 
         container.info(f"Plotting molecule `{mol.idx}` with algorithm `{explain_algorithm}`")
 
-        container.write(f"True label: `{predictions.get(mol.idx, {}).get(Results.Label, 'N/A')}`")
         container.write(
-            f"Predicted label: `{predictions.get(mol.idx, {}).get(Results.Predicted, 'N/A')}`"
+            f"True label: `{predictions.get(mol.idx, {}).get(ResultColumn.Label, 'N/A')}`"
+        )
+        container.write(
+            f"Predicted label: `{predictions.get(mol.idx, {}).get(ResultColumn.Predicted, 'N/A')}`"
         )
 
         fig = plot_mols_with_weights(
@@ -298,7 +300,7 @@ def explain_model(
 def calculate_attributions(
     mols: list,
     existing_explanations: dict,
-    explain_algorithm: ExplainAlgorithms,
+    explain_algorithm: ExplainAlgorithm,
     explainers: dict[str, Explainer],
 ):
     node_masks = {}
@@ -348,8 +350,8 @@ def get_node_feat_vector_size(node_features: dict) -> dict:
         if value == {}:
             lengths_dict[key] = 1
             continue
-        allowed_features_size = len(value[AtomBondDescriptorDictKeys.AllowableVals])
-        wildcard_feat_size = int(value[AtomBondDescriptorDictKeys.Wildcard])
+        allowed_features_size = len(value[AtomBondDescriptorDictKey.AllowableVals])
+        wildcard_feat_size = int(value[AtomBondDescriptorDictKey.Wildcard])
         lengths_dict[key] = allowed_features_size + wildcard_feat_size
     return lengths_dict
 

@@ -6,9 +6,9 @@ import torch
 from torch import load, save
 
 from polynet.app.options.file_paths import model_dir, representation_file
-from polynet.app.options.representation import RepresentationOptions
+from polynet.config.enums import MolecularDescriptor
+from polynet.config.schemas import DataConfig
 from polynet.featurizer.preprocess import sanitise_df
-from polynet.options.enums import MolecularDescriptors
 
 
 def save_tml_model(model, path):
@@ -62,7 +62,7 @@ def save_plot(fig, path, dpi=300):
 
 
 def load_dataframes(
-    representation_options: RepresentationOptions, experiment_path: Path, target_variable_col: str
+    representation_options: DataConfig, experiment_path: Path, target_variable_col: str
 ):
 
     dataframe_dict = {}
@@ -70,56 +70,54 @@ def load_dataframes(
     if representation_options.rdkit_independent:
 
         rdkit_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.RDKit}.csv"
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.RDKit}.csv"
         )
 
         rdkit_df = pd.read_csv(rdkit_file_path, index_col=0)
 
         rdkit_df = sanitise_df(
             df=rdkit_df,
-            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit],
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.RDKit],
             target_variable_col=target_variable_col,
         )
 
-        dataframe_dict[MolecularDescriptors.RDKit] = rdkit_df
+        dataframe_dict[MolecularDescriptor.RDKit] = rdkit_df
 
     if representation_options.df_descriptors_independent:
         df_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.DataFrame}.csv"
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.DataFrame}.csv"
         )
 
         df_df = pd.read_csv(df_file_path, index_col=0)
 
         df_df = sanitise_df(
             df=df_df,
-            descriptors=representation_options.molecular_descriptors[
-                MolecularDescriptors.DataFrame
-            ],
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.DataFrame],
             target_variable_col=target_variable_col,
         )
 
-        dataframe_dict[MolecularDescriptors.DataFrame] = df_df
+        dataframe_dict[MolecularDescriptor.DataFrame] = df_df
 
     if representation_options.mix_rdkit_df_descriptors:
 
         mix_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.RDKit_DataFrame}.csv"
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.RDKit_DataFrame}.csv"
         )
 
         mix_df = pd.read_csv(mix_file_path, index_col=0)
 
         mix_df = sanitise_df(
             df=mix_df,
-            descriptors=representation_options.molecular_descriptors[MolecularDescriptors.RDKit]
-            + representation_options.molecular_descriptors[MolecularDescriptors.DataFrame],
+            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.RDKit]
+            + representation_options.molecular_descriptors[MolecularDescriptor.DataFrame],
             target_variable_col=target_variable_col,
         )
 
-        dataframe_dict[MolecularDescriptors.RDKit_DataFrame] = mix_df
+        dataframe_dict[MolecularDescriptor.RDKit_DataFrame] = mix_df
 
     if representation_options.polybert_fp:
         polybert_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptors.polyBERT}.csv"
+            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.PolyBERT}.csv"
         )
         polybert_df = pd.read_csv(polybert_file_path, index_col=0)
         polybert_df = sanitise_df(
@@ -127,12 +125,12 @@ def load_dataframes(
             descriptors=[f"polyBERT_{i}" for i in range(600)],
             target_variable_col=target_variable_col,
         )
-        dataframe_dict[MolecularDescriptors.polyBERT] = polybert_df
+        dataframe_dict[MolecularDescriptor.PolyBERT] = polybert_df
 
     return dataframe_dict
 
 
-def load_models_from_experiment(experiment_path: str, model_names: list) -> dict:
+def load_models_from_experiment(experiment_path: Path, model_names: list[str]) -> dict:
     """
     Loads trained GNN models from the specified experiment path.
 
@@ -158,7 +156,7 @@ def load_models_from_experiment(experiment_path: str, model_names: list) -> dict
     return models
 
 
-def load_scalers_from_experiment(experiment_path: str, model_names: list) -> dict:
+def load_scalers_from_experiment(experiment_path: str, model_names: list[str]) -> dict:
     """
     Loads trained GNN models from the specified experiment path.
 

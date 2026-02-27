@@ -14,7 +14,6 @@ making YAML configs and UI labels human-readable without extra conversion steps.
 
 from enum import StrEnum
 
-
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
@@ -49,14 +48,6 @@ class SplitMethod(StrEnum):
 
     Random = "random"
     Stratified = "stratified"
-
-
-class DataSet(StrEnum):
-    """Dataset partition labels."""
-
-    Training = "train"
-    Validation = "validation"
-    Test = "test"
 
 
 class IteratorType(StrEnum):

@@ -11,7 +11,6 @@ from polynet.app.components.forms.train_models import (
     train_TML_models,
 )
 from polynet.app.components.plots import display_model_results
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -28,36 +27,37 @@ from polynet.app.options.file_paths import (
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
-from polynet.app.options.train_GNN import TrainGNNOptions
-from polynet.app.options.train_TML import TrainTMLOptions
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes, save_gnn_model, save_tml_model
 from polynet.app.utils import save_data
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.col_names import get_iterator_name, get_true_label_column_name
-from polynet.options.enums import Results
-from polynet.predict.predict_gnn import get_predictions_df_gnn
-from polynet.predict.predict_tml import get_predictions_df_tml
-from polynet.train.evaluate_model import get_metrics, plot_learning_curves, plot_results
-from polynet.train.train_gnn import train_GNN_ensemble
-from polynet.train.train_tml import train_tml_ensemble
-from polynet.utils.split_data import get_data_split_indices
+from polynet.config.column_names import get_iterator_name, get_true_label_column_name
+from polynet.config.constants import ResultColumn
+from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.general import GeneralConfig
+from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
+from polynet.factories.dataloader import get_data_split_indices
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
+from polynet.inference.gnn import get_predictions_df_gnn
+from polynet.inference.tml import get_predictions_df_tml
+from polynet.training.evaluate import plot_learning_curves, plot_results
+from polynet.training.gnn import train_gnn_ensemble
+from polynet.training.metrics import get_metrics
+from polynet.training.tml import train_tml_ensemble
 
 
 def train_models(
     experiment_name: str,
     tml_models: dict,
     gnn_conv_params: dict,
-    representation_options: RepresentationOptions,
-    data_options: DataOptions,
+    representation_options: RepresentationConfig,
+    data_options: DataConfig,
 ):
 
     # paths for options and experiments
@@ -78,16 +78,16 @@ def train_models(
         gen_options_path.unlink()
 
     # Get general experiment options
-    general_experiment_options = GeneralConfigOptions(
+    general_experiment_options = GeneralConfig(
         split_type=st.session_state[GeneralConfigStateKeys.SplitType],
         split_method=st.session_state[GeneralConfigStateKeys.SplitMethod],
         train_set_balance=st.session_state.get(GeneralConfigStateKeys.DesiredProportion, None),
-        n_bootstrap_iterations=st.session_state.get(
-            GeneralConfigStateKeys.BootstrapIterations, None
-        ),
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed],
+        n_bootstrap_iterations=st.session_state.get(
+            GeneralConfigStateKeys.BootstrapIterations, None
+        ),
     )
     # save new options
     save_options(path=gen_options_path, options=general_experiment_options)
@@ -121,22 +121,11 @@ def train_models(
     # check if user selected tml models to train
     if tml_models:
         # get and save options
-        train_tml_options = TrainTMLOptions(
-            TrainTMLModels=st.session_state[TrainTMLStateKeys.TrainTML],
-            TransformFeatures=st.session_state[TrainTMLStateKeys.TrasformFeatures],
-            HyperparameterOptimization=st.session_state[
-                TrainTMLStateKeys.PerformHyperparameterTuning
-            ],
-            TMLModelsParams=tml_models,
-            TrainLinearRegression=st.session_state.get(
-                TrainTMLStateKeys.TrainLinearRegression, False
-            ),
-            TrainLogisticRegression=st.session_state.get(
-                TrainTMLStateKeys.TrainLogisticRegression, False
-            ),
-            TrainRandomForest=st.session_state[TrainTMLStateKeys.TrainRandomForest],
-            TrainSupportVectorMachine=st.session_state[TrainTMLStateKeys.TrainSupportVectorMachine],
-            TrainXGBoost=st.session_state[TrainTMLStateKeys.TrainXGBoost],
+        train_tml_options = TrainTMLConfig(
+            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
+            selected_models=list(tml_models.keys()),
+            model_params=tml_models,
+            transform_features=st.session_state[TrainTMLStateKeys.TrasformFeatures],
         )
         save_options(path=tml_training_opts_path, options=train_tml_options)
 
@@ -151,7 +140,7 @@ def train_models(
         tml_models, dataframes, scalers = train_tml_ensemble(
             tml_models=tml_models,
             problem_type=data_options.problem_type,
-            transform_features=train_tml_options.TransformFeatures,
+            transform_type=train_tml_options.transform_features,
             dataframes=dataframes,
             random_seed=general_experiment_options.random_seed,
             train_val_test_idxs=train_val_test_idxs,
@@ -168,7 +157,7 @@ def train_models(
         # generate predictions df
         tml_predictions_df = get_predictions_df_tml(
             models=tml_models,
-            dataframes=dataframes,
+            training_data=dataframes,
             split_type=general_experiment_options.split_type,
             target_variable_col=data_options.target_variable_col,
             problem_type=data_options.problem_type,
@@ -194,11 +183,11 @@ def train_models(
         )
 
     if gnn_conv_params:
-        train_gnn_options = TrainGNNOptions(
-            TrainGNNModel=st.session_state[TrainGNNStateKeys.TrainGNN],
-            GNNConvolutionalLayers=gnn_conv_params,
-            HyperparameterOptimisation=st.session_state[TrainGNNStateKeys.HypTunning],
-            ShareGNNParameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
+        train_gnn_options = TrainGNNConfig(
+            train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
+            gnn_convolutional_layers=gnn_conv_params,
+            # HyperparameterOptimisation=st.session_state[TrainGNNStateKeys.HypTunning],
+            share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
         )
         save_options(path=gnn_training_opts_path, options=train_gnn_options)
 
@@ -209,15 +198,15 @@ def train_models(
             target_col=data_options.target_variable_col,
             id_col=data_options.id_col,
             weights_col=representation_options.weights_col,
-            node_feats=representation_options.node_feats,
-            edge_feats=representation_options.edge_feats,
+            node_feats=representation_options.node_features,
+            edge_feats=representation_options.edge_features,
         )
 
-        gnn_models, loaders = train_GNN_ensemble(
+        gnn_models, loaders = train_gnn_ensemble(
             experiment_path=experiment_path,
             dataset=dataset,
             split_indexes=train_val_test_idxs,
-            gnn_conv_params=train_gnn_options.GNNConvolutionalLayers,
+            gnn_conv_params=train_gnn_options.gnn_convolutional_layers,
             problem_type=data_options.problem_type,
             num_classes=data_options.num_classes,
             random_seed=general_experiment_options.random_seed,
@@ -266,7 +255,7 @@ def train_models(
         predictions = pd.merge(
             left=tml_predictions_df,
             right=gnn_predictions_df,
-            on=[Results.Index, Results.Set, iterator],
+            on=[ResultColumn.INDEX, ResultColumn.SET, iterator],
         )
 
         metrics = {}
@@ -310,11 +299,11 @@ if experiment_name:
 
     path_to_data_opts = data_options_path(experiment_path=experiment_path)
 
-    data_opts = load_options(path=path_to_data_opts, options_class=DataOptions)
+    data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
     path_to_representation_opts = representation_options_path(experiment_path=experiment_path)
     representation_opts = load_options(
-        path=path_to_representation_opts, options_class=RepresentationOptions
+        path=path_to_representation_opts, options_class=RepresentationConfig
     )
 
     train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)

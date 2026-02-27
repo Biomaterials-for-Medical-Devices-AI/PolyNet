@@ -23,13 +23,11 @@ from math import sqrt
 
 import numpy as np
 import pandas as pd
-import torch
 
 # from imblearn.metrics import geometric_mean_score as gmean
 # from imblearn.metrics import specificity_score
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
@@ -38,6 +36,7 @@ from sklearn.metrics import (
     roc_auc_score,
 )
 from sklearn.metrics import matthews_corrcoef as mcc
+import torch
 
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn

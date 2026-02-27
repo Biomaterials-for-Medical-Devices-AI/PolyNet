@@ -4,7 +4,8 @@ import re
 import pandas as pd
 from scipy.stats import mode
 
-from polynet.options.enums import IteratorTypes, ProblemTypes, Results, SplitTypes
+from polynet.config.constants import ResultColumn
+from polynet.config.enums import ProblemType
 from polynet.utils.chem_utils import check_smiles
 
 
@@ -95,7 +96,9 @@ def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
         new_pred_cols.append(pred_col)
 
         # Merge prediction column by index
-        base_df = base_df.merge(df[[Results.Index.value, pred_col]], on=Results.Index.value)
+        base_df = base_df.merge(
+            df[[ResultColumn.INDEX.value, pred_col]], on=ResultColumn.INDEX.value
+        )
 
     # Reorder columns: all existing base columns first, then all prediction columns
     existing_cols = [col for col in base_df.columns if col not in new_pred_cols]
@@ -104,7 +107,7 @@ def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
     return base_df[final_columns]
 
 
-def ensemble_predictions(pred_dfs, problem_type: ProblemTypes):
+def ensemble_predictions(pred_dfs, problem_type: ProblemType):
     """
     Computes ensemble predictions from a list of DataFrames with a single prediction column each.
 
@@ -124,16 +127,16 @@ def ensemble_predictions(pred_dfs, problem_type: ProblemTypes):
         pred_col = [col for col in df.columns if col not in combined.columns][0]
 
         combined = combined.merge(
-            df[[Results.Index.value, pred_col]], on=Results.Index.value, how="left"
+            df[[ResultColumn.INDEX.value, pred_col]], on=ResultColumn.INDEX.value, how="left"
         )
 
-    combined = combined.set_index(Results.Index.value, drop=True)
+    combined = combined.set_index(ResultColumn.INDEX.value, drop=True)
 
-    if problem_type == ProblemTypes.Classification:
+    if problem_type == ProblemType.Classification:
         # Use majority vote (mode)
         majority_vote, _ = mode(combined.values, axis=1, keepdims=False)
         result = pd.Series(majority_vote, index=combined.index, name="Ensemble Prediction")
-    elif problem_type == ProblemTypes.Regression:
+    elif problem_type == ProblemType.Regression:
         # Use mean
         mean_prediction = combined.mean(axis=1)
         result = pd.Series(mean_prediction, index=combined.index, name="Ensemble Prediction")

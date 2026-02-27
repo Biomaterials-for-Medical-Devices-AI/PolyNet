@@ -1,10 +1,10 @@
 import os
 from pathlib import Path
 
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import data_options_path, polynet_experiments_base_dir
 from polynet.app.services.configurations import save_options
 from polynet.app.utils import create_directory
+from polynet.config.schemas.data import DataConfig
 
 
 def get_experiments(base_dir: Path | None = None) -> list[str]:
@@ -35,7 +35,7 @@ def get_experiments(base_dir: Path | None = None) -> list[str]:
     return sorted(list(experiments))
 
 
-def create_experiment(experiment_path: Path, data_options: DataOptions):
+def create_experiment(experiment_path: Path, data_options: DataConfig):
     """Create an experiment on disk with it's global plotting options,
     execution options and data options saved as `json` files.
 

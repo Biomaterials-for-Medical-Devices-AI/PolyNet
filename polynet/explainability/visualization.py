@@ -17,23 +17,22 @@ Functions
 
 from __future__ import annotations
 
-import math
 from io import BytesIO
+import math
 
+from PIL import Image
+from matplotlib import rcParams
+from matplotlib.collections import PolyCollection
 import matplotlib.colors as mcolors
+from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from matplotlib import rcParams
-from matplotlib.collections import PolyCollection
-from matplotlib.colors import Normalize
-from PIL import Image
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 from scipy.stats import gaussian_kde
-
+import seaborn as sns
 
 # ---------------------------------------------------------------------------
 # Colormap
