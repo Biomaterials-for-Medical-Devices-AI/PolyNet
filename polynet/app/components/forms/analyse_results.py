@@ -9,8 +9,8 @@ from polynet.config.column_names import (
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.config.constants import ResultColumn
-from polynet.config.enums import DataSet, Plot, ProblemType
+from polynet.config.constants import ResultColumn, DataSet
+from polynet.config.enums import Plot, ProblemType
 from polynet.config.schemas import DataConfig, GeneralConfig, TrainGNNConfig
 from polynet.utils.plot_utils import (
     plot_bootstrap_boxplots,
@@ -236,7 +236,7 @@ def get_plot_customisation_form(
             help="Select the font size for the tick labels.",
         )
 
-        if plot_type == Plot.Parity.value:
+        if plot_type == Plot.Parity:
 
             config["grid"] = st.checkbox(
                 "Show Grid",
@@ -333,7 +333,7 @@ def get_plot_customisation_form(
                     help="Select a color for the points in the plot.",
                 )
 
-        elif plot_type == Plot.ConfusionMatrix.value:
+        elif plot_type == Plot.ConfusionMatrix:
             config["cmap"] = st.selectbox(
                 "Color Map",
                 options=["Blues", "Greens", "Oranges"],
@@ -440,7 +440,7 @@ def confusion_matrix_plot_form(
         help="Select the iteration or fold for which you want to display the parity plot.",
     )
 
-    trained_gnns = gnn_training_options.GNNConvolutionalLayers.keys()
+    trained_gnns = gnn_training_options.gnn_convolutional_layers.keys()
     model_name = st.multiselect(
         "Select the model to display the confusion matrix",
         options=trained_gnns,
@@ -460,11 +460,14 @@ def confusion_matrix_plot_form(
         target_variable_name=data_options.target_variable_name
     )
 
+    st.write(predictions_df[ResultColumn.SET].unique())
+    st.write(DataSet.Test)
+
     set_name = st.multiselect(
         "Select the set to display parity plot",
-        options=predictions_df[ResultColumn.SET.value].unique(),
+        options=predictions_df[ResultColumn.SET].unique(),
         key=AnalyseResultsStateKeys.PlotSet,
-        default=[DataSet.Test.value],
+        default=[DataSet.Test],
         help="Select the set for which you want to display the parity plot.",
     )
 
@@ -480,8 +483,8 @@ def confusion_matrix_plot_form(
 
     plot_data = plot_data[
         (plot_data[iterator].isin(iteration))
-        & (plot_data[ResultColumn.SET.value].isin(set_name))
-        & (plot_data[ResultColumn.MODEL.value].isin(model_name))
+        & (plot_data[ResultColumn.SET].isin(set_name))
+        & (plot_data[ResultColumn.MODEL].isin(model_name))
     ]
 
     with st.expander("Show Data", expanded=False):
@@ -494,7 +497,7 @@ def confusion_matrix_plot_form(
         st.dataframe(plot_data)
 
     plot_config = get_plot_customisation_form(
-        plot_type=Plot.ConfusionMatrix.value,
+        plot_type=Plot.ConfusionMatrix,
         data=plot_data,
         data_options=data_options,
         color_by_opts=[None],
@@ -550,7 +553,7 @@ def parity_plot_form(
     )
 
     if len(model_name) > 1:
-        color_by_opts.append(ResultColumn.MODEL.value)
+        color_by_opts.append(ResultColumn.MODEL)
 
     model_pred_cols = [
         get_predicted_label_column_name(
@@ -565,14 +568,14 @@ def parity_plot_form(
 
     set_name = st.multiselect(
         "Select the set to display parity plot",
-        options=predictions_df[ResultColumn.SET.value].unique(),
+        options=predictions_df[ResultColumn.SET].unique(),
         key=AnalyseResultsStateKeys.PlotSet,
-        default=[DataSet.Test.value],
+        default=[DataSet.Test],
         help="Select the set for which you want to display the parity plot.",
     )
 
     if len(set_name) > 1:
-        color_by_opts.append(ResultColumn.SET.value)
+        color_by_opts.append(ResultColumn.SET)
 
     plot_data = reshape_predictions(
         df=predictions_df,
@@ -586,8 +589,8 @@ def parity_plot_form(
 
     plot_data = plot_data[
         (plot_data[iterator].isin(iteration))
-        & (plot_data[ResultColumn.SET.value].isin(set_name))
-        & (plot_data[ResultColumn.MODEL.value].isin(model_name))
+        & (plot_data[ResultColumn.SET].isin(set_name))
+        & (plot_data[ResultColumn.MODEL].isin(model_name))
     ]
 
     with st.expander("Show Data", expanded=False):
@@ -600,7 +603,7 @@ def parity_plot_form(
         st.dataframe(plot_data)
 
     plot_config = get_plot_customisation_form(
-        plot_type=Plot.Parity.value,
+        plot_type=Plot.Parity,
         data=plot_data,
         data_options=data_options,
         color_by_opts=color_by_opts,
@@ -638,7 +641,7 @@ def reshape_predictions(
     )
 
     # Extract model name from the column name
-    melted_df[ResultColumn.MODEL.value] = melted_df["Prediction_Column"].apply(
+    melted_df[ResultColumn.MODEL] = melted_df["Prediction_Column"].apply(
         lambda col: extract_model_name_and_target(col, target_variable_name)
     )
 
