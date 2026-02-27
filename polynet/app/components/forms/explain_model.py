@@ -5,7 +5,7 @@ from rdkit.Chem import Descriptors
 import streamlit as st
 from torch_geometric.data import Dataset
 
-from polynet.app.options.data import DataOptions
+from polynet.config.schemas import DataConfig
 from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
 from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
 from polynet.app.services.model_training import load_gnn_model
@@ -78,7 +78,7 @@ def embedding_projection(
     data: pd.DataFrame,
     preds: pd.DataFrame,
     dataset: Dataset,
-    data_options: DataOptions,
+    data_options: DataConfig,
     random_seed: int,
     weights_col: dict,
 ):
@@ -222,7 +222,7 @@ def explain_predictions_form(
     gnn_models: list,
     gnn_models_dir: Path,
     iterator_col: str,
-    data_options: DataOptions,
+    data_options: DataConfig,
     data: pd.DataFrame,
     preds: pd.DataFrame,
     dataset: Dataset,

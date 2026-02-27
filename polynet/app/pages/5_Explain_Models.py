@@ -7,7 +7,6 @@ from polynet.app.components.forms.explain_model import (
     explain_predictions_form,
 )
 from polynet.app.components.plots import display_model_results, display_unseen_predictions
-from polynet.app.options.data import DataOptions
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -19,7 +18,7 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.config.schemas import GeneralConfig, RepresentationConfig
+from polynet.config.schemas import GeneralConfig, RepresentationConfig, DataConfig
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
@@ -52,7 +51,7 @@ if experiment_name:
     path_to_data_opts = data_options_path(
         experiment_path=polynet_experiments_base_dir() / experiment_name
     )
-    data_options = load_options(path=path_to_data_opts, options_class=DataOptions)
+    data_options = load_options(path=path_to_data_opts, options_class=DataConfig)
 
     # load the representation options
     path_to_representation_opts = representation_options_path(

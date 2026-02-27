@@ -3,10 +3,10 @@ import re
 import pandas as pd
 import streamlit as st
 
-from polynet.app.options.data import DataOptions
-from polynet.app.options.general_experiment import GeneralConfigOptions
+
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
-from polynet.app.options.train_GNN import TrainGNNOptions
+
+from polynet.config.schemas import DataConfig, TrainGNNConfig, GeneralConfig
 from polynet.config.column_names import (
     get_iterator_name,
     get_predicted_label_column_name,
@@ -28,7 +28,7 @@ from polynet.utils.statistical_analysis import (
 
 
 def compare_predictions_form(
-    predictions_df: pd.DataFrame, target_variable_name: str, data_options: DataOptions
+    predictions_df: pd.DataFrame, target_variable_name: str, data_options: DataConfig
 ):
 
     st.write("### Model predictions pairwise comparison")
@@ -81,7 +81,7 @@ def compare_predictions_form(
         return plot
 
 
-def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
+def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
 
     st.write("### Model metrics comparison")
 
@@ -146,7 +146,7 @@ def compare_metrics_form(metrics: dict, data_options: DataOptions = None):
 def get_plot_customisation_form(
     plot_type: str,
     data: pd.DataFrame,
-    data_options: DataOptions,
+    data_options: DataConfig,
     color_by_opts=None,
     model_pred_col: str = None,
     model_true_cols: str = None,
@@ -423,9 +423,9 @@ def get_plot_customisation_form(
 
 def confusion_matrix_plot_form(
     predictions_df: pd.DataFrame,
-    general_experiment_options: GeneralConfigOptions,
-    gnn_training_options: TrainGNNOptions,
-    data_options: DataOptions,
+    general_experiment_options: GeneralConfig,
+    gnn_training_options: TrainGNNConfig,
+    data_options: DataConfig,
 ):
     """
     Renders a Streamlit form for customizing and displaying a parity plot based on model predictions.
@@ -516,9 +516,9 @@ def confusion_matrix_plot_form(
 
 def parity_plot_form(
     predictions_df: pd.DataFrame,
-    general_experiment_options: GeneralConfigOptions,
-    gnn_training_options: TrainGNNOptions,
-    data_options: DataOptions,
+    general_experiment_options: GeneralConfig,
+    gnn_training_options: TrainGNNConfig,
+    data_options: DataConfig,
 ):
 
     color_by_opts = [None]

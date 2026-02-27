@@ -1,6 +1,6 @@
 import streamlit as st
 
-from polynet.app.options.representation import RepresentationOptions
+from polynet.config.schemas.representation import RepresentationConfig
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
@@ -258,7 +258,7 @@ def train_TML_models(problem_type: ProblemType):
     return models
 
 
-def train_GNN_models_form(representation_opts: RepresentationOptions, problem_type: ProblemType):
+def train_GNN_models_form(representation_opts: RepresentationConfig, problem_type: ProblemType):
 
     st.write(
         "Graph Neural Networks (GNNs) are a type of neural network that operates on graph-structured data. They are particularly well-suited for tasks involving molecular structures, such as predicting properties of polymers based on their chemical structure."
@@ -376,7 +376,7 @@ def train_GNN_models_form(representation_opts: RepresentationOptions, problem_ty
 
 
 def GNN_shared_params_form(
-    representation_opts: RepresentationOptions, problem_type: ProblemType, network: Network = None
+    representation_opts: RepresentationConfig, problem_type: ProblemType, network: Network = None
 ):
 
     shared_params = {}
