@@ -11,7 +11,7 @@ from polynet.app.components.forms.analyse_results import (
     parity_plot_form,
 )
 from polynet.app.components.plots import display_model_results
-from polynet.app.options.data import DataOptions
+
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -21,12 +21,14 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
-from polynet.app.options.train_GNN import TrainGNNOptions
+from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.general import GeneralConfig
+from polynet.config.schemas.training import TrainGNNConfig
+from polynet.config.enums import ProblemType
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
-from polynet.options.enums import ProblemTypes
+
 
 st.header("Representation of Polymers")
 
@@ -52,25 +54,25 @@ if experiment_name:
         experiment_path=polynet_experiments_base_dir() / experiment_name
     )
 
-    data_options = load_options(path=path_to_data_opts, options_class=DataOptions)
+    data_options = load_options(path=path_to_data_opts, options_class=DataConfig)
 
     path_to_representation_opts = representation_options_path(
         experiment_path=polynet_experiments_base_dir() / experiment_name
     )
     representation_options = load_options(
-        path=path_to_representation_opts, options_class=RepresentationOptions
+        path=path_to_representation_opts, options_class=RepresentationConfig
     )
 
     path_to_train_gnn_options = train_gnn_model_options_path(
         experiment_path=polynet_experiments_base_dir() / experiment_name
     )
 
-    train_gnn_options = load_options(path=path_to_train_gnn_options, options_class=TrainGNNOptions)
+    train_gnn_options = load_options(path=path_to_train_gnn_options, options_class=TrainGNNConfig)
 
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
 
     general_experiment_options = load_options(
-        path=path_to_general_opts, options_class=GeneralConfigOptions
+        path=path_to_general_opts, options_class=GeneralConfig
     )
 
     if not path_to_train_gnn_options.exists() or not path_to_general_opts.exists():
@@ -90,7 +92,7 @@ if experiment_name:
     if st.checkbox("Show predictions data"):
         st.dataframe(predictions)
 
-    if data_options.problem_type == ProblemTypes.Regression:
+    if data_options.problem_type == ProblemType.Regression:
 
         st.subheader("Parity Plot")
 
@@ -110,7 +112,7 @@ if experiment_name:
                 parity_plot.savefig(parity_plot_path)
                 st.success(f"Parity plot saved to {parity_plot_path}")
 
-    elif data_options.problem_type == ProblemTypes.Classification:
+    elif data_options.problem_type == ProblemType.Classification:
         st.subheader("Confusion Matrix")
 
         confusion_matrix_plot = confusion_matrix_plot_form(
