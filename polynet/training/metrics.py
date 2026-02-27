@@ -26,10 +26,7 @@ import pandas as pd
 
 # from imblearn.metrics import geometric_mean_score as gmean
 # from imblearn.metrics import specificity_score
-from sklearn.metrics import (
-    accuracy_score,
-    f1_score,
-)
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
