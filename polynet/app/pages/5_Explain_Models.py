@@ -19,12 +19,11 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.app.options.general_experiment import GeneralConfigOptions
-from polynet.app.options.representation import RepresentationOptions
+from polynet.config.schemas import GeneralConfig, RepresentationConfig
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
-from polynet.featurizer.graph_representation.polymer import CustomPolymerGraph
-from polynet.options.col_names import get_iterator_name
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
+from polynet.config.column_names import get_iterator_name
 
 st.header("Explain your models")
 st.markdown(
@@ -65,7 +64,7 @@ if experiment_name:
         )
         st.stop()
     representation_options = load_options(
-        path=path_to_representation_opts, options_class=RepresentationOptions
+        path=path_to_representation_opts, options_class=RepresentationConfig
     )
 
     # load gnn options
@@ -81,7 +80,7 @@ if experiment_name:
     # load general training options
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
     general_experiment_options = load_options(
-        path=path_to_general_opts, options_class=GeneralConfigOptions
+        path=path_to_general_opts, options_class=GeneralConfig
     )
 
     # display the modelling results
@@ -96,8 +95,8 @@ if experiment_name:
         target_col=data_options.target_variable_col,
         id_col=data_options.id_col,
         weights_col=representation_options.weights_col,
-        node_feats=representation_options.node_feats,
-        edge_feats=representation_options.edge_feats,
+        node_feats=representation_options.node_features,
+        edge_feats=representation_options.edge_features,
     )
 
     # load the original data
@@ -157,5 +156,5 @@ if experiment_name:
         data=data,
         preds=preds,
         dataset=dataset,
-        node_feats=representation_options.node_feats,
+        node_feats=representation_options.node_features,
     )
