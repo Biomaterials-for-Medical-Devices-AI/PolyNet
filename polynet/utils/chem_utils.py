@@ -76,8 +76,8 @@ def identify_psmiles(smiles: str):
 def determine_string_representation(df, smiles_cols):
     for col in smiles_cols:
         if not df[col].apply(identify_psmiles).all():
-            return StringRepresentation.Smiles
-    return StringRepresentation.PSmiles
+            return StringRepresentation.SMILES
+    return StringRepresentation.PSMILES
 
 
 def canonicalise_psmiles(psmiles: str) -> Optional[str]:
