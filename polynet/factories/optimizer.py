@@ -44,7 +44,6 @@ from torch.optim.lr_scheduler import ExponentialLR, MultiStepLR, ReduceLROnPlate
 
 from polynet.config.enums import Optimizer, Scheduler
 
-
 # ---------------------------------------------------------------------------
 # Optimizer factory
 # ---------------------------------------------------------------------------

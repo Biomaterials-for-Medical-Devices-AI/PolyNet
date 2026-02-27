@@ -27,10 +27,6 @@ from polynet.app.options.file_paths import (
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
-from polynet.config.schemas.data import DataConfig
-from polynet.config.schemas.representation import RepresentationConfig
-from polynet.config.schemas.general import GeneralConfig
-from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
@@ -40,23 +36,20 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes, save_gnn_model, save_tml_model
 from polynet.app.utils import save_data
-from polynet.featurizer.polymer_graph import CustomPolymerGraph
-from polynet.config.constants import ResultColumn
-
-
-from polynet.inference.tml import get_predictions_df_tml
-
-
-from polynet.training.tml import train_tml_ensemble
-from polynet.training.evaluate import plot_learning_curves, plot_results
-
-from polynet.factories.dataloader import get_data_split_indices
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
-
-
-from polynet.training.gnn import train_gnn_ensemble
+from polynet.config.constants import ResultColumn
+from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.general import GeneralConfig
+from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
+from polynet.factories.dataloader import get_data_split_indices
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.inference.gnn import get_predictions_df_gnn
+from polynet.inference.tml import get_predictions_df_tml
+from polynet.training.evaluate import plot_learning_curves, plot_results
+from polynet.training.gnn import train_gnn_ensemble
 from polynet.training.metrics import get_metrics
+from polynet.training.tml import train_tml_ensemble
 
 
 def train_models(

@@ -28,12 +28,6 @@ from polynet.app.options.file_paths import (
     unseen_predictions_experiment_parent_path,
     unseen_predictions_ml_results_path,
 )
-from polynet.config.schemas import DataConfig
-from polynet.config.schemas import GeneralConfig
-from polynet.config.schemas import RepresentationConfig
-from polynet.config.schemas import TrainGNNConfig
-from polynet.config.schemas import TrainTMLConfig
-
 from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
@@ -43,12 +37,18 @@ from polynet.app.services.model_training import (
 )
 from polynet.app.services.predict_model import predict_unseen_gnn, predict_unseen_tml
 from polynet.app.utils import create_directory
+from polynet.config.column_names import get_true_label_column_name
+from polynet.config.constants import ResultColumn
+from polynet.config.enums import ProblemType, TransformDescriptor
+from polynet.config.schemas import (
+    DataConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+)
 from polynet.featurizer.descriptors import build_vector_representation
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
-from polynet.config.enums import ProblemType, TransformDescriptor
-from polynet.config.constants import ResultColumn
-from polynet.config.column_names import get_true_label_column_name
-
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.training.metrics import calculate_metrics
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation

@@ -2,6 +2,7 @@ from io import BytesIO
 import math
 
 from PIL import Image
+from matplotlib import rcParams
 from matplotlib.collections import PolyCollection
 import matplotlib.pyplot as plt
 import numpy as np
@@ -11,7 +12,6 @@ from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 from scipy.stats import gaussian_kde
 
 from polynet.utils.chem_utils import fragment_and_match
-from matplotlib import rcParams
 
 
 def get_fragment_importance(mols, node_masks, explain_algorithm, fragmentation_approach):

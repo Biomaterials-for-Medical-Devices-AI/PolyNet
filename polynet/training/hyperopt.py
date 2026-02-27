@@ -17,27 +17,26 @@ Public API
 
 from __future__ import annotations
 
-import logging
 from copy import deepcopy
+import logging
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import ray
-import torch
 from ray import tune
 from ray.air import session
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 from sklearn.model_selection import KFold, StratifiedKFold
+import torch
 from torch_geometric.loader import DataLoader
 
-from polynet.config.enums import Network, ProblemType, TrainingParam
+from polynet.config.enums import Network, Optimizer, ProblemType, Scheduler, TrainingParam
 from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import create_optimizer, create_scheduler
-from polynet.config.enums import Optimizer, Scheduler
 from polynet.training.gnn import eval_network, train_network
 
 logger = logging.getLogger(__name__)

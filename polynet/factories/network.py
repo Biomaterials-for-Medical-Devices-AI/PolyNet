@@ -40,10 +40,9 @@ from polynet.config.enums import Network, ProblemType
 from polynet.models.gnn.cggnn import CGGNNClassifier, CGGNNRegressor
 from polynet.models.gnn.gat import GATClassifier, GATRegressor
 from polynet.models.gnn.gcn import GCNClassifier, GCNRegressor
+from polynet.models.gnn.graphsage import GraphSAGEClassifier, GraphSAGERegressor
 from polynet.models.gnn.mpnn import MPNNClassifier, MPNNRegressor
 from polynet.models.gnn.transformer import TransformerGNNClassifier, TransformerGNNRegressor
-from polynet.models.gnn.graphsage import GraphSAGEClassifier, GraphSAGERegressor
-
 
 # ---------------------------------------------------------------------------
 # Registry

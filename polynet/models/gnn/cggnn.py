@@ -10,9 +10,9 @@ due to its explicit edge feature handling.
 
 from __future__ import annotations
 
+from torch import Tensor
 import torch.nn as nn
 import torch.nn.functional as F
-from torch import Tensor
 from torch_geometric.nn import CGConv
 
 from polynet.config.enums import ApplyWeightingToGraph, Network, Pooling, ProblemType

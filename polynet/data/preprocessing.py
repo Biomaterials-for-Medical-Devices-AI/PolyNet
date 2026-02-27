@@ -26,8 +26,8 @@ Public API
 
 from __future__ import annotations
 
-import logging
 from collections import Counter
+import logging
 
 import numpy as np
 import pandas as pd

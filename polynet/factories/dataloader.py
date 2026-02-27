@@ -72,7 +72,6 @@ from torch_geometric.loader import DataLoader
 from polynet.config.enums import SplitMethod, SplitType
 from polynet.data.preprocessing import class_balancer
 
-
 # ---------------------------------------------------------------------------
 # Index computation
 # ---------------------------------------------------------------------------

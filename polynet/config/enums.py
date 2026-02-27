@@ -14,7 +14,6 @@ making YAML configs and UI labels human-readable without extra conversion steps.
 
 from enum import StrEnum
 
-
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------

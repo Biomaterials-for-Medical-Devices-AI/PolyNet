@@ -11,7 +11,6 @@ from polynet.app.components.forms.analyse_results import (
     parity_plot_form,
 )
 from polynet.app.components.plots import display_model_results
-
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -21,14 +20,13 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.config.schemas.data import DataConfig
-from polynet.config.schemas.representation import RepresentationConfig
-from polynet.config.schemas.general import GeneralConfig
-from polynet.config.schemas.training import TrainGNNConfig
-from polynet.config.enums import ProblemType
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
-
+from polynet.config.enums import ProblemType
+from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.general import GeneralConfig
+from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.training import TrainGNNConfig
 
 st.header("Representation of Polymers")
 

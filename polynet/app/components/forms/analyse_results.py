@@ -3,17 +3,15 @@ import re
 import pandas as pd
 import streamlit as st
 
-
 from polynet.app.options.state_keys import AnalyseResultsStateKeys, PlotCustomiserStateKeys
-
-from polynet.config.schemas import DataConfig, TrainGNNConfig, GeneralConfig
 from polynet.config.column_names import (
     get_iterator_name,
     get_predicted_label_column_name,
     get_true_label_column_name,
 )
-from polynet.config.enums import DataSet, Plot, ProblemType
 from polynet.config.constants import ResultColumn
+from polynet.config.enums import DataSet, Plot, ProblemType
+from polynet.config.schemas import DataConfig, GeneralConfig, TrainGNNConfig
 from polynet.utils.plot_utils import (
     plot_bootstrap_boxplots,
     plot_confusion_matrix,

@@ -3,10 +3,10 @@ import re
 
 import pandas as pd
 from scipy.stats import mode
-from polynet.utils.chem_utils import check_smiles
 
-from polynet.config.enums import ProblemType
 from polynet.config.constants import ResultColumn
+from polynet.config.enums import ProblemType
+from polynet.utils.chem_utils import check_smiles
 
 
 def create_directory(path: Path):

@@ -18,11 +18,11 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
 )
-from polynet.config.schemas import GeneralConfig, RepresentationConfig, DataConfig
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
-from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.config.column_names import get_iterator_name
+from polynet.config.schemas import DataConfig, GeneralConfig, RepresentationConfig
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 st.header("Explain your models")
 st.markdown(

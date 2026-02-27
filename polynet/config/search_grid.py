@@ -24,10 +24,9 @@ from polynet.config.enums import (
     Network,
     Pooling,
     ProblemType,
-    TrainingParam,
     TraditionalMLModel,
+    TrainingParam,
 )
-
 
 # ---------------------------------------------------------------------------
 # Traditional ML grids (templates — never mutate these directly)

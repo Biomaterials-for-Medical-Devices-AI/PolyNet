@@ -1,3 +1,4 @@
+from collections import defaultdict
 import json
 from pathlib import Path
 
@@ -13,10 +14,9 @@ from sklearn.decomposition import PCA
 from sklearn.manifold import TSNE
 import streamlit as st
 import torch
+from torch.nn import Module
 from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
 from torch_geometric.loader import DataLoader
-from torch.nn import Module
-from collections import defaultdict
 
 from polynet.app.options.file_paths import (
     explanation_json_file_path,
@@ -24,13 +24,7 @@ from polynet.app.options.file_paths import (
     explanation_plots_path,
 )
 from polynet.app.utils import filter_dataset_by_ids
-from polynet.explain.explain_mol import (
-    get_fragment_importance,
-    plot_attribution_distribution,
-    plot_mols_with_numeric_weights,
-    plot_mols_with_weights,
-)
-from polynet.featurizer.polymer_graph import CustomPolymerGraph
+from polynet.config.constants import ResultColumn
 from polynet.config.enums import (
     AtomBondDescriptorDictKey,
     DimensionalityReduction,
@@ -38,7 +32,13 @@ from polynet.config.enums import (
     ImportanceNormalisationMethod,
     ProblemType,
 )
-from polynet.config.constants import ResultColumn
+from polynet.explain.explain_mol import (
+    get_fragment_importance,
+    plot_attribution_distribution,
+    plot_mols_with_numeric_weights,
+    plot_mols_with_weights,
+)
+from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 # Define a softer blue and red
 

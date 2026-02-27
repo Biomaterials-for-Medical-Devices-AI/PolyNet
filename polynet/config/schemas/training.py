@@ -12,7 +12,6 @@ from pydantic import Field, model_validator
 from polynet.config.enums import Network, TraditionalMLModel, TransformDescriptor
 from polynet.config.schemas.base import HyperparamOptimConfig, PolynetBaseModel
 
-
 # ---------------------------------------------------------------------------
 # GNN training config
 # ---------------------------------------------------------------------------

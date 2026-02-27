@@ -5,25 +5,25 @@ from rdkit.Chem import Descriptors
 import streamlit as st
 from torch_geometric.data import Dataset
 
-from polynet.config.schemas import DataConfig
 from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
 from polynet.app.services.explain_model import analyse_graph_embeddings, explain_model
 from polynet.app.services.model_training import load_gnn_model
 from polynet.app.utils import extract_number
+from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
+from polynet.config.constants import DataSet, ResultColumn
+from polynet.config.enums import (
+    DimensionalityReduction,
+    ExplainAlgorithm,
+    FragmentationMethod,
+    ImportanceNormalisationMethod,
+    ProblemType,
+)
+from polynet.config.schemas import DataConfig
 from polynet.featurizer.descriptors import (
     calculate_rdkit_df_dict,
     get_unique_smiles,
     merge_weighted,
 )
-from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
-from polynet.config.enums import (
-    DimensionalityReduction,
-    ExplainAlgorithm,
-    ImportanceNormalisationMethod,
-    ProblemType,
-    FragmentationMethod,
-)
-from polynet.config.constants import ResultColumn, DataSet
 
 
 def explain_mols_widget(

@@ -6,9 +6,9 @@ import torch
 from torch import load, save
 
 from polynet.app.options.file_paths import model_dir, representation_file
+from polynet.config.enums import MolecularDescriptor
 from polynet.config.schemas import DataConfig
 from polynet.featurizer.preprocess import sanitise_df
-from polynet.config.enums import MolecularDescriptor
 
 
 def save_tml_model(model, path):

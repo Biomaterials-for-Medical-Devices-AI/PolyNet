@@ -4,17 +4,14 @@ from typing import Optional
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
+from rdkit.Chem.Scaffolds import MurckoScaffold
 
-from polynet.config.enums import AtomFeature, BondFeature, StringRepresentation
+from polynet.config.enums import AtomFeature, BondFeature, FragmentationMethod, StringRepresentation
 
 # from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
 # from psmiles import PolymerSmiles
 from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
 from polynet.utils.psmiles import PolymerSmiles
-
-from rdkit.Chem.Scaffolds import MurckoScaffold
-
-from polynet.config.enums import FragmentationMethod
 
 
 class PS(PolymerSmiles):

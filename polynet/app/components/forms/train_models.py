@@ -1,6 +1,5 @@
 import streamlit as st
 
-from polynet.config.schemas.representation import RepresentationConfig
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
@@ -15,9 +14,10 @@ from polynet.config.enums import (
     SplitMethod,
     SplitType,
     TraditionalMLModel,
-    TransformDescriptor,
     TrainingParam,
+    TransformDescriptor,
 )
+from polynet.config.schemas.representation import RepresentationConfig
 
 
 def train_TML_models(problem_type: ProblemType):

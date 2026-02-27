@@ -15,8 +15,8 @@ Public API
 
 from __future__ import annotations
 
-import logging
 from copy import deepcopy
+import logging
 
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
