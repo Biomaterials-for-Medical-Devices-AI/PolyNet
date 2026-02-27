@@ -1,0 +1,161 @@
+# =============================================================================
+# PolyNet Experiment Configuration
+# =============================================================================
+# Edit this file to describe your experiment. Then run:
+#
+#   python scripts/run_pipeline.py --config configs/experiment.yaml
+#
+# All paths are relative to the project root unless they start with /
+
+# -----------------------------------------------------------------------------
+# Experiment metadata
+# -----------------------------------------------------------------------------
+experiment:
+  name: "my_polymer_experiment"
+  output_dir: "results/my_polymer_experiment"   # all outputs written here
+  random_seed: 42
+
+# -----------------------------------------------------------------------------
+# Data
+# -----------------------------------------------------------------------------
+data:
+  path: "./datasets/polymers_all.csv"       # path to your CSV file
+  id_col: "id"                      # unique sample identifier column
+  target_col: "isFluo_PA"                    # column to predict
+  target_name: "Is Fluo PA"                         # human-readable name (used in plots)
+  problem_type: "classification"                # "regression" or "classification"
+
+  # For classification only — maps integer class labels to display names
+  # Leave null for regression or if you don't want custom labels
+  # class_names: null
+  class_names:
+    0: "AntiBiofilm"
+    1: "ProBiofilm"
+
+  # Number of output classes. Use 1 for regression, N for N-class classification
+  num_classes: 2
+
+# -----------------------------------------------------------------------------
+# Polymer structure columns
+# -----------------------------------------------------------------------------
+structure:
+  # List all monomer SMILES column names
+  smiles_cols:
+    - "smiles_monomer_1"
+    - "smiles_monomer_2"
+
+  # Map each smiles column to its weight fraction column
+  # Set to null if your dataset has no weight fractions
+  weights_cols:
+    smiles_monomer_1: "ratio_1"
+    smiles_monomer_2: "ratio_2"
+
+# -----------------------------------------------------------------------------
+# Representations
+# -----------------------------------------------------------------------------
+representations:
+  # --- Graph representation (for GNN models) ---
+  graph:
+    enabled: true
+
+  # --- Vector descriptors (for TML models) ---
+  descriptors:
+    enabled: true           # set true to also train TML models
+    molecular_descriptors: {
+      "rdkit": "all",   # compute all RDKit descriptors
+    }
+    rdkit: true              # compute RDKit molecular descriptors
+    merging_method: "weighted_average"   # weighted_average | average | concatenate
+
+# -----------------------------------------------------------------------------
+# Data splitting
+# -----------------------------------------------------------------------------
+splitting:
+  split_type: "train_val_test"       # TrainValTest | LeaveOneOut
+  split_method: "random"           # Random | Scaffold (scaffold requires RDKit)
+  n_bootstrap_iterations: 1        # number of train/val/test splits to generate
+  val_ratio: 0.15
+  test_ratio: 0.15
+  # Optional: balance training set for imbalanced classification
+  # train_set_balance: 0.5
+
+# -----------------------------------------------------------------------------
+# GNN models
+# GNN architectures to train. Set hyperparameters explicitly,
+# or leave the block empty ({}) to trigger automatic HPO via Ray Tune.
+# -----------------------------------------------------------------------------
+gnn_models:
+  enabled: true
+
+  GCN:
+    LearningRate: 0.001
+    BatchSize: 32
+    improved: false
+    embedding_dim: 64
+    n_convolutions: 3
+    readout_layers: 2
+    dropout: 0.1
+    pooling: "global_mean_pool"
+
+  # GAT:
+  #   LearningRate: 0.001
+  #   BatchSize: 32
+  #   num_heads: 4
+  #   embedding_dim: 64
+  #   n_convolutions: 3
+  #   readout_layers: 2
+  #   dropout: 0.1
+
+  # CGGNN:
+  #   LearningRate: 0.001
+  #   BatchSize: 32
+  #   embedding_dim: 64
+  #   n_convolutions: 3
+  #   readout_layers: 2
+  #   dropout: 0.1
+
+  # MPNN: {}   # empty = trigger HPO
+
+training:
+  epochs: 250
+
+# -----------------------------------------------------------------------------
+# TML models
+# Traditional ML models trained on descriptor vectors.
+# Only active when representations.descriptors.enabled is true.
+# Leave the block empty ({}) to trigger GridSearchCV HPO.
+# -----------------------------------------------------------------------------
+tml_models:
+  enabled: true
+
+  random_forest:
+    n_estimators: 200
+    max_depth: 10
+
+  # XGBoost:
+  #   n_estimators: 200
+  #   max_depth: 6
+  #   learning_rate: 0.05
+
+  # SupportVectorMachine: {}   # empty = trigger HPO
+
+  descriptor_transform: "standard_scaler"   # StandardScaler | MinMaxScaler | NoTransformation
+
+# -----------------------------------------------------------------------------
+# Explainability
+# Only applied to GNN models. Requires gnn_models.enabled: true
+# -----------------------------------------------------------------------------
+explainability:
+  enabled: true
+  algorithm: "integrated_gradients"   # IntegratedGradients | Saliency | GNNExplainer
+                                     # InputXGradient | ShapleyValueSampling
+  fragmentation: "brics"             # brics | recap
+  normalisation: "local"             # Local | Global
+  cutoff: 0.05
+
+  # Molecule IDs to compute and plot attributions for
+  # Leave null to explain the first 5 test-set molecules
+  explain_mol_ids: null
+  # explain_mol_ids:
+  #   - "poly_0001"
+  #   - "poly_0042"
