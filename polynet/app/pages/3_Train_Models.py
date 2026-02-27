@@ -58,10 +58,6 @@ from polynet.training.gnn import train_gnn_ensemble
 from polynet.inference.gnn import get_predictions_df_gnn
 from polynet.training.metrics import get_metrics
 
-# from polynet.train.train_gnn import train_GNN_ensemble
-# from polynet.predict.predict_gnn import get_predictions_df_gnn
-# from polynet.train.evaluate_model import get_metrics
-
 
 def train_models(
     experiment_name: str,
