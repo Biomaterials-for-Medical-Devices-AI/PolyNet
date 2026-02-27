@@ -226,23 +226,23 @@ def train_models(
             target_variable_name=data_options.target_variable_name,
         )
 
-        # metrics_gnn = get_metrics(
-        #     predictions=gnn_predictions_df,
-        #     split_type=general_experiment_options.split_type,
-        #     target_variable_name=data_options.target_variable_name,
-        #     trained_models=gnn_models.keys(),
-        #     problem_type=data_options.problem_type,
-        # )
+        metrics_gnn = get_metrics(
+            predictions=gnn_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            trained_models=gnn_models.keys(),
+            problem_type=data_options.problem_type,
+        )
 
-        # plot_results(
-        #     predictions=gnn_predictions_df,
-        #     split_type=general_experiment_options.split_type,
-        #     target_variable_name=data_options.target_variable_name,
-        #     ml_algorithms=gnn_models.keys(),
-        #     problem_type=data_options.problem_type,
-        #     save_path=plots_dir,
-        #     class_names=data_options.class_names,
-        # )
+        plot_results(
+            predictions=gnn_predictions_df,
+            split_type=general_experiment_options.split_type,
+            target_variable_name=data_options.target_variable_name,
+            ml_algorithms=gnn_models.keys(),
+            problem_type=data_options.problem_type,
+            save_path=plots_dir,
+            class_names=data_options.class_names,
+        )
 
     if tml_models and gnn_conv_params:
 
@@ -262,22 +262,19 @@ def train_models(
 
         for i in range(general_experiment_options.n_bootstrap_iterations):
             iteration = str(i + 1)
-            metrics[iteration] = {
-                # **metrics_gnn[iteration],
-                **metrics_tml[iteration]
-            }
+            metrics[iteration] = {**metrics_gnn[iteration], **metrics_tml[iteration]}
 
     elif gnn_conv_params:
         predictions = gnn_predictions_df.copy()
-        # metrics = metrics_gnn
+        metrics = metrics_gnn
     elif tml_models:
         predictions = tml_predictions_df.copy()
         metrics = metrics_tml
 
     save_data(data=predictions, data_path=ml_results_file_path(experiment_path=experiment_path))
 
-    # with open(metrics_path, "w") as f:
-    #     json.dump(metrics, f, indent=4)
+    with open(metrics_path, "w") as f:
+        json.dump(metrics, f, indent=4)
 
     display_model_results(experiment_path=experiment_path, expanded=True)
 
