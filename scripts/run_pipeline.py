@@ -35,9 +35,9 @@ from __future__ import annotations
 import argparse
 import json
 import logging
+from pathlib import Path
 import sys
 import time
-from pathlib import Path
 
 import pandas as pd
 import yaml
@@ -154,9 +154,9 @@ def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path, root: 
 
 def stage_compute_descriptors(cfg: dict, df: pd.DataFrame):
     announce("3. Compute molecular descriptors")
-    from polynet.featurizer.descriptors import build_vector_representation
     from polynet.config.enums import DescriptorMergingMethod
     from polynet.data.preprocessing import sanitise_df
+    from polynet.featurizer.descriptors import build_vector_representation
 
     repr_cfg = cfg["representations"]["descriptors"]
     struct_cfg = cfg["structure"]
@@ -193,8 +193,8 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame):
 
 def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
     announce("4. Compute data splits")
-    from polynet.factories.dataloader import get_data_split_indices
     from polynet.config.enums import SplitMethod, SplitType
+    from polynet.factories.dataloader import get_data_split_indices
 
     split_cfg = cfg["splitting"]
     data_cfg = cfg["data"]
@@ -232,8 +232,8 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
 
 def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     announce("5. Train GNN ensemble")
-    from polynet.training.gnn import train_gnn_ensemble
     from polynet.config.enums import Network, ProblemType, TrainingParam
+    from polynet.training.gnn import train_gnn_ensemble
 
     data_cfg = cfg["data"]
     gnn_cfg = cfg["gnn_models"]
@@ -277,8 +277,8 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
 
 def stage_gnn_inference(cfg: dict, trained_models, loaders):
     announce("6. GNN inference")
-    from polynet.inference.gnn import get_predictions_df_gnn
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.inference.gnn import get_predictions_df_gnn
 
     predictions = get_predictions_df_gnn(
         models=trained_models,
@@ -293,8 +293,8 @@ def stage_gnn_inference(cfg: dict, trained_models, loaders):
 
 def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
     announce("7. Train TML ensemble")
-    from polynet.training.tml import train_tml_ensemble
     from polynet.config.enums import ProblemType, TraditionalMLModel, TransformDescriptor
+    from polynet.training.tml import train_tml_ensemble
 
     data_cfg = cfg["data"]
     tml_cfg = cfg["tml_models"]
@@ -321,8 +321,8 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
 
 def stage_tml_inference(cfg: dict, trained, training_data):
     announce("8. TML inference")
-    from polynet.inference.tml import get_predictions_df_tml
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.inference.tml import get_predictions_df_tml
 
     predictions = get_predictions_df_tml(
         models=trained,
@@ -338,8 +338,8 @@ def stage_tml_inference(cfg: dict, trained, training_data):
 
 def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, label: str):
     announce(f"9. Metrics ({label})")
-    from polynet.training.metrics import get_metrics
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.training.metrics import get_metrics
 
     metrics = get_metrics(
         predictions=predictions,
@@ -363,8 +363,8 @@ def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, la
 
 def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, out_dir: Path):
     announce("10. Result plots")
-    from polynet.training.evaluate import plot_learning_curves, plot_results
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.training.evaluate import plot_learning_curves, plot_results
 
     plots_dir = out_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)

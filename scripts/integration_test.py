@@ -26,11 +26,11 @@ error message, so you can copy it directly into a bug report.
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass, field
+from pathlib import Path
 import sys
 import time
 import traceback
-from dataclasses import dataclass, field
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -175,15 +175,15 @@ def stage_synthetic_data(n_samples: int, task: str):
 def stage_enums():
     """Verify that critical enums import and resolve correctly."""
     from polynet.config.enums import (
+        EvaluationMetric,
         Network,
-        ProblemType,
-        Pooling,
-        SplitType,
         Optimizer,
+        Pooling,
+        ProblemType,
         Scheduler,
+        SplitType,
         TraditionalMLModel,
         TransformDescriptor,
-        EvaluationMetric,
     )
 
     checks = {
@@ -228,8 +228,8 @@ def stage_graph_dataset(filename: str, tmp_path: Path):
 
 
 def stage_data_split(dataset, n_samples: int):
+    from polynet.config.enums import SplitMethod, SplitType
     from polynet.factories.dataloader import get_data_split_indices
-    from polynet.config.enums import SplitType, SplitMethod
 
     # Build a minimal DataFrame with index for splitting
 
@@ -252,8 +252,8 @@ def stage_data_split(dataset, n_samples: int):
 
 
 def stage_network_factory(task: str):
-    from polynet.factories.network import create_network, list_available_networks
     from polynet.config.enums import Network, ProblemType
+    from polynet.factories.network import create_network, list_available_networks
 
     problem_type = ProblemType(task)
     available = list_available_networks()
@@ -284,8 +284,8 @@ def stage_network_factory(task: str):
 
 
 def stage_optimizer_factory(models: dict):
-    from polynet.factories.optimizer import create_optimizer, create_scheduler
     from polynet.config.enums import Optimizer, Scheduler
+    from polynet.factories.optimizer import create_optimizer, create_scheduler
 
     results = {}
     for name, model in models.items():
@@ -297,8 +297,8 @@ def stage_optimizer_factory(models: dict):
 
 
 def stage_loss_factory(task: str):
-    from polynet.factories.loss import create_loss
     from polynet.config.enums import ProblemType
+    from polynet.factories.loss import create_loss
 
     loss = create_loss(ProblemType(task))
     print(f"  Loss function: {type(loss).__name__}")
@@ -306,8 +306,8 @@ def stage_loss_factory(task: str):
 
 
 def stage_gnn_training(dataset, split_indexes, task: str, epochs: int, tmp_path: Path):
-    from polynet.training.gnn import train_gnn_ensemble
     from polynet.config.enums import Network, ProblemType, TrainingParam
+    from polynet.training.gnn import train_gnn_ensemble
 
     problem_type = ProblemType(task)
     n_classes = 1 if task == "regression" else 2
@@ -338,8 +338,8 @@ def stage_gnn_training(dataset, split_indexes, task: str, epochs: int, tmp_path:
 
 
 def stage_gnn_inference(trained_models, loaders, task: str):
-    from polynet.inference.gnn import get_predictions_df_gnn
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.inference.gnn import get_predictions_df_gnn
 
     predictions = get_predictions_df_gnn(
         models=trained_models,
@@ -355,8 +355,8 @@ def stage_gnn_inference(trained_models, loaders, task: str):
 
 
 def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
-    from polynet.training.tml import train_tml_ensemble
     from polynet.config.enums import ProblemType, TraditionalMLModel, TransformDescriptor
+    from polynet.training.tml import train_tml_ensemble
 
     # Build a descriptor DataFrame (simple numeric features from df)
     # In a real run this comes from featurizer.descriptors
@@ -383,8 +383,8 @@ def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
 
 
 def stage_tml_inference(trained, training_data, df: pd.DataFrame, task: str):
-    from polynet.inference.tml import get_predictions_df_tml
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.inference.tml import get_predictions_df_tml
 
     predictions = get_predictions_df_tml(
         models=trained,
@@ -401,8 +401,8 @@ def stage_tml_inference(trained, training_data, df: pd.DataFrame, task: str):
 
 
 def stage_metrics(predictions: pd.DataFrame, trained_models: dict, task: str):
-    from polynet.training.metrics import get_metrics
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.training.metrics import get_metrics
 
     metrics = get_metrics(
         predictions=predictions,
@@ -420,8 +420,8 @@ def stage_metrics(predictions: pd.DataFrame, trained_models: dict, task: str):
 
 
 def stage_evaluate_plots(predictions, trained_models, task: str, tmp_path: Path):
-    from polynet.training.evaluate import plot_learning_curves, plot_results
     from polynet.config.enums import ProblemType, SplitType
+    from polynet.training.evaluate import plot_learning_curves, plot_results
 
     plot_learning_curves(models=trained_models, save_path=tmp_path / "plots")
     print("  Learning curves saved.")
