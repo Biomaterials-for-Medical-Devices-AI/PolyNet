@@ -39,7 +39,6 @@ def explain_mols_widget(
         key=SetStateKey,
         default=["All"],
     )
-    st.write(data)
 
     if mols_to_explain == DataSet.Training:
         explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Training].index
