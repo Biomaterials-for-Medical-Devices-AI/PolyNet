@@ -292,6 +292,25 @@ files = [
 ]
 
 [[package]]
+name = "canonicalize-psmiles"
+version = "0.1.2"
+description = "Canonicalize PSMILES strings."
+optional = false
+python-versions = ">=3.7,<4"
+groups = ["main"]
+files = []
+develop = false
+
+[package.dependencies]
+rdkit = ">=2022.3.5"
+
+[package.source]
+type = "git"
+url = "https://github.com/kuennethgroup/canonicalize_psmiles.git"
+reference = "HEAD"
+resolved_reference = "42aebcf3e780198ba8bb50b50d4fa84dc8fb66fa"
+
+[[package]]
 name = "captum"
 version = "0.8.0"
 description = "Model interpretability for PyTorch"
@@ -4850,4 +4869,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.11"
-content-hash = "8dcf59f67b00d8c624f6a53037fbd79ed1bd35257a6d2dc23bf4f76624f8af50"
+content-hash = "0210fd47f87a0f5526c5ac5b94ebe09b109ca0e774389187e47552297c37f633"
