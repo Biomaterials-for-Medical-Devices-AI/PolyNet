@@ -3,6 +3,7 @@ import streamlit as st
 
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
+from polynet.config.constants import ResultColumn
 from polynet.config.enums import ProblemType, StringRepresentation
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import (
@@ -101,6 +102,12 @@ def select_data_form():
 
         if id_col is None:
             st.warning("An ID column to identify your polymers is highly recommended.")
+            st.info(
+                f"To differentiate the instances, we will number your instances in from 0 to {len(df)-1} in order of appereance"
+            )
+            df.index.name = ResultColumn.INDEX
+            df = df.reset_index()
+            # st.session_state[CreateExperimentStateKeys.IDCol] = ResultColumn.INDEX
 
         target_col = st.selectbox(
             "Select target column",
