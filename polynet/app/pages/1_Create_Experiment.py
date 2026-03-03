@@ -5,6 +5,7 @@ from polynet.app.components.forms.create_experiment import select_data_form
 from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.app.services.experiments import create_experiment
+from polynet.config.constants import ResultColumn
 from polynet.config.schemas.data import DataConfig
 
 
@@ -18,6 +19,12 @@ def save_experiment(df):
         / st.session_state[CreateExperimentStateKeys.ExperimentName],
     )
 
+    id_col = (
+        st.session_state[CreateExperimentStateKeys.IDCol]
+        if st.session_state[CreateExperimentStateKeys.IDCol] is not None
+        else ResultColumn.INDEX
+    )
+
     data_options = DataConfig(
         data_name=dataset_name,
         data_path=str(path_to_data),
@@ -26,7 +33,7 @@ def save_experiment(df):
         target_variable_col=st.session_state[CreateExperimentStateKeys.TargetVariableCol],
         problem_type=st.session_state[CreateExperimentStateKeys.ProblemType],
         string_representation=st.session_state[CreateExperimentStateKeys.StringRepresentation],
-        id_col=st.session_state[CreateExperimentStateKeys.IDCol],
+        id_col=id_col,
         num_classes=st.session_state[CreateExperimentStateKeys.NumClasses],
         target_variable_name=st.session_state[CreateExperimentStateKeys.TargetVariableName],
         class_names=st.session_state.get(

@@ -1,34 +1,13 @@
 from collections import defaultdict
 from typing import Optional
 
+from canonicalize_psmiles.canonicalize import canonicalize
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
 from rdkit.Chem.Scaffolds import MurckoScaffold
 
 from polynet.config.enums import AtomFeature, BondFeature, FragmentationMethod, StringRepresentation
-
-# from canonicalize_psmiles.canonicalize import canonicalize as ext_canonicalize
-# from psmiles import PolymerSmiles
-from polynet.utils.canonicalise_psmiles import canonicalize as ext_canonicalize
-from polynet.utils.psmiles import PolymerSmiles
-
-
-class PS(PolymerSmiles):
-    def __init__(self, psmiles, deactivate_warnings=True):
-        super().__init__(psmiles, deactivate_warnings)
-        self.deactivate_warnings = deactivate_warnings
-
-    @property
-    def canonicalize(self) -> PolymerSmiles:
-        """Canonicalize the PSMILES string
-
-        Returns:
-            PolymerSmiles: canonicalized PSMILES string
-        """
-        return PolymerSmiles(
-            ext_canonicalize(self.psmiles), deactivate_warnings=self.deactivate_warnings
-        )
 
 
 def check_smiles(smiles: str) -> bool:
@@ -82,8 +61,8 @@ def determine_string_representation(df, smiles_cols):
 
 def canonicalise_psmiles(psmiles: str) -> Optional[str]:
     try:
-        psmiles = PS(psmiles=psmiles, deactivate_warnings=True).canonicalize
-        return psmiles.psmiles
+        psmiles = canonicalize(psmiles)
+        return psmiles
     except Exception as e:
         print(f"Error converting SMILES to canonical form: '{psmiles}'. Exception: {e}")
         return None

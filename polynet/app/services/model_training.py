@@ -6,8 +6,9 @@ import torch
 from torch import load, save
 
 from polynet.app.options.file_paths import model_dir, representation_file
+from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import MolecularDescriptor
-from polynet.config.schemas import DataConfig
+from polynet.config.schemas import RepresentationConfig
 from polynet.featurizer.preprocess import sanitise_df
 
 
@@ -62,70 +63,24 @@ def save_plot(fig, path, dpi=300):
 
 
 def load_dataframes(
-    representation_options: DataConfig, experiment_path: Path, target_variable_col: str
-):
+    representation_options: RepresentationConfig, experiment_path: Path, target_variable_col: str
+) -> dict[MolecularDescriptor, pd.DataFrame]:
 
     dataframe_dict = {}
 
-    if representation_options.rdkit_independent:
+    for representation, features in representation_options.molecular_descriptors.items():
 
-        rdkit_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.RDKit}.csv"
+        file_path = representation_file(
+            experiment_path=experiment_path, file_name=f"{representation}.csv"
         )
+        df = pd.read_csv(file_path, index_col=0)
 
-        rdkit_df = pd.read_csv(rdkit_file_path, index_col=0)
-
-        rdkit_df = sanitise_df(
-            df=rdkit_df,
-            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.RDKit],
-            target_variable_col=target_variable_col,
-        )
-
-        dataframe_dict[MolecularDescriptor.RDKit] = rdkit_df
-
-    if representation_options.df_descriptors_independent:
-        df_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.DataFrame}.csv"
-        )
-
-        df_df = pd.read_csv(df_file_path, index_col=0)
-
-        df_df = sanitise_df(
-            df=df_df,
-            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.DataFrame],
-            target_variable_col=target_variable_col,
-        )
-
-        dataframe_dict[MolecularDescriptor.DataFrame] = df_df
-
-    if representation_options.mix_rdkit_df_descriptors:
-
-        mix_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.RDKit_DataFrame}.csv"
-        )
-
-        mix_df = pd.read_csv(mix_file_path, index_col=0)
-
-        mix_df = sanitise_df(
-            df=mix_df,
-            descriptors=representation_options.molecular_descriptors[MolecularDescriptor.RDKit]
-            + representation_options.molecular_descriptors[MolecularDescriptor.DataFrame],
-            target_variable_col=target_variable_col,
-        )
-
-        dataframe_dict[MolecularDescriptor.RDKit_DataFrame] = mix_df
-
-    if representation_options.polybert_fp:
-        polybert_file_path = representation_file(
-            experiment_path=experiment_path, file_name=f"{MolecularDescriptor.PolyBERT}.csv"
-        )
-        polybert_df = pd.read_csv(polybert_file_path, index_col=0)
-        polybert_df = sanitise_df(
-            df=polybert_df,
-            descriptors=[f"polyBERT_{i}" for i in range(600)],
-            target_variable_col=target_variable_col,
-        )
-        dataframe_dict[MolecularDescriptor.PolyBERT] = polybert_df
+        if representation == MolecularDescriptor.PolyBERT and not features:
+            features = get_fp_col_names()
+        elif not features:
+            continue
+        df = sanitise_df(df=df, descriptors=features, target_variable_col=target_variable_col)
+        dataframe_dict[representation] = df
 
     return dataframe_dict
 

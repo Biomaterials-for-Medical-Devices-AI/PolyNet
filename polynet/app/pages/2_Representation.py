@@ -1,4 +1,5 @@
 from shutil import rmtree
+from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
@@ -34,19 +35,17 @@ from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 def parse_representation_options(
     experiment_name: str,
-    node_feats: dict,
-    edge_feats: dict,
-    molecular_descriptors: dict[MolecularDescriptor, list[str]],
+    node_feats: Dict,
+    edge_feats: Dict,
+    molecular_descriptors: Dict[MolecularDescriptor, List[str]],
     data: pd.DataFrame,
     data_options: DataConfig,
-    weights_col: dict,
+    weights_col: Dict[str, str],
 ):
     """
     Parse the representation options from the user input.
     This function is a placeholder for future implementation.
     """
-
-    calculate_polybert_fps = st.session_state.get(DescriptorCalculationStateKeys.polyBERTfp, False)
 
     representation_options = RepresentationConfig(
         smiles_merge_approach=st.session_state.get(
@@ -56,8 +55,6 @@ def parse_representation_options(
         node_features=node_feats,
         edge_features=edge_feats,
         molecular_descriptors=molecular_descriptors,
-        # rdkit_descriptors=None,
-        # df_descriptors=None,
         rdkit_independent=st.session_state.get(
             DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
             bool(molecular_descriptors[MolecularDescriptor.RDKit]),
@@ -69,7 +66,6 @@ def parse_representation_options(
             DescriptorCalculationStateKeys.MergeDescriptors, False
         ),
         weights_col=weights_col,
-        polybert_fp=calculate_polybert_fps,
     )
 
     experiment_path = polynet_experiment_path(experiment_name=experiment_name)

@@ -118,3 +118,37 @@ def get_score_column_name(
     if model_name:
         return f"{model_name} {ResultColumn.SCORE} {class_num}"
     return f"{ResultColumn.SCORE} {class_num}"
+
+
+def get_fp_col_names(prefix: str = "polyBERT", dim: int = 600) -> list[str]:
+    """
+    Generate standardised column names for fingerprint feature vectors.
+
+    Parameters
+    ----------
+    prefix:
+        String prefix used to identify the fingerprint type.
+        For example, ``"polyBERT"`` or ``"morgan"``.
+    dim:
+        Dimensionality of the fingerprint vector. This determines
+        how many feature column names are generated.
+
+    Returns
+    -------
+    list[str]
+        List of column names in the format ``"{prefix}_{i}"`` for
+        ``i`` in ``range(dim)``.
+
+    Examples
+    --------
+    >>> get_fp_col_names(prefix="polyBERT", dim=3)
+    ['polyBERT_0', 'polyBERT_1', 'polyBERT_2']
+
+    Notes
+    -----
+    This helper ensures consistent naming of fingerprint features
+    across the pipeline, which is important for joining feature
+    matrices, saving trained models, and performing feature importance
+    analysis.
+    """
+    return [f"{prefix}_{i}" for i in range(dim)]
