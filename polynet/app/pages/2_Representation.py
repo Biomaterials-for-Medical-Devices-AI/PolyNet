@@ -1,8 +1,8 @@
 from shutil import rmtree
+from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
-from typing import List, Dict
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (

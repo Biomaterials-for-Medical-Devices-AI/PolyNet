@@ -5,8 +5,8 @@ from polynet.app.components.forms.create_experiment import select_data_form
 from polynet.app.options.file_paths import data_file_path, polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.app.services.experiments import create_experiment
-from polynet.config.schemas.data import DataConfig
 from polynet.config.constants import ResultColumn
+from polynet.config.schemas.data import DataConfig
 
 
 def save_experiment(df):
