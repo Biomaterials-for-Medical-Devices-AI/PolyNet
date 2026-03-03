@@ -18,6 +18,8 @@ from polynet.config.enums import (
     TransformDescriptor,
 )
 from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
+from polynet.config.enums import FeatureSelection
 
 
 def train_TML_models(problem_type: ProblemType):
@@ -244,18 +246,88 @@ def train_TML_models(problem_type: ProblemType):
 
         st.divider()
 
-        st.selectbox(
-            "Apply transformation to the independent variables",
-            options=[
-                TransformDescriptor.NoTransformation,
-                TransformDescriptor.StandardScaler,
-                TransformDescriptor.MinMaxScaler,
-            ],
-            index=0,
-            key=TrainTMLStateKeys.TrasformFeatures,
-        )
+        feature_cfg = feature_transformer_widgets()
 
-    return models
+    return models, feature_cfg
+
+
+def feature_transformer_widgets() -> FeatureTransformConfig:
+    st.markdown("### Feature preprocessing")
+    st.caption("Scale features and optionally apply feature selection (fit on train only).")
+
+    scaler = st.selectbox(
+        "Scaling / normalization",
+        options=[
+            TransformDescriptor.NoTransformation,
+            TransformDescriptor.StandardScaler,
+            TransformDescriptor.MinMaxScaler,
+            TransformDescriptor.RobustScaler,
+            TransformDescriptor.PowerTransformer,
+            TransformDescriptor.QuantileTransformer,
+            TransformDescriptor.Normalizer,
+        ],
+        index=0,
+        key=getattr(TrainTMLStateKeys, "FeatureScaler", "FeatureScaler"),
+        help="Applied to X (independent variables). Fit on training set, reused for val/test.",
+    )
+
+    enable_fs = st.toggle(
+        "Enable feature selection",
+        value=False,
+        key=getattr(TrainTMLStateKeys, "EnableFeatureSelection", "EnableFeatureSelection"),
+        help="Applies selection after scaling. Steps are applied sequentially in the order chosen.",
+    )
+
+    selectors: dict[FeatureSelection, dict] = {}
+
+    if enable_fs:
+        with st.expander("Feature selection settings", expanded=True):
+            # Order matters. We’ll let the user decide order via a multiselect + order list.
+            available_steps = [FeatureSelection.Variance, FeatureSelection.Correlation]
+
+            chosen_steps = st.multiselect(
+                "Select feature selection steps (order matters)",
+                options=available_steps,
+                default=[FeatureSelection.Variance],
+                key=getattr(TrainTMLStateKeys, "FeatureSelectionSteps", "FeatureSelectionSteps"),
+                help="Steps are applied in the order selected below.",
+            )
+
+            # Per-step params
+            for step in chosen_steps:
+                if step == FeatureSelection.Variance:
+                    thr = st.number_input(
+                        "Variance threshold",
+                        min_value=0.0,
+                        value=0.0,
+                        step=1e-6,
+                        format="%.6f",
+                        key=getattr(TrainTMLStateKeys, "VarianceThreshold", "VarianceThreshold"),
+                        help="Remove features with variance <= threshold (computed after scaling).",
+                    )
+                    selectors[FeatureSelection.Variance] = {"threshold": float(thr)}
+
+                elif step == FeatureSelection.Correlation:
+                    corr_thr = st.slider(
+                        "Correlation threshold",
+                        min_value=0.50,
+                        max_value=0.999,
+                        value=0.95,
+                        step=0.01,
+                        key=getattr(
+                            TrainTMLStateKeys, "CorrelationThreshold", "CorrelationThreshold"
+                        ),
+                        help="Remove one of each pair of features with abs(corr) >= threshold (greedy).",
+                    )
+                    selectors[FeatureSelection.Correlation] = {"threshold": float(corr_thr)}
+
+            st.caption(
+                "Tip: a common choice is Variance → Correlation. "
+                "Correlation selection can be expensive for very wide descriptor sets."
+            )
+
+    # Return a validated config object (matches your updated schema)
+    return FeatureTransformConfig(scaler=scaler, selectors=selectors, random_state=42)
 
 
 def train_GNN_models_form(representation_opts: RepresentationConfig, problem_type: ProblemType):
