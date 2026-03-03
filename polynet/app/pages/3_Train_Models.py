@@ -26,6 +26,7 @@ from polynet.app.options.file_paths import (
     representation_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
+    preprocessing_tml_model_options_path,
 )
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
@@ -40,6 +41,7 @@ from polynet.config.column_names import get_iterator_name, get_true_label_column
 from polynet.config.constants import ResultColumn
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.general import GeneralConfig
+from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
 from polynet.factories.dataloader import get_data_split_indices
@@ -55,6 +57,7 @@ from polynet.training.tml import train_tml_ensemble
 def train_models(
     experiment_name: str,
     tml_models: dict,
+    preprocessing_cfg: FeatureTransformConfig,
     gnn_conv_params: dict,
     representation_options: RepresentationConfig,
     data_options: DataConfig,
@@ -63,12 +66,15 @@ def train_models(
     # paths for options and experiments
     experiment_path = polynet_experiment_path(experiment_name=experiment_name)
     tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
+    preprocessing_opts_path = preprocessing_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
 
     # delete old options if it exists
     if tml_training_opts_path.exists():
         tml_training_opts_path.unlink()
+    if preprocessing_opts_path.exists():
+        preprocessing_opts_path.unlink()
     if gnn_training_opts_path.exists():
         gnn_training_opts_path.unlink()
     if ml_results_dir.exists():
@@ -125,9 +131,9 @@ def train_models(
             train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
             selected_models=list(tml_models.keys()),
             model_params=tml_models,
-            transform_features=st.session_state[TrainTMLStateKeys.TrasformFeatures],
         )
         save_options(path=tml_training_opts_path, options=train_tml_options)
+        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
         # load dataframes
         dataframes = load_dataframes(
@@ -140,7 +146,8 @@ def train_models(
         tml_models, dataframes, scalers = train_tml_ensemble(
             tml_models=tml_models,
             problem_type=data_options.problem_type,
-            transform_type=train_tml_options.transform_features,
+            transform_type=preprocessing_cfg.scaler,
+            feature_selection=preprocessing_cfg.selectors,
             dataframes=dataframes,
             random_seed=general_experiment_options.random_seed,
             train_val_test_idxs=train_val_test_idxs,
@@ -319,7 +326,7 @@ if experiment_name:
 
     if representation_file_path(experiment_path=experiment_path).exists():
 
-        tml_models = train_TML_models(problem_type=data_opts.problem_type)
+        tml_models, preprocessing_cfg = train_TML_models(problem_type=data_opts.problem_type)
 
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
@@ -353,6 +360,7 @@ if experiment_name:
         train_models(
             experiment_name=experiment_name,
             tml_models=tml_models,
+            preprocessing_cfg=preprocessing_cfg,
             gnn_conv_params=gnn_conv_params,
             representation_options=representation_opts,
             data_options=data_opts,
