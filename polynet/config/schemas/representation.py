@@ -80,12 +80,14 @@ class RepresentationConfig(PolynetBaseModel):
     molecular_descriptors: dict[MolecularDescriptor, list[str]] = Field(
         default_factory=dict, description="Descriptor types and their selected descriptor names."
     )
+    # TODO delete rdkit_descriptors, df descriptors and polybert fp as it is infered drom the molecular descriptors dict
     rdkit_descriptors: list[str] | None = Field(
         default=None, description="Explicit RDKit descriptor names. None uses all available."
     )
     df_descriptors: list[str] | None = Field(
         default=None, description="Column names from an external DataFrame to use as descriptors."
     )
+    polybert_fp: bool = Field(default=False, description="Compute PolyBERT fingerprints.")
     rdkit_independent: bool = Field(
         default=True, description="Treat RDKit descriptors as an independent representation."
     )
@@ -98,7 +100,6 @@ class RepresentationConfig(PolynetBaseModel):
     weights_col: dict[str, str] | None = Field(
         default=None, description="Mapping from SMILES column to weight-fraction column."
     )
-    polybert_fp: bool = Field(default=False, description="Compute PolyBERT fingerprints.")
 
     @field_validator("rdkit_descriptors", "df_descriptors", mode="before")
     @classmethod
