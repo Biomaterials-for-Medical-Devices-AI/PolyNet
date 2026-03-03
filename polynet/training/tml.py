@@ -25,9 +25,15 @@ from sklearn.model_selection import GridSearchCV, StratifiedKFold
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
-from polynet.config.enums import ProblemType, TraditionalMLModel, TransformDescriptor
+from polynet.config.enums import (
+    ProblemType,
+    TraditionalMLModel,
+    TransformDescriptor,
+    FeatureSelection,
+)
 from polynet.config.search_grid import get_tml_search_grid
 from polynet.data.preprocessing import transform_features
+from polynet.data.feature_transformer import FeatureTransformer
 
 logger = logging.getLogger(__name__)
 
@@ -130,6 +136,7 @@ def train_tml_ensemble(
     tml_models: dict[TraditionalMLModel, dict | None],
     problem_type: ProblemType | str,
     transform_type: TransformDescriptor | str,
+    feature_selection: dict[FeatureSelection, dict],
     dataframes: dict[str, pd.DataFrame],
     random_seed: int,
     train_val_test_idxs: tuple[list, list | None, list],
@@ -197,20 +204,25 @@ def train_tml_ensemble(
             train_df = df.loc[combined_train_idxs].copy()
             test_df = df.loc[test_idxs].copy()
 
-            if transform_type != TransformDescriptor.NoTransformation:
+            X_train, y_train = train_df.iloc[:, :-1], train_df.iloc[:, -1]
+            X_test, y_test = test_df.iloc[:, :-1], test_df.iloc[:, -1]
 
-                fit_features = train_df.iloc[:, :-1].copy()
-                X_train_scaled, scaler = transform_features(
-                    fit_data=fit_features,
-                    transform_data=train_df.iloc[:, :-1],
-                    transform_type=transform_type,
-                )
-                train_df.iloc[:, :-1] = X_train_scaled
+            transformer = FeatureTransformer(scaler=transform_type, selectors=feature_selection)
+            transformer.fit(X_train)
 
-                X_test_scaled = scaler.transform(test_df.iloc[:, :-1])
-                test_df.iloc[:, :-1] = X_test_scaled
-                scalers[log_name] = scaler
+            X_train = transformer.transform(X_train)
+            X_train = pd.DataFrame(
+                X_train, index=combined_train_idxs, columns=transformer.get_feature_names_out()
+            )
+            train_df = pd.concat([X_train, y_train], axis=1)
 
+            X_test = transformer.transform(X_test)
+            X_test = pd.DataFrame(
+                X_test, index=test_idxs, columns=transformer.get_feature_names_out()
+            )
+            test_df = pd.concat([X_test, y_test], axis=1)
+
+            scalers[log_name] = transformer
             training_data[log_name] = (train_df, test_df)
 
             model_classes = generate_models(
