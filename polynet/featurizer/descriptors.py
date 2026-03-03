@@ -158,13 +158,18 @@ def build_vector_representation(
         mixed_df = pd.concat([rdkit_descriptors_df, descriptors_df], axis=1)
         descriptors[MolecularDescriptor.RDKit_DataFrame] = mixed_df
     # --- PolyBERT ---
-    if molecular_descriptors.get(MolecularDescriptor.PolyBERT):
-        warnings.warn(
-            "PolyBERT fingerprint computation is not yet fully integrated. "
-            "The PolyBERT representation will be skipped.",
-            UserWarning,
-            stacklevel=2,
+    if MolecularDescriptor.PolyBERT in molecular_descriptors:
+        polyBERT_dict = calculate_polybert_df_dict(
+            unique_psmiles=unique_smiles, data=data, psmiles_cols=smiles_cols
         )
+        polyBERT_df = _merge(
+            df_dict=polyBERT_dict,
+            data=data,
+            weights_col=weights_col,
+            data_index=data_index,
+            merging_approach=merging_approach,
+        )
+        descriptors[MolecularDescriptor.PolyBERT] = polyBERT_df
 
     return descriptors
 
@@ -229,35 +234,104 @@ def calculate_descriptors(
     return descriptors, list(selected_descriptors.keys())
 
 
-def get_polybert_fingerprints(psmiles_list: list[str]) -> dict[str, list[float]]:
+def get_polybert_fingerprints(
+    psmiles_list: list[str], batch_size: int = 64, show_progress_bar: bool = False
+) -> dict[str, list[float]]:
     """
-    Compute PolyBERT fingerprints for a list of PSMILES strings.
+    Compute PolyBERT fingerprints for a list of PSMILES strings (batched + cached).
 
-    Requires the ``psmiles`` package and a compatible PolyBERT model.
+    Returns mapping: original_psmiles -> fingerprint vector (list[float])
 
-    Parameters
-    ----------
-    psmiles_list:
-        PSMILES strings to compute fingerprints for.
-
-    Returns
-    -------
-    dict[str, list[float]]
-        Mapping from PSMILES string to its PolyBERT fingerprint vector.
+    Notes
+    -----
+    - Canonicalization is applied before encoding.
+    - Embeddings are computed only once per unique canonical PSMILES.
+    - Output keys remain the original strings from `psmiles_list` so you can
+      join back to your dataset without needing to canonicalize your dataframe.
     """
-    try:
-        from psmiles import PolymerSMILES as PS
-    except ImportError as e:
-        raise ImportError(
-            "The 'psmiles' package is required for PolyBERT fingerprints. "
-            "Install it with: pip install psmiles"
-        ) from e
+    from canonicalize_psmiles.canonicalize import canonicalize
+    from sentence_transformers import SentenceTransformer
 
-    fingerprints: dict[str, list[float]] = {}
-    for psmile in psmiles_list:
-        fingerprints[psmile] = PS(psmile).fingerprint("polyBERT")
+    model = SentenceTransformer("kuelumbus/polyBERT")
 
-    return fingerprints
+    # 1) Canonicalize (keep a mapping from original -> canonical)
+    orig_to_canon: dict[str, str] = {}
+    canon_list: list[str] = []
+    for p in psmiles_list:
+        if p is None:
+            continue
+        p_str = str(p)
+        try:
+            c = canonicalize(p_str)
+        except Exception:
+            # If canonicalization fails, keep original; embedding may still work
+            c = p_str
+        orig_to_canon[p_str] = c
+        canon_list.append(c)
+
+    if not canon_list:
+        return {}
+
+    # 2) Deduplicate canonical strings (preserve order)
+    seen = set()
+    unique_canons: list[str] = []
+    for c in canon_list:
+        if c not in seen:
+            seen.add(c)
+            unique_canons.append(c)
+
+    # 3) Batched encoding for unique canonical strings
+    # convert_to_numpy=True returns np.ndarray directly
+    embeddings = model.encode(
+        unique_canons,
+        batch_size=batch_size,
+        show_progress_bar=show_progress_bar,
+        convert_to_numpy=True,
+        normalize_embeddings=False,
+    )
+
+    # 4) Build canonical -> vector lookup (as python lists for JSON/pandas friendliness)
+    canon_to_vec: dict[str, list[float]] = {
+        c: embeddings[i].astype(float).tolist() for i, c in enumerate(unique_canons)
+    }
+
+    # 5) Map back to original strings
+    return {orig: canon_to_vec[canon] for orig, canon in orig_to_canon.items()}
+
+
+def calculate_polybert_df_dict(
+    unique_psmiles: list[str], data: pd.DataFrame, psmiles_cols: list[str], prefix: str = "polybert"
+) -> dict[str, pd.DataFrame]:
+    """
+    Compute PolyBERT fingerprints once for unique PSMILES and join to each
+    PSMILES column in the dataset.
+
+    Returns dict[col] -> DataFrame containing only the fingerprint columns
+    aligned to `data`'s rows (via left join on that column).
+    """
+    fp_dict = get_polybert_fingerprints(unique_psmiles)
+
+    if not fp_dict:
+        # No valid fingerprints computed
+        n_rows = len(data)
+        out: dict[str, pd.DataFrame] = {}
+        for col in psmiles_cols:
+            out[col] = pd.DataFrame(index=data.index)
+        return out
+
+    # Determine embedding dimension from first vector
+    first_vec = next(iter(fp_dict.values()))
+    dim = len(first_vec)
+
+    fp_cols = [f"{prefix}_{i}" for i in range(dim)]
+    fingerprints_df = pd.DataFrame.from_dict(fp_dict, orient="index", columns=fp_cols)
+
+    polybert_df_dict: dict[str, pd.DataFrame] = {}
+    for col in psmiles_cols:
+        joined = data.join(fingerprints_df, how="left", on=col)
+        polybert_df_dict[col] = joined[fp_cols].copy()
+
+    return polybert_df_dict
 
 
 # ---------------------------------------------------------------------------
