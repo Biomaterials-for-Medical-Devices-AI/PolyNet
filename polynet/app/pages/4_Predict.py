@@ -273,8 +273,6 @@ def predict(
             if model not in metrics[number]:
                 metrics[number][model] = {}
 
-            print(probs_cols)
-
             metrics[number][model][dataset_name.split(".")[0]] = calculate_metrics(
                 y_true=predictions[label_col_name],
                 y_pred=predictions[col],

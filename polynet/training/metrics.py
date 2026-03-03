@@ -24,20 +24,20 @@ from math import sqrt
 import numpy as np
 import pandas as pd
 
-# from imblearn.metrics import geometric_mean_score as gmean
-# from imblearn.metrics import specificity_score
-from sklearn.metrics import accuracy_score, f1_score
+from imblearn.metrics import geometric_mean_score as gmean, specificity_score
 from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
     mean_absolute_error,
     mean_squared_error,
     precision_score,
     r2_score,
     recall_score,
     roc_auc_score,
+    matthews_corrcoef as mcc,
 )
-from sklearn.metrics import matthews_corrcoef as mcc
-import torch
 
+import torch
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import EvaluationMetric, ProblemType, SplitType
@@ -148,9 +148,11 @@ def calculate_metrics(
             EvaluationMetric.Accuracy: accuracy_score(y_true, y_pred),
             EvaluationMetric.Precision: precision_score(y_true, y_pred),
             EvaluationMetric.Recall: recall_score(y_true, y_pred),
+            EvaluationMetric.Specificity: specificity_score(y_true, y_pred),
             EvaluationMetric.AUROC: auroc,
             EvaluationMetric.MCC: mcc(y_true, y_pred),
             EvaluationMetric.F1Score: f1_score(y_true, y_pred),
+            EvaluationMetric.GScore: gmean(y_true, y_pred),
         }
 
     return {
