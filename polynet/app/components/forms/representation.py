@@ -1,3 +1,5 @@
+from typing import Dict, List
+
 import pandas as pd
 from rdkit.Chem import Descriptors
 import streamlit as st
@@ -17,7 +19,9 @@ from polynet.config.schemas.data import DataConfig
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
-def select_weight_factor(requires_weights: bool, data_options: DataConfig, df: pd.DataFrame):
+def select_weight_factor(
+    requires_weights: bool, data_options: DataConfig, df: pd.DataFrame
+) -> Dict[str, str]:
 
     mol_weights_col = {}
 
@@ -57,7 +61,9 @@ def select_weight_factor(requires_weights: bool, data_options: DataConfig, df: p
     return mol_weights_col
 
 
-def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConfig):
+def molecular_descriptor_representation(
+    df: pd.DataFrame, data_options: DataConfig
+) -> Dict[MolecularDescriptor, List[str]]:
 
     descriptors_dict = {}
 
@@ -111,8 +117,10 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConf
 
         if data_options.string_representation == StringRepresentation.SMILES:
             disabled = True
+            message = "To use polyBERT fingerprints you must provide PSMILES representations"
         elif data_options.string_representation == StringRepresentation.PSMILES:
             disabled = False
+            message = "polyBERT fingerprints are numerical representations of PSMILES from a BERT model specialised on polymer grammar."
 
         st.markdown("### polyBERT fingerprint")
 
@@ -120,8 +128,8 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConf
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
-            disabled=True,
-            help="polyBERT will remain disabled until Git repo becomes available again.",
+            disabled=disabled,
+            help=message,
         )
 
         st.markdown("### Descriptors from DataFrame")
@@ -195,6 +203,7 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConf
                 disabled=True,
                 help="Currently, polyBERT fingerprints cannot be combined with any other representation.",
             )
+            descriptors_dict[MolecularDescriptor.PolyBERT] = []
 
         if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
 
@@ -216,7 +225,6 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConf
             merging_methods = st.segmented_control(
                 label="Select merging approach of descriptors for multiple SMILES columns",
                 options=[
-                    # DescriptorMergingMethods.Average,
                     DescriptorMergingMethod.WeightedAverage,
                     DescriptorMergingMethod.Concatenate,
                 ],
@@ -239,7 +247,9 @@ def molecular_descriptor_representation(df: pd.DataFrame, data_options: DataConf
     return descriptors_dict
 
 
-def graph_representation(data_opts: DataConfig, df: pd.DataFrame) -> tuple[dict, dict]:
+def graph_representation(
+    data_opts: DataConfig, df: pd.DataFrame
+) -> tuple[Dict[AtomFeature, List[str]], Dict[BondFeature, List[str]]]:
 
     atomic_properties = sorted(atom_properties.keys())
     bond_properties = sorted(bond_features.keys())
