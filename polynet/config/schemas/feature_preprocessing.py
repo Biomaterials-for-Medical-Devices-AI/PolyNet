@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any
 
 from pydantic import Field, model_validator
 
+from polynet.config.enums import FeatureSelection, TransformDescriptor
 from polynet.config.schemas.base import PolynetBaseModel
-from polynet.config.enums import TransformDescriptor, FeatureSelection
 
 
 class FeatureTransformConfig(PolynetBaseModel):
@@ -15,71 +15,87 @@ class FeatureTransformConfig(PolynetBaseModel):
     Attributes
     ----------
     scaler:
-        Feature normalization strategy. Use "none" to disable scaling.
+        Feature normalization strategy. Use ``TransformDescriptor.NoTransformation``
+        to disable scaling.
     selectors:
-        Ordered list of feature selection steps to apply after scaling.
-        Steps are applied sequentially, each reducing the feature set.
-        Allowed values: "variance", "correlation", "lasso".
+        Mapping of feature selection step → parameter dict. Steps are applied
+        sequentially in the mapping order (insertion order is preserved in Python 3.7+).
+
+        Supported steps and parameters:
+        - ``FeatureSelection.Variance``:
+            ``{"threshold": float}``  (variance <= threshold is removed)
+        - ``FeatureSelection.Correlation``:
+            ``{"threshold": float}``  (0 < threshold < 1, abs(corr) >= threshold removed)
 
         Example::
-            selectors: ["variance", "correlation", "lasso"]
+            selectors:
+              Variance:
+                threshold: 0.0
+              Correlation:
+                threshold: 0.95
 
-    variance_threshold:
-        Threshold for VarianceThreshold selection. Features with variance
-        <= this value are removed.
-    corr_threshold:
-        Absolute correlation threshold for correlation-based selection.
-        Features with abs(corr) >= threshold are removed (greedy upper-triangular rule).
-    lasso_alpha:
-        Regularization strength for LASSO regression selection (regression tasks).
-    lasso_C:
-        Inverse regularization strength for L1 logistic regression selection (classification tasks).
-    lasso_max_iter:
-        Max iterations for the L1 solver.
     random_state:
-        Random seed used by stochastic selectors (e.g., some solvers).
+        Random seed for reproducibility (reserved for future stochastic selectors).
     """
 
     scaler: TransformDescriptor = Field(
         default=TransformDescriptor.NoTransformation, description="Scaling strategy."
     )
-    selectors: list[FeatureSelection] = Field(
-        default_factory=list, description="Ordered selection steps applied after scaling."
+
+    # Ordered mapping: FeatureSelection -> params dict
+    selectors: dict[FeatureSelection, dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Ordered selection steps applied after scaling, with per-step params.",
     )
 
-    variance_threshold: float = Field(default=0.0, ge=0.0, description="VarianceThreshold cutoff.")
-    corr_threshold: float = Field(
-        default=0.95, gt=0.0, lt=1.0, description="Correlation cutoff in (0, 1)."
-    )
-
-    # LASSO-related
-    lasso_alpha: float = Field(default=1e-3, gt=0.0, description="Alpha for LASSO (regression).")
-    lasso_C: float = Field(
-        default=1.0, gt=0.0, description="C for L1 logistic regression (classification)."
-    )
-    lasso_max_iter: int = Field(
-        default=10_000, ge=1, description="Max solver iterations for LASSO/L1 LR."
-    )
     random_state: int = Field(default=42, description="Random seed for reproducibility.")
 
     @model_validator(mode="after")
-    def selectors_unique_and_ordered(self) -> "FeatureTransformConfig":
-        # Disallow duplicates because repeating the same selector is almost always accidental.
-        if len(self.selectors) != len(set(self.selectors)):
-            raise ValueError(
-                f"selectors contains duplicates: {self.selectors}. "
-                "Each selection step should appear at most once."
-            )
-        return self
+    def validate_selectors(self) -> "FeatureTransformConfig":
+        """
+        Validate selector keys and required parameters.
+        """
+        for step, params in self.selectors.items():
+            if params is None:
+                params = {}
+                self.selectors[step] = params  # type: ignore[index]
 
-    @model_validator(mode="after")
-    def lasso_requires_scaling_recommended(self) -> "FeatureTransformConfig":
-        # Not strictly required, but a helpful guardrail for users.
-        if "lasso" in self.selectors and self.scaler == "none":
-            # You could make this a warning instead if you prefer.
-            raise ValueError(
-                "selectors includes 'lasso' but scaler='none'. "
-                "LASSO feature selection is usually unstable without scaling. "
-                "Use scaler='standard' (recommended) or another scaler."
-            )
+            if not isinstance(params, dict):
+                raise ValueError(
+                    f"selectors[{step}] must be a dict of parameters, got {type(params).__name__}."
+                )
+
+            # Only Variance and Correlation are supported (LASSO removed)
+            if step == FeatureSelection.Variance:
+                thr = params.get("threshold", 0.0)
+                try:
+                    thr_f = float(thr)
+                except Exception as e:
+                    raise ValueError(
+                        f"selectors[{step}]['threshold'] must be a float, got {thr!r}."
+                    ) from e
+                if thr_f < 0.0:
+                    raise ValueError(f"selectors[{step}]['threshold'] must be >= 0, got {thr_f}.")
+                params["threshold"] = thr_f  # normalize
+
+            elif step == FeatureSelection.Correlation:
+                thr = params.get("threshold", 0.95)
+                try:
+                    thr_f = float(thr)
+                except Exception as e:
+                    raise ValueError(
+                        f"selectors[{step}]['threshold'] must be a float, got {thr!r}."
+                    ) from e
+                if not (0.0 < thr_f < 1.0):
+                    raise ValueError(
+                        f"selectors[{step}]['threshold'] must be in (0, 1), got {thr_f}."
+                    )
+                params["threshold"] = thr_f  # normalize
+
+            else:
+                raise ValueError(
+                    f"Unsupported feature selection step: {step!r}. "
+                    f"Supported: {FeatureSelection.Variance}, {FeatureSelection.Correlation}."
+                )
+
         return self
