@@ -62,9 +62,14 @@ def select_data_form():
         else:
             invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
             if invalid_smiles:
-                for col, smiles in invalid_smiles.values():
-                    st.error(f"Invalid SMILES found in column '{col}': {', '.join(smiles)}")
+                for col, smiles in invalid_smiles.items():
+                    st.error(
+                        f"Invalid SMILES found in column '{col}'. Example: {', '.join(smiles[:10])}"
+                    )
 
+                st.error(
+                    "To continue with experiment creation, please provide columns with valid SMILES or PSMILES strings."
+                )
                 st.stop()
 
             str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
@@ -75,8 +80,9 @@ def select_data_form():
         if st.checkbox(
             f"Canonicalise `{str_representation}`",
             key=CreateExperimentStateKeys.CanonicaliseSMILES,
-            help="Select this option to canonicalise the SMILES strings in the selected columns.",
+            help="To ensure proper featurization, the SMILES and PSMILES are always canonicalised.",
             value=True,
+            disabled=True,
         ):
             for col in smiles_cols:
 
@@ -92,6 +98,7 @@ def select_data_form():
             index=None,
             key=CreateExperimentStateKeys.IDCol,
         )
+
         if id_col is None:
             st.warning("An ID column to identify your polymers is highly recommended.")
 
@@ -107,11 +114,10 @@ def select_data_form():
             st.write(f"Target variable '{target_col}' is numeric")
             unique_vals_target = df[target_col].nunique()
             if unique_vals_target < 20:
-                st.warning("This looks like a classification problem is to be modeled.")
                 suggested_problem_type = ProblemType.Classification
             else:
-                st.warning("This looks like a regression problem is to be modeled.")
                 suggested_problem_type = ProblemType.Regression
+            st.warning(f"It looks like a {suggested_problem_type} problem is to be modeled.")
         elif target_col is None:
             st.error("Please select a target variable.")
             return False
@@ -192,8 +198,6 @@ def select_data_form():
                 )
                 st.pyplot(fig)
 
-                return df
-
             elif problem_type == ProblemType.Regression:
 
                 st.markdown("**Continuous Distribution**")
@@ -208,4 +212,5 @@ def select_data_form():
                         ),
                     )
                 )
-                return df
+
+            return df
