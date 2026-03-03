@@ -43,6 +43,7 @@ import warnings
 import pandas as pd
 from rdkit.Chem import Descriptors, MolFromSmiles
 
+from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.data.preprocessing import get_data_index
 
@@ -323,7 +324,7 @@ def calculate_polybert_df_dict(
     first_vec = next(iter(fp_dict.values()))
     dim = len(first_vec)
 
-    fp_cols = [f"{prefix}_{i}" for i in range(dim)]
+    fp_cols = get_fp_col_names()
     fingerprints_df = pd.DataFrame.from_dict(fp_dict, orient="index", columns=fp_cols)
 
     polybert_df_dict: dict[str, pd.DataFrame] = {}
