@@ -293,11 +293,12 @@ def stage_gnn_inference(cfg: dict, trained_models, loaders):
 
 def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
     announce("7. Train TML ensemble")
-    from polynet.config.enums import ProblemType, TraditionalMLModel, TransformDescriptor
+    from polynet.config.enums import ProblemType, TraditionalMLModel
     from polynet.training.tml import train_tml_ensemble
 
     data_cfg = cfg["data"]
     tml_cfg = cfg["tml_models"]
+    preprocessing_cfg = cfg["feature_preprocessing"]
     problem_type = ProblemType(data_cfg["problem_type"])
 
     skip_keys = {"enabled", "descriptor_transform"}
@@ -310,7 +311,8 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
     trained, training_data, scalers = train_tml_ensemble(
         tml_models=tml_models_config,
         problem_type=problem_type,
-        transform_type=TransformDescriptor(tml_cfg.get("descriptor_transform", "standard_scaler")),
+        transform_type=preprocessing_cfg["scaler"],
+        feature_selection=preprocessing_cfg.get("selectors", None),
         dataframes=desc_dfs,
         random_seed=cfg["experiment"]["random_seed"],
         train_val_test_idxs=split_indexes,
