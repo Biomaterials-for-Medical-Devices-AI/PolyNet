@@ -33,6 +33,7 @@ pydantic = "^2.12.3"
 captum = "^0.8.0"
 canonicalize-psmiles = {git = "https://github.com/kuennethgroup/canonicalize_psmiles.git"}
 sentence-transformers = "^5.2.3"
+polymetrix = "^0.2.0"
 
 
 [build-system]
