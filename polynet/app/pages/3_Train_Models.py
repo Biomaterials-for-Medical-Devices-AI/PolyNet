@@ -331,6 +331,7 @@ if experiment_name:
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
         tml_models = {}
+        preprocessing_cfg = {}
 
     st.markdown("## Graph Neural Networks (GNNs)")
 
