@@ -130,12 +130,9 @@ def predict(
             experiment_path=experiment_path, model_names=tml_models
         )
 
-        if train_tml_options.transform_features != TransformDescriptor.NoTransformation:
-            scalers = load_scalers_from_experiment(
-                experiment_path=experiment_path, model_names=tml_models
-            )
-        else:
-            scalers = {}
+        scalers = load_scalers_from_experiment(
+            experiment_path=experiment_path, model_names=tml_models
+        )
 
         # get predictions
         predictions_tml = predict_unseen_tml(
