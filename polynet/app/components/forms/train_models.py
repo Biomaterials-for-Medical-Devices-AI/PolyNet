@@ -25,6 +25,7 @@ from polynet.config.schemas.representation import RepresentationConfig
 def train_TML_models(problem_type: ProblemType):
 
     models = {}
+    feature_cfg = {}
 
     st.write(
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
