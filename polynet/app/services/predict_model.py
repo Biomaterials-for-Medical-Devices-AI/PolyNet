@@ -5,10 +5,10 @@ from polynet.config.column_names import get_predicted_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import ProblemType
 from polynet.config.schemas import DataConfig
+from polynet.data.feature_transformer import FeatureTransformer
 from polynet.featurizer.graph import PolymerGraphDataset
 from polynet.inference.utils import prepare_probs_df
 from polynet.models.base import BaseNetwork
-from polynet.data.feature_transformer import FeatureTransformer
 
 
 def predict_unseen_tml(
