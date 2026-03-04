@@ -22,11 +22,11 @@ from polynet.app.options.file_paths import (
     model_metrics_file_path,
     plots_directory,
     polynet_experiment_path,
+    preprocessing_tml_model_options_path,
     representation_file_path,
     representation_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
-    preprocessing_tml_model_options_path,
 )
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
@@ -40,8 +40,8 @@ from polynet.app.utils import save_data
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.schemas.data import DataConfig
-from polynet.config.schemas.general import GeneralConfig
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
+from polynet.config.schemas.general import GeneralConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
 from polynet.factories.dataloader import get_data_split_indices

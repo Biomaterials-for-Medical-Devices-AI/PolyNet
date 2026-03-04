@@ -8,6 +8,7 @@ from polynet.app.options.state_keys import (
 from polynet.config.enums import (
     ApplyWeightingToGraph,
     ArchitectureParam,
+    FeatureSelection,
     Network,
     Pooling,
     ProblemType,
@@ -17,9 +18,8 @@ from polynet.config.enums import (
     TrainingParam,
     TransformDescriptor,
 )
-from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
-from polynet.config.enums import FeatureSelection
+from polynet.config.schemas.representation import RepresentationConfig
 
 
 def train_TML_models(problem_type: ProblemType):

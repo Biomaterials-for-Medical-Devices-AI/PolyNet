@@ -26,14 +26,14 @@ from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
 from polynet.config.enums import (
+    FeatureSelection,
     ProblemType,
     TraditionalMLModel,
     TransformDescriptor,
-    FeatureSelection,
 )
 from polynet.config.search_grid import get_tml_search_grid
-from polynet.data.preprocessing import transform_features
 from polynet.data.feature_transformer import FeatureTransformer
+from polynet.data.preprocessing import transform_features
 
 logger = logging.getLogger(__name__)
 
