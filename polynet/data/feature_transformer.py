@@ -55,12 +55,15 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         random_state: int = 42,
         problem_type: ProblemType = ProblemType.Classification,
     ):
-        # Keep FeatureTransformConfig if you want a single place to validate defaults,
-        # but selectors are now per-step param dicts.
-        self.config = FeatureTransformConfig(
-            scaler=scaler, selectors=selectors or {}, random_state=random_state
-        )
+        self.scaler = scaler
+        self.selectors = selectors or {}
+        self.random_state = random_state
         self.problem_type = problem_type
+
+        # You can still build a validated config from them
+        self.config = FeatureTransformConfig(
+            scaler=self.scaler, selectors=self.selectors, random_state=self.random_state
+        )
 
         # learned attributes
         self.scaler_ = None
