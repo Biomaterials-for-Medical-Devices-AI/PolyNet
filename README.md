@@ -482,7 +482,7 @@ The summary table at the end lists every stage with its status, duration, and er
 
 ## Developer team
 
-Main developer: Eduardo Aguilar-Bejarano
+Main developer: [Eduardo Aguilar-Bejarano](https://edaguilarb.github.io/)
 
 
 ## Citing PolyNet
