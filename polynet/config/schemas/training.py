@@ -125,6 +125,7 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
     )
+    # TODO: remove transform_features arg
     transform_features: TransformDescriptor = Field(
         default=TransformDescriptor.NoTransformation,
         description="Feature scaling applied before training.",

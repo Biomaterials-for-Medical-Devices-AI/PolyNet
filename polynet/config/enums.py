@@ -120,6 +120,13 @@ class TransformDescriptor(StrEnum):
     Normalizer = "normalizer"
 
 
+class FeatureSelection(StrEnum):
+    NoSelection = "no_selection"
+    Variance = "variance"
+    Correlation = "correlation"
+    LASSO = "lasso"
+
+
 class FragmentationMethod(StrEnum):
     """Molecular fragmentation strategies for graph-based explainability."""
 

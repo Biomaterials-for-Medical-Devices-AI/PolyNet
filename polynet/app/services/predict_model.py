@@ -5,6 +5,7 @@ from polynet.config.column_names import get_predicted_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import ProblemType
 from polynet.config.schemas import DataConfig
+from polynet.data.feature_transformer import FeatureTransformer
 from polynet.featurizer.graph import PolymerGraphDataset
 from polynet.inference.utils import prepare_probs_df
 from polynet.models.base import BaseNetwork
@@ -12,7 +13,7 @@ from polynet.models.base import BaseNetwork
 
 def predict_unseen_tml(
     models: dict[str, object],
-    scalers: dict[str, object],
+    scalers: dict[str, FeatureTransformer],
     dfs: dict[str, pd.DataFrame],
     data_options: DataConfig,
 ) -> pd.DataFrame:
@@ -35,9 +36,8 @@ def predict_unseen_tml(
         if scalers:
             scaler_name = model_name.rsplit("-", 1)[-1]
             scaler = scalers[scaler_name]
-            df_cols = df.columns
             df = scaler.transform(df)
-            df = pd.DataFrame(df, columns=df_cols)
+            df = pd.DataFrame(df, columns=scaler.get_feature_names_out())
 
         preds = model.predict(df)
 
