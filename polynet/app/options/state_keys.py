@@ -8,6 +8,7 @@ class CreateExperimentStateKeys(StrEnum):
 
     ExperimentName = "ExperimentName"
     DatasetName = "DatasetName"
+    DatasetNameLoad = "DatasetNameLoad"
     SmilesCols = "SmilesCols"
     CanonicaliseSMILES = "CanonicaliseSMILES"
     IDCol = "IDCol"
