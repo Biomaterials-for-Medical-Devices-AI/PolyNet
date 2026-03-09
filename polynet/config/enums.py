@@ -78,6 +78,58 @@ class MolecularDescriptor(StrEnum):
     PolyBERT = "polybert"
     DataFrame = "dataframe"
     RDKit_DataFrame = "rdkit_dataframe"
+    PolyMetriX = "polymetrix"
+
+
+class PMXAggMethod(StrEnum):
+    Sum = "sum"
+    Mean = "mean"
+    Max = "max"
+    Min = "min"
+
+
+class PMXChemFeature(StrEnum):
+    """
+    Chemical descriptor-based featurizers operating on molecular structures.
+
+    The enum values follow the PolyNet configuration convention:
+    lowercase with underscores.
+    """
+
+    NumHBondDonors = "num_hbond_donors"
+    NumHBondAcceptors = "num_hbond_acceptors"
+    NumRotatableBonds = "num_rotatable_bonds"
+    NumRings = "num_rings"
+    NumNonAromaticRings = "num_non_aromatic_rings"
+    NumAromaticRings = "num_aromatic_rings"
+    NumAtoms = "num_atoms"
+    TopologicalSurfaceArea = "topological_surface_area"
+    FractionBicyclicRings = "fraction_bicyclic_rings"
+    NumAliphaticHeterocycles = "num_aliphatic_heterocycles"
+    SlogPVSA1 = "slogpvsa1"
+    BalabanJIndex = "balaban_j_index"
+    MolecularWeight = "molecular_weight"
+    Sp3CarbonCountFeaturizer = "sp3_carbon_count"
+    Sp2CarbonCountFeaturizer = "sp2_carbon_count"
+    MaxEStateIndex = "max_estate_index"
+    SmrVSA5 = "smr_vsa5"
+    FpDensityMorgan1 = "fp_density_morgan1"
+    HalogenCounts = "halogen_counts"
+    BondCounts = "bond_counts"
+    BridgingRingsCount = "bridging_rings_count"
+    MaxRingSize = "max_ring_size"
+    HeteroatomCount = "heteroatom_count"
+    HeteroatomDensity = "heteroatom_density"
+
+
+class PMXTopoFeature(StrEnum):
+    """
+    Topology-aware featurizers for polymer representation.
+    """
+
+    NumSideChainFeaturizer = "num_sidechains"
+    NumBackBoneFeaturizer = "num_backbone"
+    SideChainLengthFeaturizer = "sidechain_length"
 
 
 class AtomFeature(StrEnum):
