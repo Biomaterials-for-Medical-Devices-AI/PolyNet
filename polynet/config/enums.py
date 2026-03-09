@@ -19,6 +19,12 @@ from enum import StrEnum
 # ---------------------------------------------------------------------------
 
 
+class DatasetName(StrEnum):
+    """Benchmarking datasets"""
+
+    CuratedTg = "curated_tg"
+
+
 class ProblemType(StrEnum):
     """Supervised learning task type."""
 
