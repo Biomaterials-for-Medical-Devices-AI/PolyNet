@@ -52,7 +52,9 @@ def select_data_form():
             df = pd.read_csv(csv_file)
     with tab2:
         dataset_name = st.selectbox(
-            "Select a benchmark dataset to load", options=[DatasetName.CuratedTg]
+            "Select a benchmark dataset to load",
+            options=[DatasetName.CuratedTg],
+            key=CreateExperimentStateKeys.DatasetNameLoad,
         )
         if not dataset_name:
             st.error("Please select a dataset name to proceed.")
