@@ -36,10 +36,10 @@ import argparse
 import json
 import logging
 from pathlib import Path
-import joblib
 import sys
 import time
 
+import joblib
 import pandas as pd
 import yaml
 
@@ -235,9 +235,10 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
 
 def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     announce("5. Train GNN ensemble")
+    from torch import save
+
     from polynet.config.enums import Network, ProblemType, TrainingParam
     from polynet.training.gnn import train_gnn_ensemble
-    from torch import save
 
     data_cfg = cfg["data"]
     gnn_cfg = cfg["gnn_models"]

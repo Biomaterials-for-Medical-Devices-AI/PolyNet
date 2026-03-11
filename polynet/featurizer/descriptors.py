@@ -41,13 +41,12 @@ import logging
 import warnings
 
 import pandas as pd
+from polymetrix.featurizers.polymer import Polymer
 from rdkit.Chem import Descriptors, MolFromSmiles
 
 from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.data.preprocessing import get_data_index
-
-from polymetrix.featurizers.polymer import Polymer
 from polynet.featurizer.pmx import create_pmx_featurizer
 
 logger = logging.getLogger(__name__)

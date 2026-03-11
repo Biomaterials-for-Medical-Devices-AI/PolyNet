@@ -8,8 +8,7 @@ from torch import load, save
 from polynet.app.options.file_paths import model_dir, representation_file
 from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import MolecularDescriptor
-from polynet.config.schemas import RepresentationConfig, DataConfig
-
+from polynet.config.schemas import DataConfig, RepresentationConfig
 from polynet.data import sanitise_df
 
 

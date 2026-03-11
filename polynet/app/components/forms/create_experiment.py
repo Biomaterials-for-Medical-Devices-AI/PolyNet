@@ -4,9 +4,9 @@ import streamlit as st
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
-from polynet.config.enums import ProblemType, StringRepresentation, DatasetName
-from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
+from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
 from polynet.data.creator import DatasetCreator
+from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import (
     canonicalise_psmiles,
     canonicalise_smiles,

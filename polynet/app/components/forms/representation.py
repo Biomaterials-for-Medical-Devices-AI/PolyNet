@@ -13,12 +13,12 @@ from polynet.config.enums import (
     BondFeature,
     DescriptorMergingMethod,
     MolecularDescriptor,
-    StringRepresentation,
     PMXAggMethod,
+    StringRepresentation,
 )
 from polynet.config.schemas.data import DataConfig
-from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 from polynet.featurizer.pmx import CHEMICAL_FEATURIZER_REGISTRY, TOPOLOGICAL_FEATURIZER_REGISTRY
+from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
 def select_weight_factor(

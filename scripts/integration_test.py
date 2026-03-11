@@ -356,10 +356,10 @@ def stage_gnn_inference(trained_models, loaders, task: str):
 
 def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
     from polynet.config.enums import (
+        FeatureSelection,
         ProblemType,
         TraditionalMLModel,
         TransformDescriptor,
-        FeatureSelection,
     )
     from polynet.training.tml import train_tml_ensemble
 
