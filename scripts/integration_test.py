@@ -355,7 +355,12 @@ def stage_gnn_inference(trained_models, loaders, task: str):
 
 
 def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
-    from polynet.config.enums import ProblemType, TraditionalMLModel, TransformDescriptor
+    from polynet.config.enums import (
+        ProblemType,
+        TraditionalMLModel,
+        TransformDescriptor,
+        FeatureSelection,
+    )
     from polynet.training.tml import train_tml_ensemble
 
     # Build a descriptor DataFrame (simple numeric features from df)
@@ -368,11 +373,13 @@ def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
     desc_df = desc_df[["weight_fraction_1", "weight_fraction_2", "feat1", "feat2", "target"]]
 
     tml_models_config = {TraditionalMLModel.RandomForest: {"n_estimators": 10, "max_depth": 3}}
+    feature_selection = {FeatureSelection.Variance: {"threshold": 0}}
 
     trained, training_data, scalers = train_tml_ensemble(
         tml_models=tml_models_config,
         problem_type=ProblemType(task),
         transform_type=TransformDescriptor.StandardScaler,
+        feature_selection=feature_selection,
         dataframes={"descriptors": desc_df},
         random_seed=42,
         train_val_test_idxs=split_indexes,
