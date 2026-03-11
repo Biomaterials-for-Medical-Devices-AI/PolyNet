@@ -19,11 +19,16 @@ experiment:
 # Data
 # -----------------------------------------------------------------------------
 data:
-  path: "./datasets/polymers_all.csv"       # path to your CSV file
-  id_col: "id"                      # unique sample identifier column
-  target_col: "isFluo_PA"                    # column to predict
-  target_name: "Is Fluo PA"                         # human-readable name (used in plots)
+  data_name: "polymers_all.csv"
+  data_path: "./datasets/bacteria_all/raw/polymers_all.csv"       # path to your CSV file
+  smiles_cols: ["smiles_monomer_1", "smiles_monomer_2"]
+  canonicalise_smiles: true
+  target_variable_col: "isFluo_PA"                    # column to predict
   problem_type: "classification"                # "regression" or "classification"
+  string_representation: "smiles"
+  id_col: "id"                      # unique sample identifier column
+  num_classes: 2                # Number of output classes. Use 1 for regression, N for N-class classification
+  target_name: "Is Fluo PA"                         # human-readable name (used in plots)
 
   # For classification only — maps integer class labels to display names
   # Leave null for regression or if you don't want custom labels
@@ -31,24 +36,6 @@ data:
   class_names:
     0: "AntiBiofilm"
     1: "ProBiofilm"
-
-  # Number of output classes. Use 1 for regression, N for N-class classification
-  num_classes: 2
-
-# -----------------------------------------------------------------------------
-# Polymer structure columns
-# -----------------------------------------------------------------------------
-structure:
-  # List all monomer SMILES column names
-  smiles_cols:
-    - "smiles_monomer_1"
-    - "smiles_monomer_2"
-
-  # Map each smiles column to its weight fraction column
-  # Set to null if your dataset has no weight fractions
-  weights_cols:
-    smiles_monomer_1: "ratio_1"
-    smiles_monomer_2: "ratio_2"
 
 # -----------------------------------------------------------------------------
 # Representations
@@ -63,9 +50,59 @@ representations:
     enabled: true           # set true to also train TML models
     molecular_descriptors: {
       "rdkit": "all",   # compute all RDKit descriptors
+      "polybert": true,
+      "polymetrix": {
+        "side_chain": [
+          "num_hbond_donors",
+          "num_hbond_acceptors",
+          "num_rotatable_bonds",
+          "num_rings",
+          "num_non_aromatic_rings",
+          "num_aromatic_rings",
+          "num_atoms",
+          "topological_surface_area",
+          "fraction_bicyclic_rings",
+          "num_aliphatic_heterocycles",
+          "molecular_weight",
+          "sp3_carbon_count",
+          "sp2_carbon_count",
+          "halogen_counts",
+          "bond_counts",
+          "max_ring_size",
+          "heteroatom_count",
+          "heteroatom_density"
+        ],
+        "backbone": [
+          "num_hbond_donors",
+          "num_hbond_acceptors",
+          "num_rotatable_bonds",
+          "num_rings",
+          "num_non_aromatic_rings",
+          "num_aromatic_rings",
+          "num_atoms",
+          "topological_surface_area",
+          "fraction_bicyclic_rings",
+          "num_aliphatic_heterocycles",
+          "molecular_weight",
+          "sp3_carbon_count",
+          "sp2_carbon_count",
+          "halogen_counts",
+          "bond_counts",
+          "max_ring_size",
+          "heteroatom_count",
+          "heteroatom_density"
+        ],
+        "agg": ["sum", "mean"]
+      }
     }
     rdkit: true              # compute RDKit molecular descriptors
     merging_method: "weighted_average"   # weighted_average | average | concatenate
+
+  # Map each smiles column to its weight fraction column
+  # Set to null if your dataset has no weight fractions
+  weights_cols:
+    smiles_monomer_1: "ratio_1"
+    smiles_monomer_2: "ratio_2"
 
 # -----------------------------------------------------------------------------
 # Data splitting
@@ -125,6 +162,14 @@ training:
 # Only active when representations.descriptors.enabled is true.
 # Leave the block empty ({}) to trigger GridSearchCV HPO.
 # -----------------------------------------------------------------------------
+feature_preprocessing:
+  scaler: "standard_scaler"
+  selectors:
+    variance:
+      threshold: 0.05
+    correlation:
+      threshold: 0.95
+
 tml_models:
   enabled: true
 
