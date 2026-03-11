@@ -47,6 +47,9 @@ from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.data.preprocessing import get_data_index
 
+from polymetrix.featurizers.polymer import Polymer
+from polynet.featurizer.pmx import create_pmx_featurizer
+
 logger = logging.getLogger(__name__)
 
 
@@ -171,6 +174,22 @@ def build_vector_representation(
             merging_approach=merging_approach,
         )
         descriptors[MolecularDescriptor.PolyBERT] = polyBERT_df
+
+    if MolecularDescriptor.PolyMetriX in molecular_descriptors:
+        pmx_dict = calculate_PMX_df_dict(
+            unique_psmiles=unique_smiles,
+            data=data,
+            psmiles_cols=smiles_cols,
+            pmx_descriptors=molecular_descriptors[MolecularDescriptor.PolyMetriX],
+        )
+        pmx_df = _merge(
+            df_dict=pmx_dict,
+            data=data,
+            weights_col=weights_col,
+            data_index=data_index,
+            merging_approach=merging_approach,
+        )
+        descriptors[MolecularDescriptor.PolyMetriX] = pmx_df
 
     return descriptors
 
@@ -333,6 +352,47 @@ def calculate_polybert_df_dict(
         polybert_df_dict[col] = joined[fp_cols].copy()
 
     return polybert_df_dict
+
+
+def get_PMX_descriptors(
+    unique_psmiles: list[str], side_chain_desc_list, backbone_desclist, agg_method
+):
+
+    feat_dict = {}
+
+    featurizer = create_pmx_featurizer(
+        side_chain_features=side_chain_desc_list,
+        backbone_features=backbone_desclist,
+        agg_method=agg_method,
+    )
+
+    for psmiles in unique_psmiles:
+        polymer = Polymer.from_psmiles(psmiles)
+
+        feat_dict[psmiles] = featurizer.featurize(polymer)
+
+    return feat_dict, featurizer.feature_labels()
+
+
+def calculate_PMX_df_dict(
+    unique_psmiles: list[str], data: pd.DataFrame, psmiles_cols: list[str], pmx_descriptors: dict
+):
+
+    pmx_dict, cols = get_PMX_descriptors(
+        unique_psmiles=unique_psmiles,
+        side_chain_desc_list=pmx_descriptors["side_chain"],
+        backbone_desclist=pmx_descriptors["backbone"],
+        agg_method=pmx_descriptors["agg"],
+    )
+
+    pmx_df = pd.DataFrame.from_dict(pmx_dict, orient="index", columns=cols)
+
+    pmx_df_dict: dict[str, pd.DataFrame] = {}
+    for col in psmiles_cols:
+        joined = data.join(pmx_df, how="left", on=col)
+        pmx_df_dict[col] = joined[cols].copy()
+
+    return pmx_df_dict
 
 
 # ---------------------------------------------------------------------------
