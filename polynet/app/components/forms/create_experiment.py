@@ -4,7 +4,8 @@ import streamlit as st
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
-from polynet.config.enums import ProblemType, StringRepresentation
+from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
+from polynet.data.creator import DatasetCreator
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import (
     canonicalise_psmiles,
@@ -34,19 +35,36 @@ def select_data_form():
     if not experiment_name:
         st.error("Please provide an experiment name.")
 
-    csv_file = st.file_uploader(
-        "Choose a CSV file",
-        type="csv",
-        key=CreateExperimentStateKeys.DatasetName,
-        help="Upload a CSV file containing SMILES strings and the target variable.",
-    )
+    tab1, tab2 = st.tabs(["Upload dataset", "Load benchmarking dataset"])
 
-    if not csv_file:
-        st.warning("Please upload a CSV file to proceed.")
+    with tab1:
+        csv_file = st.file_uploader(
+            "Choose a CSV file",
+            type="csv",
+            key=CreateExperimentStateKeys.DatasetName,
+            help="Upload a CSV file containing SMILES strings and the target variable.",
+        )
 
-    if csv_file:
+        if not csv_file:
+            st.error("Please upload a CSV file to proceed.")
+            df = None
+        else:
+            df = pd.read_csv(csv_file)
+    with tab2:
+        dataset_name = st.selectbox(
+            "Select a benchmark dataset to load",
+            options=[DatasetName.CuratedTg],
+            key=CreateExperimentStateKeys.DatasetNameLoad,
+        )
+        if not dataset_name:
+            st.error("Please select a dataset name to proceed.")
+            df = None
+        else:
+            dataset = DatasetCreator(dataset_name)
+            df = dataset.create_dataset()
+
+    if df is not None:
         st.markdown("**Preview Data**")
-        df = pd.read_csv(csv_file)
         if st.checkbox("Show data provided"):
             st.write(df)
 

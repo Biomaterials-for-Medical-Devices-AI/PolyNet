@@ -77,7 +77,7 @@ class RepresentationConfig(PolynetBaseModel):
     edge_features: dict[BondFeature, dict] = Field(
         default_factory=dict, description="Bond feature configuration for graph construction."
     )
-    molecular_descriptors: dict[MolecularDescriptor, list[str]] = Field(
+    molecular_descriptors: dict[MolecularDescriptor, list[str] | dict] = Field(
         default_factory=dict, description="Descriptor types and their selected descriptor names."
     )
     # TODO delete rdkit_descriptors, df descriptors and polybert fp as it is infered drom the molecular descriptors dict

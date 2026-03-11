@@ -8,8 +8,8 @@ from torch import load, save
 from polynet.app.options.file_paths import model_dir, representation_file
 from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import MolecularDescriptor
-from polynet.config.schemas import RepresentationConfig
-from polynet.featurizer.preprocess import sanitise_df
+from polynet.config.schemas import DataConfig, RepresentationConfig
+from polynet.data import sanitise_df
 
 
 def save_tml_model(model, path):
@@ -63,7 +63,7 @@ def save_plot(fig, path, dpi=300):
 
 
 def load_dataframes(
-    representation_options: RepresentationConfig, experiment_path: Path, target_variable_col: str
+    representation_options: RepresentationConfig, data_options: DataConfig, experiment_path: Path
 ) -> dict[MolecularDescriptor, pd.DataFrame]:
 
     dataframe_dict = {}
@@ -79,7 +79,39 @@ def load_dataframes(
             features = get_fp_col_names()
         elif not features:
             continue
-        df = sanitise_df(df=df, descriptors=features, target_variable_col=target_variable_col)
+        elif representation == MolecularDescriptor.PolyMetriX:
+            # TODO: think of a way to make this better
+            agg_method = features["agg"]
+            side_feats = features["side_chain"]
+            feats_side_chain = [
+                f"{feat}_sidechainfeaturizer_{agg}" for agg in agg_method for feat in side_feats
+            ]
+            back_feats = features["backbone"]
+            feats_backbone = [f"{feat}_sum_backbonefeaturizer" for feat in back_feats]
+            features = feats_side_chain + feats_backbone
+
+        df = sanitise_df(
+            df=df,
+            smiles_cols=data_options.smiles_cols,
+            target_variable_col=data_options.target_variable_col,
+            weights_cols=list(representation_options.weights_col.values()),
+        )
+
+        expected_features = set(features)
+        actual_cols = list(df.columns)
+        target = data_options.target_variable_col
+
+        # 1 Check all expected features exist
+        missing = expected_features - set(actual_cols)
+        assert not missing, f"Missing expected feature columns: {sorted(missing)}"
+
+        # 2 Check target is last column
+        assert actual_cols[-1] == target, (
+            f"Target column must be the last column.\n"
+            f"Expected last column: '{target}'\n"
+            f"Got: '{actual_cols[-1]}'"
+        )
+
         dataframe_dict[representation] = df
 
     return dataframe_dict

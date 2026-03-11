@@ -15,6 +15,7 @@ from polynet.featurizer.descriptors import (
     get_polybert_fingerprints,
 )
 from polynet.featurizer.graph import PolymerGraphDataset
+from polynet.featurizer.pmx import create_pmx_featurizer
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.featurizer.selection import (
     diversity_filter,
@@ -27,6 +28,7 @@ __all__ = [
     "build_vector_representation",
     "calculate_descriptors",
     "get_polybert_fingerprints",
+    "create_pmx_featurizer",
     # Graph datasets
     "PolymerGraphDataset",
     "CustomPolymerGraph",

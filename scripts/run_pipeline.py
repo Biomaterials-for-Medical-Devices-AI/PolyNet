@@ -39,6 +39,7 @@ from pathlib import Path
 import sys
 import time
 
+import joblib
 import pandas as pd
 import yaml
 
@@ -110,12 +111,12 @@ def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
     from polynet.data.loader import load_dataset
 
     data_cfg = cfg["data"]
-    data_path = resolve_path(data_cfg["path"], root)
+    data_path = resolve_path(data_cfg["data_path"], root)
 
     df = load_dataset(
         path=data_path,
-        smiles_cols=cfg["structure"]["smiles_cols"],
-        target_col=data_cfg["target_col"],
+        smiles_cols=data_cfg["smiles_cols"],
+        target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
         problem_type=data_cfg["problem_type"],
     )
@@ -124,26 +125,25 @@ def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
     return df
 
 
-def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path, root: Path):
+def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path):
     announce("2. Build graph dataset")
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
     data_cfg = cfg["data"]
-    struct_cfg = cfg["structure"]
 
     # Write the current (possibly filtered) DataFrame to the raw directory
     # so CustomPolymerGraph can read it via its standard file interface.
-    raw_dir = out_dir / "graph_dataset" / "raw"
+    raw_dir = out_dir / "representation" / "GNN" / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
-    filename = "dataset.csv"
+    filename = data_cfg["data_name"]
     df.to_csv(raw_dir / filename)
 
     dataset = CustomPolymerGraph(
-        root=str(out_dir / "graph_dataset"),
+        root=str(raw_dir.parent),
         filename=filename,
-        smiles_cols=struct_cfg["smiles_cols"],
-        weights_col=struct_cfg.get("weights_cols"),
-        target_col=data_cfg["target_col"],
+        smiles_cols=data_cfg["smiles_cols"],
+        weights_col=cfg["representations"].get("weights_cols"),
+        target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
     )
     logger.info(f"  Graph dataset: {len(dataset)} graphs")
@@ -152,38 +152,41 @@ def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path, root: 
     return dataset
 
 
-def stage_compute_descriptors(cfg: dict, df: pd.DataFrame):
+def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
     announce("3. Compute molecular descriptors")
     from polynet.config.enums import DescriptorMergingMethod
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
 
     repr_cfg = cfg["representations"]["descriptors"]
-    struct_cfg = cfg["structure"]
     data_cfg = cfg["data"]
+
+    representation_dir = out_dir / "representation" / "Descriptors"
+    representation_dir.mkdir(parents=True, exist_ok=True)
 
     desc_dfs = build_vector_representation(
         data=df,
         molecular_descriptors=repr_cfg["molecular_descriptors"],
-        smiles_cols=struct_cfg["smiles_cols"],
+        smiles_cols=data_cfg["smiles_cols"],
         id_col=data_cfg.get("id_col"),
-        target_col=data_cfg["target_col"],
+        target_col=data_cfg["target_variable_col"],
         merging_approach=DescriptorMergingMethod(
             repr_cfg.get("merging_method", "weighted_average")
         ),
-        weights_col=struct_cfg.get("weights_cols"),
+        weights_col=cfg["representations"].get("weights_cols"),
         rdkit_independent=repr_cfg.get("rdkit_independent", True),
         df_descriptors_independent=repr_cfg.get("df_descriptors_independent", False),
         mix_rdkit_df_descriptors=repr_cfg.get("mix_rdkit_df_descriptors", False),
     )
     for name, desc_df in desc_dfs.items():
+        desc_df.to_csv(representation_dir / f"{name}.csv")
         desc_dfs[name] = sanitise_df(
             df=desc_df,
-            smiles_cols=struct_cfg["smiles_cols"],
-            target_variable_col=data_cfg["target_col"],
+            smiles_cols=data_cfg["smiles_cols"],
+            target_variable_col=data_cfg["target_variable_col"],
             weights_cols=(
-                list(struct_cfg.get("weights_cols").values())
-                if struct_cfg.get("weights_cols")
+                list(cfg["representations"].get("weights_cols").values())
+                if cfg["representations"].get("weights_cols")
                 else None
             ),
         )
@@ -206,7 +209,7 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
         n_bootstrap_iterations=split_cfg.get("n_bootstrap_iterations", 1),
         val_ratio=split_cfg.get("val_ratio", 0.15),
         test_ratio=split_cfg.get("test_ratio", 0.15),
-        target_variable_col=data_cfg.get("target_col"),
+        target_variable_col=data_cfg.get("target_variable_col"),
         train_set_balance=split_cfg.get("train_set_balance"),
         random_seed=cfg["experiment"]["random_seed"],
     )
@@ -232,12 +235,17 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
 
 def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     announce("5. Train GNN ensemble")
+    from torch import save
+
     from polynet.config.enums import Network, ProblemType, TrainingParam
     from polynet.training.gnn import train_gnn_ensemble
 
     data_cfg = cfg["data"]
     gnn_cfg = cfg["gnn_models"]
     problem_type = ProblemType(data_cfg["problem_type"])
+
+    models_dir = out_dir / "ml_results" / "models"
+    models_dir.mkdir(exist_ok=True, parents=True)
 
     # Build the gnn_conv_params dict from config
     # Any architecture key that maps to an empty dict triggers HPO
@@ -270,6 +278,9 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
         num_classes=data_cfg["num_classes"],
         random_seed=cfg["experiment"]["random_seed"],
     )
+    for model_name, model in trained_models.items():
+        save_path = models_dir / f"{model_name}.pt"
+        save(model, save_path)
 
     logger.info(f"  Trained GNN models: {list(trained_models.keys())}")
     return trained_models, loaders
@@ -291,7 +302,7 @@ def stage_gnn_inference(cfg: dict, trained_models, loaders):
     return predictions
 
 
-def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
+def stage_train_tml(cfg: dict, desc_dfs, split_indexes, out_dir: Path):
     announce("7. Train TML ensemble")
     from polynet.config.enums import ProblemType, TraditionalMLModel
     from polynet.training.tml import train_tml_ensemble
@@ -300,6 +311,9 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
     tml_cfg = cfg["tml_models"]
     preprocessing_cfg = cfg["feature_preprocessing"]
     problem_type = ProblemType(data_cfg["problem_type"])
+
+    models_dir = out_dir / "ml_results" / "models"
+    models_dir.mkdir(exist_ok=True, parents=True)
 
     skip_keys = {"enabled", "descriptor_transform"}
     tml_models_config = {}
@@ -318,6 +332,15 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes):
         train_val_test_idxs=split_indexes,
     )
     logger.info(f"  Trained TML models: {list(trained.keys())}")
+
+    for model_name, model in trained.items():
+        save_path = models_dir / f"{model_name}.joblib"
+        joblib.dump(model, save_path)
+    if scalers:
+        for scaler_name, scaler in scalers.items():
+            save_path = models_dir / f"{scaler_name}.pkl"
+            joblib.dump(scaler, save_path)
+
     return trained, training_data, scalers
 
 
@@ -330,7 +353,7 @@ def stage_tml_inference(cfg: dict, trained, training_data):
         models=trained,
         training_data=training_data,
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_col=cfg["data"]["target_col"],
+        target_variable_col=cfg["data"]["target_variable_col"],
         problem_type=ProblemType(cfg["data"]["problem_type"]),
         target_variable_name=cfg["data"]["target_name"],
     )
@@ -537,7 +560,7 @@ def main() -> None:
     dataset = None
     if gnn_enabled:
         try:
-            dataset = stage_build_graph_dataset(cfg, df, out_dir, root)
+            dataset = stage_build_graph_dataset(cfg, df, out_dir)
         except Exception as e:
             logger.error(f"Graph dataset failed: {e}. GNN stages will be skipped.")
             gnn_enabled = False
@@ -548,7 +571,7 @@ def main() -> None:
     desc_dfs = None
     if desc_enabled and tml_enabled:
         try:
-            desc_dfs = stage_compute_descriptors(cfg, df)
+            desc_dfs = stage_compute_descriptors(cfg, df, out_dir)
         except Exception as e:
             logger.error(f"Descriptor computation failed: {e}. TML stages will be skipped.")
             tml_enabled = False
@@ -586,7 +609,9 @@ def main() -> None:
     tml_trained = {}
     if tml_enabled and desc_dfs is not None:
         try:
-            tml_trained, tml_training_data, _ = stage_train_tml(cfg, desc_dfs, split_indexes)
+            tml_trained, tml_training_data, _ = stage_train_tml(
+                cfg, desc_dfs, split_indexes, out_dir
+            )
             tml_predictions = stage_tml_inference(cfg, tml_trained, tml_training_data)
             all_predictions.append(tml_predictions)
             all_trained_models.update(tml_trained)
@@ -610,10 +635,10 @@ def main() -> None:
     # Stage 10 — Plots
     # ------------------------------------------------------------------
     if gnn_predictions is not None and gnn_trained:
-        stage_plots(cfg, gnn_predictions, gnn_trained, out_dir / "gnn")
+        stage_plots(cfg, gnn_predictions, gnn_trained, out_dir / "ml_results" / "plots")
 
     if tml_predictions is not None and tml_trained:
-        stage_plots(cfg, tml_predictions, tml_trained, out_dir / "tml")
+        stage_plots(cfg, tml_predictions, tml_trained, out_dir / "ml_results" / "plots")
 
     # ------------------------------------------------------------------
     # Stage 11 — Explainability

@@ -8,6 +8,7 @@ class CreateExperimentStateKeys(StrEnum):
 
     ExperimentName = "ExperimentName"
     DatasetName = "DatasetName"
+    DatasetNameLoad = "DatasetNameLoad"
     SmilesCols = "SmilesCols"
     CanonicaliseSMILES = "CanonicaliseSMILES"
     IDCol = "IDCol"
@@ -37,6 +38,10 @@ class DescriptorCalculationStateKeys(StrEnum):
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
     polyBERTfp = "polyBERTfp"
+    PMXDescriptors = "pmx_descriptors"
+    PMXSideChainDescriptors = "pmx_side_chain_descriptors"
+    PMXBackboneDescriptors = "pmx_backbone_descriptors"
+    PMXAggMethod = "pmx_agg_method"
     polyBERTindependent = "polyBERTindependent"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
     IndependentDFDescriptors = "IndependentDFDescriptors"

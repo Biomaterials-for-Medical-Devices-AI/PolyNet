@@ -13,9 +13,11 @@ from polynet.config.enums import (
     BondFeature,
     DescriptorMergingMethod,
     MolecularDescriptor,
+    PMXAggMethod,
     StringRepresentation,
 )
 from polynet.config.schemas.data import DataConfig
+from polynet.featurizer.pmx import CHEMICAL_FEATURIZER_REGISTRY, TOPOLOGICAL_FEATURIZER_REGISTRY
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
@@ -131,6 +133,43 @@ def molecular_descriptor_representation(
             disabled=disabled,
             help=message,
         )
+
+        st.markdown("### PolyMetriX Descriptors")
+
+        pmx_descriptors = st.checkbox(
+            "Calculate PolyMetrix fingerprint",
+            value=False,
+            key=DescriptorCalculationStateKeys.PMXDescriptors,
+            disabled=disabled,
+            help="PMX is a library for calculation of descriptors of polymers. For it to work properly, it must operate on PMILES.",
+        )
+
+        if pmx_descriptors:
+            descriptors_dict[MolecularDescriptor.PolyMetriX] = {}
+
+            # TODO: think of a way to only show topological options related to side chain or backbone
+            side_chain_descriptors = st.multiselect(
+                "Select the descriptors to calculate for the side chain of the polymers",
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
+                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                key=DescriptorCalculationStateKeys.PMXSideChainDescriptors,
+            )
+            backbone_descriptors = st.multiselect(
+                "Select the descriptors to calculate for the backbone of the polymers",
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
+                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                key=DescriptorCalculationStateKeys.PMXBackboneDescriptors,
+            )
+
+            agg_method = st.multiselect(
+                "Select an aggregation method for polymers with multiple side chains",
+                options=[PMXAggMethod.Sum, PMXAggMethod.Mean, PMXAggMethod.Max, PMXAggMethod.Min],
+                key=DescriptorCalculationStateKeys.PMXAggMethod,
+            )
+
+            descriptors_dict[MolecularDescriptor.PolyMetriX]["side_chain"] = side_chain_descriptors
+            descriptors_dict[MolecularDescriptor.PolyMetriX]["backbone"] = backbone_descriptors
+            descriptors_dict[MolecularDescriptor.PolyMetriX]["agg"] = agg_method
 
         st.markdown("### Descriptors from DataFrame")
 

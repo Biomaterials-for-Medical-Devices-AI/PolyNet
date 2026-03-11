@@ -65,9 +65,7 @@ class DataConfig(PolynetBaseModel):
         description="Polymer string notation used in smiles_cols.",
     )
     id_col: str | None = Field(default=None, description="Optional sample identifier column.")
-    num_classes: int | None = Field(
-        default=None, ge=2, description="Number of classes (classification only)."
-    )
+    num_classes: int | None = Field(default=None, ge=1, description="Number of classes.")
     target_variable_name: str | None = Field(
         default=None, description="Human-readable target variable name."
     )
@@ -96,8 +94,10 @@ class DataConfig(PolynetBaseModel):
     def classification_requires_num_classes(self) -> "DataConfig":
         if self.problem_type == ProblemType.Classification and self.num_classes is None:
             raise ValueError("num_classes is required when problem_type is 'classification'.")
-        if self.problem_type == ProblemType.Regression and self.num_classes is not None:
-            raise ValueError("num_classes should not be set when problem_type is 'regression'.")
+        if self.problem_type == ProblemType.Regression and self.num_classes != 1:
+            raise ValueError(
+                "num_classes should not be different from 1 when problem_type is 'regression'."
+            )
         return self
 
     @model_validator(mode="after")

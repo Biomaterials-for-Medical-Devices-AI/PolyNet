@@ -138,8 +138,8 @@ def train_models(
         # load dataframes
         dataframes = load_dataframes(
             representation_options=representation_options,
+            data_options=data_options,
             experiment_path=experiment_path,
-            target_variable_col=data_options.target_variable_col,
         )
 
         # train the models
