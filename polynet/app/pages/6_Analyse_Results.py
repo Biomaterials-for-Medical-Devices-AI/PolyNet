@@ -23,10 +23,14 @@ from polynet.app.options.file_paths import (
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.config.enums import ProblemType
-from polynet.config.schemas.data import DataConfig
-from polynet.config.schemas.general import GeneralConfig
-from polynet.config.schemas.representation import RepresentationConfig
-from polynet.config.schemas.training import TrainGNNConfig
+from polynet.config.schemas import (
+    DataConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    TrainGNNConfig,
+    SplitConfig,
+)
+
 
 st.header("Representation of Polymers")
 
@@ -68,10 +72,13 @@ if experiment_name:
     train_gnn_options = load_options(path=path_to_train_gnn_options, options_class=TrainGNNConfig)
 
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
-
     general_experiment_options = load_options(
         path=path_to_general_opts, options_class=GeneralConfig
     )
+
+    path_to_split_options = experiment_path / "split_options.json"
+    split_options = load_options(path=path_to_split_options, options_class=SplitConfig)
+    split_type = split_options.split_type
 
     if not path_to_train_gnn_options.exists() or not path_to_general_opts.exists():
         st.error(
@@ -96,7 +103,7 @@ if experiment_name:
 
         parity_plot = parity_plot_form(
             predictions_df=predictions,
-            general_experiment_options=general_experiment_options,
+            split_type=split_type,
             gnn_training_options=train_gnn_options,
             data_options=data_options,
         )
@@ -115,7 +122,7 @@ if experiment_name:
 
         confusion_matrix_plot = confusion_matrix_plot_form(
             predictions_df=predictions,
-            general_experiment_options=general_experiment_options,
+            split_type=split_type,
             gnn_training_options=train_gnn_options,
             data_options=data_options,
         )
