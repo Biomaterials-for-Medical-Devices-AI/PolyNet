@@ -44,7 +44,13 @@ import joblib
 import pandas as pd
 import yaml
 from polynet.config.schemas.base import PolynetBaseModel
-from polynet.config.schemas import DataConfig, RepresentationConfig
+from polynet.config.schemas import (
+    DataConfig,
+    RepresentationConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+    FeatureTransformConfig,
+)
 from pydantic import BaseModel
 import dataclasses
 from typing import Any
@@ -81,7 +87,7 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
     if args.no_gnn:
         cfg["gnn_training"]["train_gnn"] = False
     if args.no_tml:
-        cfg["tml_models"]["enabled"] = False
+        cfg["tml_models"]["train_tml"] = False
     if args.no_explain:
         cfg["explainability"]["enabled"] = False
     return cfg
@@ -289,7 +295,8 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     from polynet.training.gnn import train_gnn_ensemble
 
     data_cfg = cfg["data"]
-    gnn_cfg = cfg["gnn_training"]["gnn_convolutional_layers"]
+    gnn_cfg = cfg["gnn_training"]
+    save_options(out_dir / "train_gnn_options.json", gnn_cfg, TrainGNNConfig)
     problem_type = ProblemType(data_cfg["problem_type"])
 
     models_dir = out_dir / "ml_results" / "models"
@@ -297,12 +304,10 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
 
     # Build the gnn_conv_params dict from config
     # Any architecture key that maps to an empty dict triggers HPO
-    skip_keys = {"enabled"}
+
     gnn_conv_params = {}
 
-    for arch_name, arch_params in gnn_cfg.items():
-        if arch_name in skip_keys:
-            continue
+    for arch_name, arch_params in gnn_cfg["gnn_convolutional_layers"].items():
         net = Network(arch_name)
         params = dict(arch_params) if arch_params else {}
 
@@ -344,7 +349,7 @@ def stage_gnn_inference(cfg: dict, trained_models, loaders):
         loaders=loaders,
         problem_type=ProblemType(cfg["data"]["problem_type"]),
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
     )
     logger.info(f"  Predictions shape: {predictions.shape}")
     return predictions
@@ -360,14 +365,16 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes, out_dir: Path):
     preprocessing_cfg = cfg["feature_preprocessing"]
     problem_type = ProblemType(data_cfg["problem_type"])
 
+    save_options(out_dir / "train_tml_options.json", tml_cfg, TrainTMLConfig)
+    save_options(
+        out_dir / "preprocessing_tml_options.json", preprocessing_cfg, FeatureTransformConfig
+    )
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(exist_ok=True, parents=True)
 
-    skip_keys = {"enabled", "descriptor_transform"}
     tml_models_config = {}
-    for model_name, model_params in tml_cfg.items():
-        if model_name in skip_keys:
-            continue
+    for model_name, model_params in tml_cfg["selected_models"].items():
         tml_models_config[TraditionalMLModel(model_name)] = model_params or {}
 
     trained, training_data, scalers = train_tml_ensemble(
@@ -403,7 +410,7 @@ def stage_tml_inference(cfg: dict, trained, training_data):
         split_type=SplitType(cfg["splitting"]["split_type"]),
         target_variable_col=cfg["data"]["target_variable_col"],
         problem_type=ProblemType(cfg["data"]["problem_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
     )
     logger.info(f"  Predictions shape: {predictions.shape}")
     return predictions
@@ -417,7 +424,7 @@ def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, la
     metrics = get_metrics(
         predictions=predictions,
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
         trained_models=list(trained_models.keys()),
         problem_type=ProblemType(cfg["data"]["problem_type"]),
     )
@@ -434,12 +441,11 @@ def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, la
     return metrics
 
 
-def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, out_dir: Path):
+def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, plots_dir: Path):
     announce("10. Result plots")
     from polynet.config.enums import ProblemType, SplitType
     from polynet.training.evaluate import plot_learning_curves, plot_results
 
-    plots_dir = out_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     plot_learning_curves(models=trained_models, save_path=plots_dir)
@@ -451,7 +457,7 @@ def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, out_
     plot_results(
         predictions=predictions,
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
         ml_algorithms=list(trained_models.keys()),
         problem_type=ProblemType(cfg["data"]["problem_type"]),
         save_path=plots_dir,
@@ -591,7 +597,7 @@ def main() -> None:
         yaml.dump(cfg, f, default_flow_style=False)
 
     gnn_enabled = cfg["gnn_training"].get("train_gnn", True)
-    tml_enabled = cfg["tml_models"].get("enabled", False)
+    tml_enabled = cfg["tml_models"].get("train_tml", False)
     explain_enabled = cfg["explainability"].get("enabled", False)
     desc_enabled = bool(cfg["representations"].get("molecular_descriptors", False))
 
