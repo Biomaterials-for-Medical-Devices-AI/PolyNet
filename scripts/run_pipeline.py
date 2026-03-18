@@ -36,7 +36,6 @@ import argparse
 import json
 import logging
 from pathlib import Path
-import sys
 import time
 from pydantic import ValidationError
 
@@ -50,6 +49,8 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
     FeatureTransformConfig,
+    GeneralConfig,
+    SplitConfig,
 )
 from pydantic import BaseModel
 import dataclasses
@@ -284,6 +285,9 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
             indent=2,
         )
     logger.info(f"  Split indices saved to {splits_file}")
+
+    save_options(out_dir / "split_options.json", split_cfg, SplitConfig)
+
     return train_idxs, val_idxs, test_idxs
 
 
@@ -584,13 +588,16 @@ def main() -> None:
     cfg = load_config(args.config)
     cfg = apply_overrides(cfg, args)
 
-    exp_name = cfg["experiment"]["name"]
-    out_dir = resolve_path(cfg["experiment"]["output_dir"], root)
+    exp_cfg = cfg["experiment"]
+    exp_name = exp_cfg["name"]
+    out_dir = resolve_path(exp_cfg["output_dir"], root)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Experiment : {exp_name}")
     logger.info(f"Output dir : {out_dir}")
     logger.info(f"Task       : {cfg['data']['problem_type']}")
+
+    save_options(out_dir / "general_options.json", options=exp_cfg, config_type=GeneralConfig)
 
     # Persist resolved config alongside outputs for reproducibility
     with open(out_dir / "config_used.yaml", "w") as f:
@@ -679,6 +686,10 @@ def main() -> None:
     # ------------------------------------------------------------------
     # Stage 9 — Metrics
     # ------------------------------------------------------------------
+    if gnn_predictions is not None and tml_predictions is not None:
+        from polynet.config.column_names import get_iterator_name
+
+        iterator = get_iterator_name(cfg["splitting"]["split_type"])
     if gnn_predictions is not None and gnn_trained:
         gnn_metrics = stage_metrics(cfg, gnn_predictions, gnn_trained, "GNN")
         gnn_predictions.to_csv(out_dir / "predictions_gnn.csv", index=False)
