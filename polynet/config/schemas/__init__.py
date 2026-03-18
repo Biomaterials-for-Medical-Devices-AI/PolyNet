@@ -21,6 +21,7 @@ from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
 from polynet.config.schemas.plotting import PlottingConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
+from polynet.config.schemas.split_data import SplitConfig
 
 __all__ = [
     "DataConfig",
@@ -28,6 +29,7 @@ __all__ = [
     "FeatureTransformConfig",
     "PlottingConfig",
     "RepresentationConfig",
+    "SplitConfig",
     "TrainGNNConfig",
     "TrainTMLConfig",
 ]
