@@ -21,7 +21,7 @@ from polynet.app.options.file_paths import (
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.config.column_names import get_iterator_name
-from polynet.config.schemas import DataConfig, GeneralConfig, RepresentationConfig
+from polynet.config.schemas import DataConfig, GeneralConfig, RepresentationConfig, SplitConfig
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 st.header("Explain your models")
@@ -82,6 +82,9 @@ if experiment_name:
         path=path_to_general_opts, options_class=GeneralConfig
     )
 
+    path_to_split_options = experiment_path / "split_options.json"
+    split_options = load_options(path=path_to_split_options, options_class=SplitConfig)
+
     # display the modelling results
     display_model_results(experiment_path=experiment_path, expanded=False)
     display_unseen_predictions(experiment_path=experiment_path)
@@ -108,7 +111,7 @@ if experiment_name:
     preds = pd.read_csv(ml_results_file_path(experiment_path=experiment_path), index_col=0)
 
     # get the name of the iterator used for training
-    iterator_col = get_iterator_name(general_experiment_options.split_type)
+    iterator_col = get_iterator_name(split_options.split_type)
 
     # get the list of trained GNN models
     gnn_models_dir = model_dir(experiment_path=experiment_path)
