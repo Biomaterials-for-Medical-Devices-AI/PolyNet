@@ -118,17 +118,9 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
     train_tml: bool = Field(
         default=False, description="Master switch to enable or disable traditional ML training."
     )
-    selected_models: list[TraditionalMLModel] = Field(
-        default_factory=list, description="Traditional ML models to train."
-    )
-    model_params: dict[TraditionalMLModel, dict] | None = Field(
+    selected_models: dict[TraditionalMLModel, dict] | None = Field(
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
-    )
-    # TODO: remove transform_features arg
-    transform_features: TransformDescriptor = Field(
-        default=TransformDescriptor.NoTransformation,
-        description="Feature scaling applied before training.",
     )
 
     @model_validator(mode="after")
@@ -138,16 +130,4 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
                 "train_tml is True but selected_models is empty. "
                 "Provide at least one TraditionalMLModel to train."
             )
-        return self
-
-    @model_validator(mode="after")
-    def model_params_keys_in_selected_models(self) -> "TrainTMLConfig":
-        if self.model_params:
-            unknown = set(self.model_params.keys()) - set(self.selected_models)
-            if unknown:
-                raise ValueError(
-                    f"model_params contains models not listed in selected_models: "
-                    f"{[m.value for m in unknown]}. Add them to selected_models or "
-                    "remove them from model_params."
-                )
         return self

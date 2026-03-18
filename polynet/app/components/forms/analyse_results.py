@@ -10,8 +10,8 @@ from polynet.config.column_names import (
     get_true_label_column_name,
 )
 from polynet.config.constants import DataSet, ResultColumn
-from polynet.config.enums import Plot, ProblemType
-from polynet.config.schemas import DataConfig, GeneralConfig, TrainGNNConfig
+from polynet.config.enums import Plot, ProblemType, SplitType
+from polynet.config.schemas import DataConfig, TrainGNNConfig
 from polynet.utils.plot_utils import (
     plot_bootstrap_boxplots,
     plot_confusion_matrix,
@@ -421,7 +421,7 @@ def get_plot_customisation_form(
 
 def confusion_matrix_plot_form(
     predictions_df: pd.DataFrame,
-    general_experiment_options: GeneralConfig,
+    split_type: SplitType | str,
     gnn_training_options: TrainGNNConfig,
     data_options: DataConfig,
 ):
@@ -430,7 +430,7 @@ def confusion_matrix_plot_form(
     Returns a matplotlib figure object.
     """
 
-    iterator = get_iterator_name(general_experiment_options.split_type)
+    iterator = get_iterator_name(split_type)
 
     iteration = st.multiselect(
         f"Select the {iterator} to display parity plot",
@@ -517,14 +517,14 @@ def confusion_matrix_plot_form(
 
 def parity_plot_form(
     predictions_df: pd.DataFrame,
-    general_experiment_options: GeneralConfig,
+    split_type: SplitType | str,
     gnn_training_options: TrainGNNConfig,
     data_options: DataConfig,
 ):
 
     color_by_opts = [None]
 
-    iterator = get_iterator_name(general_experiment_options.split_type)
+    iterator = get_iterator_name(split_type)
 
     iteration = st.multiselect(
         f"Select the {iterator} to display parity plot",

@@ -132,6 +132,7 @@ def train_gnn_ensemble(
             arch_params = arch_params or {}
             is_hpo = not arch_params
 
+            # TODO: Move this outside the function, and always pass the dict hyperparameters.
             if is_hpo:
                 logger.info(
                     f"No hyperparameters for {gnn_arch.value} — "
@@ -147,6 +148,7 @@ def train_gnn_ensemble(
                     problem_type=problem_type,
                     random_seed=seed,
                 )
+                del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")
                 loss_strength = arch_params.pop(TrainingParam.AsymmetricLossStrength, None)
                 lr = arch_params.pop(TrainingParam.LearningRate)

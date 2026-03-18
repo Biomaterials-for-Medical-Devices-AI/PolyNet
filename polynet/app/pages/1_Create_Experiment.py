@@ -14,7 +14,7 @@ def save_experiment(df: pd.DataFrame):
     dataset_name = (
         st.session_state[CreateExperimentStateKeys.DatasetName].name
         if st.session_state[CreateExperimentStateKeys.DatasetName] is not None
-        else st.session_state[CreateExperimentStateKeys.DatasetNameLoad]
+        else st.session_state[CreateExperimentStateKeys.DatasetNameLoad] + ".csv"
     )
 
     path_to_data = data_file_path(

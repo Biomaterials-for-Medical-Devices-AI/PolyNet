@@ -35,7 +35,7 @@ class ProblemType(StrEnum):
 class StringRepresentation(StrEnum):
     """Polymer string representation format."""
 
-    SMILES = "SMILES"
+    SMILES = "smiles"
     PSMILES = "psmiles"
 
 

@@ -12,7 +12,7 @@
 # -----------------------------------------------------------------------------
 experiment:
   name: "my_polymer_experiment"
-  output_dir: "results/my_polymer_experiment"   # all outputs written here
+  output_dir: "results"   # all outputs written here
   random_seed: 42
 
 # -----------------------------------------------------------------------------
@@ -28,79 +28,84 @@ data:
   string_representation: "smiles"
   id_col: "id"                      # unique sample identifier column
   num_classes: 2                # Number of output classes. Use 1 for regression, N for N-class classification
-  target_name: "Is Fluo PA"                         # human-readable name (used in plots)
+  target_variable_name: "Is Fluo PA"                         # human-readable name (used in plots)
 
   # For classification only — maps integer class labels to display names
   # Leave null for regression or if you don't want custom labels
   # class_names: null
   class_names:
-    0: "AntiBiofilm"
-    1: "ProBiofilm"
+    "0": "AntiBiofilm"
+    "1": "ProBiofilm"
+  target_variable_units: null
 
 # -----------------------------------------------------------------------------
 # Representations
 # -----------------------------------------------------------------------------
 representations:
+
+  smiles_merge_approach: "weighted_average"   # weighted_average | average | concatenate
+
   # --- Graph representation (for GNN models) ---
-  graph:
-    enabled: true
+  node_features:
+    GetAtomicNum:
+      allowable_vals: [1, 2, 3]
+      wildcard: true
+  edge_features:
+    GetBondTypeAsDouble:
+      allowable_vals: [1, 2, 3]
+      wildcard: true
 
   # --- Vector descriptors (for TML models) ---
-  descriptors:
-    enabled: true           # set true to also train TML models
-    molecular_descriptors: {
-      "rdkit": "all",   # compute all RDKit descriptors
-      "polybert": true,
-      "polymetrix": {
-        "side_chain": [
-          "num_hbond_donors",
-          "num_hbond_acceptors",
-          "num_rotatable_bonds",
-          "num_rings",
-          "num_non_aromatic_rings",
-          "num_aromatic_rings",
-          "num_atoms",
-          "topological_surface_area",
-          "fraction_bicyclic_rings",
-          "num_aliphatic_heterocycles",
-          "molecular_weight",
-          "sp3_carbon_count",
-          "sp2_carbon_count",
-          "halogen_counts",
-          "bond_counts",
-          "max_ring_size",
-          "heteroatom_count",
-          "heteroatom_density"
-        ],
-        "backbone": [
-          "num_hbond_donors",
-          "num_hbond_acceptors",
-          "num_rotatable_bonds",
-          "num_rings",
-          "num_non_aromatic_rings",
-          "num_aromatic_rings",
-          "num_atoms",
-          "topological_surface_area",
-          "fraction_bicyclic_rings",
-          "num_aliphatic_heterocycles",
-          "molecular_weight",
-          "sp3_carbon_count",
-          "sp2_carbon_count",
-          "halogen_counts",
-          "bond_counts",
-          "max_ring_size",
-          "heteroatom_count",
-          "heteroatom_density"
-        ],
-        "agg": ["sum", "mean"]
-      }
+  molecular_descriptors: {
+    "rdkit": "all",   # compute all RDKit descriptors
+    "polybert": true,
+    "polymetrix": {
+      "side_chain": [
+        "num_hbond_donors",
+        "num_hbond_acceptors",
+        "num_rotatable_bonds",
+        "num_rings",
+        "num_non_aromatic_rings",
+        "num_aromatic_rings",
+        "num_atoms",
+        "topological_surface_area",
+        "fraction_bicyclic_rings",
+        "num_aliphatic_heterocycles",
+        "molecular_weight",
+        "sp3_carbon_count",
+        "sp2_carbon_count",
+        "halogen_counts",
+        "bond_counts",
+        "max_ring_size",
+        "heteroatom_count",
+        "heteroatom_density"
+      ],
+      "backbone": [
+        "num_hbond_donors",
+        "num_hbond_acceptors",
+        "num_rotatable_bonds",
+        "num_rings",
+        "num_non_aromatic_rings",
+        "num_aromatic_rings",
+        "num_atoms",
+        "topological_surface_area",
+        "fraction_bicyclic_rings",
+        "num_aliphatic_heterocycles",
+        "molecular_weight",
+        "sp3_carbon_count",
+        "sp2_carbon_count",
+        "halogen_counts",
+        "bond_counts",
+        "max_ring_size",
+        "heteroatom_count",
+        "heteroatom_density"
+      ],
+      "agg": ["sum", "mean"]
     }
-    rdkit: true              # compute RDKit molecular descriptors
-    merging_method: "weighted_average"   # weighted_average | average | concatenate
-
+  }
   # Map each smiles column to its weight fraction column
   # Set to null if your dataset has no weight fractions
-  weights_cols:
+  weights_col:
     smiles_monomer_1: "ratio_1"
     smiles_monomer_2: "ratio_2"
 
@@ -110,9 +115,11 @@ representations:
 splitting:
   split_type: "train_val_test"       # TrainValTest | LeaveOneOut
   split_method: "random"           # Random | Scaffold (scaffold requires RDKit)
-  n_bootstrap_iterations: 1        # number of train/val/test splits to generate
-  val_ratio: 0.15
+  train_set_balance: null
   test_ratio: 0.15
+  val_ratio: 0.15
+  n_bootstrap_iterations: 2        # number of train/val/test splits to generate
+
   # Optional: balance training set for imbalanced classification
   # train_set_balance: 0.5
 
@@ -121,37 +128,37 @@ splitting:
 # GNN architectures to train. Set hyperparameters explicitly,
 # or leave the block empty ({}) to trigger automatic HPO via Ray Tune.
 # -----------------------------------------------------------------------------
-gnn_models:
-  enabled: true
+gnn_training:
+  train_gnn: true
+  gnn_convolutional_layers:
+    GCN:
+      LearningRate: 0.001
+      BatchSize: 32
+      improved: false
+      embedding_dim: 64
+      n_convolutions: 3
+      readout_layers: 2
+      dropout: 0.1
+      pooling: "global_mean_pool"
 
-  GCN:
-    LearningRate: 0.001
-    BatchSize: 32
-    improved: false
-    embedding_dim: 64
-    n_convolutions: 3
-    readout_layers: 2
-    dropout: 0.1
-    pooling: "global_mean_pool"
+    # GAT:
+    #   LearningRate: 0.001
+    #   BatchSize: 32
+    #   num_heads: 4
+    #   embedding_dim: 64
+    #   n_convolutions: 3
+    #   readout_layers: 2
+    #   dropout: 0.1
 
-  # GAT:
-  #   LearningRate: 0.001
-  #   BatchSize: 32
-  #   num_heads: 4
-  #   embedding_dim: 64
-  #   n_convolutions: 3
-  #   readout_layers: 2
-  #   dropout: 0.1
+    # CGGNN:
+    #   LearningRate: 0.001
+    #   BatchSize: 32
+    #   embedding_dim: 64
+    #   n_convolutions: 3
+    #   readout_layers: 2
+    #   dropout: 0.1
 
-  # CGGNN:
-  #   LearningRate: 0.001
-  #   BatchSize: 32
-  #   embedding_dim: 64
-  #   n_convolutions: 3
-  #   readout_layers: 2
-  #   dropout: 0.1
-
-  # MPNN: {}   # empty = trigger HPO
+    # MPNN: {}   # empty = trigger HPO
 
 training:
   epochs: 250
@@ -171,27 +178,26 @@ feature_preprocessing:
       threshold: 0.95
 
 tml_models:
-  enabled: true
+  train_tml: true
 
-  random_forest:
-    n_estimators: 200
-    max_depth: 10
+  selected_models:
+    random_forest:
+      n_estimators: 200
+      max_depth: 10
 
-  # XGBoost:
-  #   n_estimators: 200
-  #   max_depth: 6
-  #   learning_rate: 0.05
+    xgboost:
+      n_estimators: 200
+      max_depth: 6
+      learning_rate: 0.05
 
-  # SupportVectorMachine: {}   # empty = trigger HPO
-
-  descriptor_transform: "standard_scaler"   # StandardScaler | MinMaxScaler | NoTransformation
+    # SupportVectorMachine: {}   # empty = trigger HPO
 
 # -----------------------------------------------------------------------------
 # Explainability
 # Only applied to GNN models. Requires gnn_models.enabled: true
 # -----------------------------------------------------------------------------
 explainability:
-  enabled: true
+  enabled: false
   algorithm: "integrated_gradients"   # IntegratedGradients | Saliency | GNNExplainer
                                      # InputXGradient | ShapleyValueSampling
   fragmentation: "brics"             # brics | recap

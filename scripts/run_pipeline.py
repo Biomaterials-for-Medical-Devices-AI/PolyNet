@@ -33,15 +33,28 @@ All outputs are written under the directory specified by
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 from pathlib import Path
-import sys
 import time
+from typing import Any
 
 import joblib
 import pandas as pd
+from pydantic import BaseModel, ValidationError
 import yaml
+
+from polynet.config.schemas import (
+    DataConfig,
+    FeatureTransformConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    SplitConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+)
+from polynet.config.schemas.base import PolynetBaseModel
 
 # ---------------------------------------------------------------------------
 # Logging setup — runs before any polynet imports so the root logger is
@@ -73,9 +86,9 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
     if args.task is not None:
         cfg["data"]["problem_type"] = args.task
     if args.no_gnn:
-        cfg["gnn_models"]["enabled"] = False
+        cfg["gnn_training"]["train_gnn"] = False
     if args.no_tml:
-        cfg["tml_models"]["enabled"] = False
+        cfg["tml_models"]["train_tml"] = False
     if args.no_explain:
         cfg["explainability"]["enabled"] = False
     return cfg
@@ -84,6 +97,46 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
 def resolve_path(path: str, root: Path) -> Path:
     p = Path(path)
     return p if p.is_absolute() else root / p
+
+
+def validate_configs(config_type: PolynetBaseModel, cfg: dict):
+    try:
+        data_config = config_type.model_validate(cfg)
+        logger.info("Valid config")
+        return True
+    except ValidationError as e:
+        logger.warning(
+            "Invalid config. While experiments might run, it is expected no compatibility with app."
+        )
+        logger.warning(e)
+
+
+def save_options(path: Path, options: Any, config_type: PolynetBaseModel) -> None:
+    """Save options/config to a JSON file at the specified path.
+
+    Supports:
+      - dataclass instances
+      - Pydantic v2 models (BaseModel)
+      - plain dicts
+    """
+    validate_configs(config_type, options)
+
+    if dataclasses.is_dataclass(options):
+        payload = dataclasses.asdict(options)
+    elif BaseModel is not None and isinstance(options, BaseModel):
+        # Pydantic v2
+        payload = options.model_dump(mode="json")
+    elif isinstance(options, dict):
+        payload = options
+    else:
+        raise TypeError(
+            f"Unsupported options type: {type(options)!r}. "
+            "Expected dataclass, pydantic BaseModel, or dict."
+        )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=4, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +159,7 @@ def done(t0: float) -> None:
 # ---------------------------------------------------------------------------
 
 
-def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
+def stage_load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
     announce("1. Load & validate data")
     from polynet.data.loader import load_dataset
 
@@ -122,6 +175,8 @@ def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
     )
     logger.info(f"  Loaded {len(df)} samples from {data_path}")
     logger.info(f"  Columns: {list(df.columns)}")
+    save_options(path=out_dir / "data_options.json", options=data_cfg, config_type=DataConfig)
+
     return df
 
 
@@ -142,7 +197,7 @@ def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path):
         root=str(raw_dir.parent),
         filename=filename,
         smiles_cols=data_cfg["smiles_cols"],
-        weights_col=cfg["representations"].get("weights_cols"),
+        weights_col=cfg["representations"].get("weights_col"),
         target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
     )
@@ -158,7 +213,7 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
 
-    repr_cfg = cfg["representations"]["descriptors"]
+    repr_cfg = cfg["representations"]
     data_cfg = cfg["data"]
 
     representation_dir = out_dir / "representation" / "Descriptors"
@@ -173,7 +228,7 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
         merging_approach=DescriptorMergingMethod(
             repr_cfg.get("merging_method", "weighted_average")
         ),
-        weights_col=cfg["representations"].get("weights_cols"),
+        weights_col=cfg["representations"].get("weights_col"),
         rdkit_independent=repr_cfg.get("rdkit_independent", True),
         df_descriptors_independent=repr_cfg.get("df_descriptors_independent", False),
         mix_rdkit_df_descriptors=repr_cfg.get("mix_rdkit_df_descriptors", False),
@@ -185,8 +240,8 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
             smiles_cols=data_cfg["smiles_cols"],
             target_variable_col=data_cfg["target_variable_col"],
             weights_cols=(
-                list(cfg["representations"].get("weights_cols").values())
-                if cfg["representations"].get("weights_cols")
+                list(cfg["representations"].get("weights_col").values())
+                if cfg["representations"].get("weights_col")
                 else None
             ),
         )
@@ -230,6 +285,9 @@ def stage_data_split(cfg: dict, data: pd.DataFrame, out_dir: Path):
             indent=2,
         )
     logger.info(f"  Split indices saved to {splits_file}")
+
+    save_options(out_dir / "split_options.json", split_cfg, SplitConfig)
+
     return train_idxs, val_idxs, test_idxs
 
 
@@ -241,7 +299,8 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     from polynet.training.gnn import train_gnn_ensemble
 
     data_cfg = cfg["data"]
-    gnn_cfg = cfg["gnn_models"]
+    gnn_cfg = cfg["gnn_training"]
+    save_options(out_dir / "train_gnn_options.json", gnn_cfg, TrainGNNConfig)
     problem_type = ProblemType(data_cfg["problem_type"])
 
     models_dir = out_dir / "ml_results" / "models"
@@ -249,12 +308,10 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
 
     # Build the gnn_conv_params dict from config
     # Any architecture key that maps to an empty dict triggers HPO
-    skip_keys = {"enabled"}
+
     gnn_conv_params = {}
 
-    for arch_name, arch_params in gnn_cfg.items():
-        if arch_name in skip_keys:
-            continue
+    for arch_name, arch_params in gnn_cfg["gnn_convolutional_layers"].items():
         net = Network(arch_name)
         params = dict(arch_params) if arch_params else {}
 
@@ -296,7 +353,7 @@ def stage_gnn_inference(cfg: dict, trained_models, loaders):
         loaders=loaders,
         problem_type=ProblemType(cfg["data"]["problem_type"]),
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
     )
     logger.info(f"  Predictions shape: {predictions.shape}")
     return predictions
@@ -312,14 +369,16 @@ def stage_train_tml(cfg: dict, desc_dfs, split_indexes, out_dir: Path):
     preprocessing_cfg = cfg["feature_preprocessing"]
     problem_type = ProblemType(data_cfg["problem_type"])
 
+    save_options(out_dir / "train_tml_options.json", tml_cfg, TrainTMLConfig)
+    save_options(
+        out_dir / "preprocessing_tml_options.json", preprocessing_cfg, FeatureTransformConfig
+    )
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(exist_ok=True, parents=True)
 
-    skip_keys = {"enabled", "descriptor_transform"}
     tml_models_config = {}
-    for model_name, model_params in tml_cfg.items():
-        if model_name in skip_keys:
-            continue
+    for model_name, model_params in tml_cfg["selected_models"].items():
         tml_models_config[TraditionalMLModel(model_name)] = model_params or {}
 
     trained, training_data, scalers = train_tml_ensemble(
@@ -355,7 +414,7 @@ def stage_tml_inference(cfg: dict, trained, training_data):
         split_type=SplitType(cfg["splitting"]["split_type"]),
         target_variable_col=cfg["data"]["target_variable_col"],
         problem_type=ProblemType(cfg["data"]["problem_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
     )
     logger.info(f"  Predictions shape: {predictions.shape}")
     return predictions
@@ -369,7 +428,7 @@ def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, la
     metrics = get_metrics(
         predictions=predictions,
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
         trained_models=list(trained_models.keys()),
         problem_type=ProblemType(cfg["data"]["problem_type"]),
     )
@@ -386,12 +445,11 @@ def stage_metrics(cfg: dict, predictions: pd.DataFrame, trained_models: dict, la
     return metrics
 
 
-def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, out_dir: Path):
+def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, plots_dir: Path):
     announce("10. Result plots")
     from polynet.config.enums import ProblemType, SplitType
     from polynet.training.evaluate import plot_learning_curves, plot_results
 
-    plots_dir = out_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     plot_learning_curves(models=trained_models, save_path=plots_dir)
@@ -403,7 +461,7 @@ def stage_plots(cfg: dict, predictions: pd.DataFrame, trained_models: dict, out_
     plot_results(
         predictions=predictions,
         split_type=SplitType(cfg["splitting"]["split_type"]),
-        target_variable_name=cfg["data"]["target_name"],
+        target_variable_name=cfg["data"]["target_variable_name"],
         ml_algorithms=list(trained_models.keys()),
         problem_type=ProblemType(cfg["data"]["problem_type"]),
         save_path=plots_dir,
@@ -470,7 +528,7 @@ def stage_explain(cfg: dict, trained_models: dict, dataset, split_indexes, out_d
         logger.info(f"  Saved {mol_exp.mol_id}_heatmap.png")
 
 
-def save_metrics(metrics: dict, path: Path, label: str) -> None:
+def save_metrics(metrics: dict, path: Path) -> None:
     """Serialise a metrics dict to JSON, converting enum keys to strings."""
 
     def _jsonify(obj):
@@ -480,7 +538,7 @@ def save_metrics(metrics: dict, path: Path, label: str) -> None:
             }
         return obj
 
-    out = path / f"metrics_{label}.json"
+    out = path / f"metrics.json"
     with open(out, "w") as f:
         json.dump(_jsonify(metrics), f, indent=2)
     logger.info(f"  Metrics saved to {out}")
@@ -530,37 +588,44 @@ def main() -> None:
     cfg = load_config(args.config)
     cfg = apply_overrides(cfg, args)
 
-    exp_name = cfg["experiment"]["name"]
-    out_dir = resolve_path(cfg["experiment"]["output_dir"], root)
+    exp_cfg = cfg["experiment"]
+    exp_name = exp_cfg["name"]
+    out_dir = resolve_path(exp_cfg["output_dir"], root)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     logger.info(f"Experiment : {exp_name}")
     logger.info(f"Output dir : {out_dir}")
     logger.info(f"Task       : {cfg['data']['problem_type']}")
 
+    save_options(out_dir / "general_options.json", options=exp_cfg, config_type=GeneralConfig)
+
     # Persist resolved config alongside outputs for reproducibility
     with open(out_dir / "config_used.yaml", "w") as f:
         yaml.dump(cfg, f, default_flow_style=False)
 
-    gnn_enabled = cfg["gnn_models"].get("enabled", True)
-    tml_enabled = cfg["tml_models"].get("enabled", False)
+    gnn_enabled = cfg["gnn_training"].get("train_gnn", True)
+    tml_enabled = cfg["tml_models"].get("train_tml", False)
     explain_enabled = cfg["explainability"].get("enabled", False)
-    desc_enabled = cfg["representations"]["descriptors"].get("enabled", False)
+    desc_enabled = bool(cfg["representations"].get("molecular_descriptors", False))
 
     t_total = time.perf_counter()
 
     # ------------------------------------------------------------------
     # Stage 1 — Load data
     # ------------------------------------------------------------------
-    df = stage_load_data(cfg, root)
+    df = stage_load_data(cfg, root, out_dir)
+    df.to_csv(out_dir / cfg["data"]["data_name"])
 
     # ------------------------------------------------------------------
     # Stage 2 — Graph dataset
     # ------------------------------------------------------------------
+    representation_cfg = cfg["representations"]
     dataset = None
     if gnn_enabled:
         try:
             dataset = stage_build_graph_dataset(cfg, df, out_dir)
+            representation_cfg["node_features"] = dataset.node_feats
+            representation_cfg["edge_features"] = dataset.edge_feats
         except Exception as e:
             logger.error(f"Graph dataset failed: {e}. GNN stages will be skipped.")
             gnn_enabled = False
@@ -575,6 +640,7 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Descriptor computation failed: {e}. TML stages will be skipped.")
             tml_enabled = False
+    save_options(out_dir / "representation_options.json", representation_cfg, RepresentationConfig)
 
     # ------------------------------------------------------------------
     # Stage 4 — Data splits
@@ -619,26 +685,39 @@ def main() -> None:
             logger.error(f"TML pipeline failed: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
-    # Stage 9 — Metrics
+    # Stage 9 and 10 — Metrics, Predictions and Plots
     # ------------------------------------------------------------------
+    sources = []
     if gnn_predictions is not None and gnn_trained:
-        gnn_metrics = stage_metrics(cfg, gnn_predictions, gnn_trained, "GNN")
-        gnn_predictions.to_csv(out_dir / "predictions_gnn.csv", index=False)
-        save_metrics(gnn_metrics, out_dir, "gnn")
-
+        sources.append((gnn_predictions, gnn_trained, "GNN"))
     if tml_predictions is not None and tml_trained:
-        tml_metrics = stage_metrics(cfg, tml_predictions, tml_trained, "TML")
-        tml_predictions.to_csv(out_dir / "predictions_tml.csv", index=False)
-        save_metrics(tml_metrics, out_dir, "tml")
+        sources.append((tml_predictions, tml_trained, "TML"))
 
-    # ------------------------------------------------------------------
-    # Stage 10 — Plots
-    # ------------------------------------------------------------------
-    if gnn_predictions is not None and gnn_trained:
-        stage_plots(cfg, gnn_predictions, gnn_trained, out_dir / "ml_results" / "plots")
+    if sources:
+        metrics = {}
+        for preds, trained, name in sources:
+            stage_plots(cfg, preds, trained, out_dir / "ml_results" / "plots")
+            for iteration, iter_metrics in stage_metrics(cfg, preds, trained, name).items():
+                metrics.setdefault(iteration, {}).update(iter_metrics)
 
-    if tml_predictions is not None and tml_trained:
-        stage_plots(cfg, tml_predictions, tml_trained, out_dir / "ml_results" / "plots")
+        if len(sources) == 2:
+            from polynet.config.column_names import get_iterator_name, get_true_label_column_name
+            from polynet.config.constants import ResultColumn
+
+            iterator = get_iterator_name(cfg["splitting"]["split_type"])
+            label_col_name = get_true_label_column_name(
+                target_variable_name=cfg["data"]["target_variable_name"]
+            )
+            gnn_predictions = gnn_predictions.drop(columns=[label_col_name])
+            tml_predictions = tml_predictions.drop(columns=[ResultColumn.SET])
+            predictions = pd.merge(
+                left=gnn_predictions, right=tml_predictions, on=[ResultColumn.INDEX, iterator]
+            )
+        else:
+            predictions = sources[0][0]
+
+        save_metrics(metrics, out_dir / "ml_results")
+        predictions.to_csv(out_dir / "ml_results" / "predictions.csv", index=False)
 
     # ------------------------------------------------------------------
     # Stage 11 — Explainability
