@@ -38,10 +38,16 @@ import logging
 from pathlib import Path
 import sys
 import time
+from pydantic import ValidationError
 
 import joblib
 import pandas as pd
 import yaml
+from polynet.config.schemas.base import PolynetBaseModel
+from polynet.config.schemas import DataConfig, RepresentationConfig
+from pydantic import BaseModel
+import dataclasses
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Logging setup — runs before any polynet imports so the root logger is
@@ -73,7 +79,7 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
     if args.task is not None:
         cfg["data"]["problem_type"] = args.task
     if args.no_gnn:
-        cfg["gnn_models"]["enabled"] = False
+        cfg["gnn_training"]["train_gnn"] = False
     if args.no_tml:
         cfg["tml_models"]["enabled"] = False
     if args.no_explain:
@@ -84,6 +90,46 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
 def resolve_path(path: str, root: Path) -> Path:
     p = Path(path)
     return p if p.is_absolute() else root / p
+
+
+def validate_configs(config_type: PolynetBaseModel, cfg: dict):
+    try:
+        data_config = config_type.model_validate(cfg)
+        logger.info("Valid config")
+        return True
+    except ValidationError as e:
+        logger.warning(
+            "Invalid config. While experiments might run, it is expected no compatibility with app."
+        )
+        logger.warning(e)
+
+
+def save_options(path: Path, options: Any, config_type: PolynetBaseModel) -> None:
+    """Save options/config to a JSON file at the specified path.
+
+    Supports:
+      - dataclass instances
+      - Pydantic v2 models (BaseModel)
+      - plain dicts
+    """
+    validate_configs(config_type, options)
+
+    if dataclasses.is_dataclass(options):
+        payload = dataclasses.asdict(options)
+    elif BaseModel is not None and isinstance(options, BaseModel):
+        # Pydantic v2
+        payload = options.model_dump(mode="json")
+    elif isinstance(options, dict):
+        payload = options
+    else:
+        raise TypeError(
+            f"Unsupported options type: {type(options)!r}. "
+            "Expected dataclass, pydantic BaseModel, or dict."
+        )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=4, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +152,7 @@ def done(t0: float) -> None:
 # ---------------------------------------------------------------------------
 
 
-def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
+def stage_load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
     announce("1. Load & validate data")
     from polynet.data.loader import load_dataset
 
@@ -122,6 +168,8 @@ def stage_load_data(cfg: dict, root: Path) -> pd.DataFrame:
     )
     logger.info(f"  Loaded {len(df)} samples from {data_path}")
     logger.info(f"  Columns: {list(df.columns)}")
+    save_options(path=out_dir / "data_options.json", options=data_cfg, config_type=DataConfig)
+
     return df
 
 
@@ -142,7 +190,7 @@ def stage_build_graph_dataset(cfg: dict, df: pd.DataFrame, out_dir: Path):
         root=str(raw_dir.parent),
         filename=filename,
         smiles_cols=data_cfg["smiles_cols"],
-        weights_col=cfg["representations"].get("weights_cols"),
+        weights_col=cfg["representations"].get("weights_col"),
         target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
     )
@@ -158,7 +206,7 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
 
-    repr_cfg = cfg["representations"]["descriptors"]
+    repr_cfg = cfg["representations"]
     data_cfg = cfg["data"]
 
     representation_dir = out_dir / "representation" / "Descriptors"
@@ -173,7 +221,7 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
         merging_approach=DescriptorMergingMethod(
             repr_cfg.get("merging_method", "weighted_average")
         ),
-        weights_col=cfg["representations"].get("weights_cols"),
+        weights_col=cfg["representations"].get("weights_col"),
         rdkit_independent=repr_cfg.get("rdkit_independent", True),
         df_descriptors_independent=repr_cfg.get("df_descriptors_independent", False),
         mix_rdkit_df_descriptors=repr_cfg.get("mix_rdkit_df_descriptors", False),
@@ -185,8 +233,8 @@ def stage_compute_descriptors(cfg: dict, df: pd.DataFrame, out_dir: Path):
             smiles_cols=data_cfg["smiles_cols"],
             target_variable_col=data_cfg["target_variable_col"],
             weights_cols=(
-                list(cfg["representations"].get("weights_cols").values())
-                if cfg["representations"].get("weights_cols")
+                list(cfg["representations"].get("weights_col").values())
+                if cfg["representations"].get("weights_col")
                 else None
             ),
         )
@@ -241,7 +289,7 @@ def stage_train_gnn(cfg: dict, dataset, split_indexes, out_dir: Path):
     from polynet.training.gnn import train_gnn_ensemble
 
     data_cfg = cfg["data"]
-    gnn_cfg = cfg["gnn_models"]
+    gnn_cfg = cfg["gnn_training"]["gnn_convolutional_layers"]
     problem_type = ProblemType(data_cfg["problem_type"])
 
     models_dir = out_dir / "ml_results" / "models"
@@ -542,25 +590,28 @@ def main() -> None:
     with open(out_dir / "config_used.yaml", "w") as f:
         yaml.dump(cfg, f, default_flow_style=False)
 
-    gnn_enabled = cfg["gnn_models"].get("enabled", True)
+    gnn_enabled = cfg["gnn_training"].get("train_gnn", True)
     tml_enabled = cfg["tml_models"].get("enabled", False)
     explain_enabled = cfg["explainability"].get("enabled", False)
-    desc_enabled = cfg["representations"]["descriptors"].get("enabled", False)
+    desc_enabled = bool(cfg["representations"].get("molecular_descriptors", False))
 
     t_total = time.perf_counter()
 
     # ------------------------------------------------------------------
     # Stage 1 — Load data
     # ------------------------------------------------------------------
-    df = stage_load_data(cfg, root)
+    df = stage_load_data(cfg, root, out_dir)
 
     # ------------------------------------------------------------------
     # Stage 2 — Graph dataset
     # ------------------------------------------------------------------
+    representation_cfg = cfg["representations"]
     dataset = None
     if gnn_enabled:
         try:
             dataset = stage_build_graph_dataset(cfg, df, out_dir)
+            representation_cfg["node_features"] = dataset.node_feats
+            representation_cfg["edge_features"] = dataset.edge_feats
         except Exception as e:
             logger.error(f"Graph dataset failed: {e}. GNN stages will be skipped.")
             gnn_enabled = False
@@ -575,6 +626,7 @@ def main() -> None:
         except Exception as e:
             logger.error(f"Descriptor computation failed: {e}. TML stages will be skipped.")
             tml_enabled = False
+    save_options(out_dir / "representation_options.json", representation_cfg, RepresentationConfig)
 
     # ------------------------------------------------------------------
     # Stage 4 — Data splits
