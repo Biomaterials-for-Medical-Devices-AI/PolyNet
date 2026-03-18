@@ -35,9 +35,14 @@ def select_data_form():
     if not experiment_name:
         st.error("Please provide an experiment name.")
 
-    tab1, tab2 = st.tabs(["Upload dataset", "Load benchmarking dataset"])
+    dataset_source = st.radio(
+        "Select dataset source", ["Upload dataset", "Load benchmarking dataset"], horizontal=True
+    )
 
-    with tab1:
+    df = None
+
+    if dataset_source == "Upload dataset":
+
         csv_file = st.file_uploader(
             "Choose a CSV file",
             type="csv",
@@ -46,22 +51,20 @@ def select_data_form():
         )
 
         if not csv_file:
-            st.error("Please upload a CSV file to proceed.")
-            df = None
+            st.warning("Please upload a CSV file to proceed.")
         else:
             df = pd.read_csv(csv_file)
-    with tab2:
+
+    elif dataset_source == "Load benchmarking dataset":
+
         dataset_name = st.selectbox(
             "Select a benchmark dataset to load",
             options=[DatasetName.CuratedTg],
             key=CreateExperimentStateKeys.DatasetNameLoad,
         )
-        if not dataset_name:
-            st.error("Please select a dataset name to proceed.")
-            df = None
-        else:
-            dataset = DatasetCreator(dataset_name)
-            df = dataset.create_dataset()
+
+        dataset = DatasetCreator(dataset_name)
+        df = dataset.create_dataset()
 
     if df is not None:
         st.markdown("**Preview Data**")
