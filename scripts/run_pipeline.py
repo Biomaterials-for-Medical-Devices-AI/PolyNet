@@ -528,7 +528,7 @@ def stage_explain(cfg: dict, trained_models: dict, dataset, split_indexes, out_d
         logger.info(f"  Saved {mol_exp.mol_id}_heatmap.png")
 
 
-def save_metrics(metrics: dict, path: Path, label: str) -> None:
+def save_metrics(metrics: dict, path: Path) -> None:
     """Serialise a metrics dict to JSON, converting enum keys to strings."""
 
     def _jsonify(obj):
@@ -538,7 +538,7 @@ def save_metrics(metrics: dict, path: Path, label: str) -> None:
             }
         return obj
 
-    out = path / f"metrics_{label}.json"
+    out = path / f"metrics.json"
     with open(out, "w") as f:
         json.dump(_jsonify(metrics), f, indent=2)
     logger.info(f"  Metrics saved to {out}")
@@ -684,30 +684,40 @@ def main() -> None:
             logger.error(f"TML pipeline failed: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
-    # Stage 9 — Metrics
+    # Stage 9 and 10 — Metrics, Predictions and Plots
     # ------------------------------------------------------------------
-    if gnn_predictions is not None and tml_predictions is not None:
-        from polynet.config.column_names import get_iterator_name
-
-        iterator = get_iterator_name(cfg["splitting"]["split_type"])
+    sources = []
     if gnn_predictions is not None and gnn_trained:
-        gnn_metrics = stage_metrics(cfg, gnn_predictions, gnn_trained, "GNN")
-        gnn_predictions.to_csv(out_dir / "predictions_gnn.csv", index=False)
-        save_metrics(gnn_metrics, out_dir, "gnn")
-
+        sources.append((gnn_predictions, gnn_trained, "GNN"))
     if tml_predictions is not None and tml_trained:
-        tml_metrics = stage_metrics(cfg, tml_predictions, tml_trained, "TML")
-        tml_predictions.to_csv(out_dir / "predictions_tml.csv", index=False)
-        save_metrics(tml_metrics, out_dir, "tml")
+        sources.append((tml_predictions, tml_trained, "TML"))
 
-    # ------------------------------------------------------------------
-    # Stage 10 — Plots
-    # ------------------------------------------------------------------
-    if gnn_predictions is not None and gnn_trained:
-        stage_plots(cfg, gnn_predictions, gnn_trained, out_dir / "ml_results" / "plots")
+    if sources:
+        metrics = {}
+        for preds, trained, name in sources:
+            stage_plots(cfg, preds, trained, out_dir / "ml_results" / "plots")
+            for iteration, iter_metrics in stage_metrics(cfg, preds, trained, name).items():
+                metrics.setdefault(iteration, {}).update(iter_metrics)
 
-    if tml_predictions is not None and tml_trained:
-        stage_plots(cfg, tml_predictions, tml_trained, out_dir / "ml_results" / "plots")
+        if len(sources) == 2:
+            from polynet.config.column_names import get_iterator_name, get_true_label_column_name
+            from polynet.config.constants import ResultColumn
+
+            iterator = get_iterator_name(cfg["splitting"]["split_type"])
+            label_col_name = get_true_label_column_name(
+                target_variable_name=cfg["data"]["target_variable_name"]
+            )
+            gnn_predictions = gnn_predictions.drop(columns=[label_col_name])
+            predictions = pd.merge(
+                left=gnn_predictions,
+                right=tml_predictions,
+                on=[ResultColumn.INDEX, ResultColumn.SET, iterator],
+            )
+        else:
+            predictions = sources[0][0]
+
+        save_metrics(metrics, out_dir / "ml_results")
+        predictions.to_csv(out_dir / "ml_results" / "predictions.csv", index=False)
 
     # ------------------------------------------------------------------
     # Stage 11 — Explainability
