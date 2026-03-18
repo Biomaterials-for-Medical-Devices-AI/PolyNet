@@ -33,28 +33,28 @@ All outputs are written under the directory specified by
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import logging
 from pathlib import Path
 import time
-from pydantic import ValidationError
+from typing import Any
 
 import joblib
 import pandas as pd
+from pydantic import BaseModel, ValidationError
 import yaml
-from polynet.config.schemas.base import PolynetBaseModel
+
 from polynet.config.schemas import (
     DataConfig,
-    RepresentationConfig,
-    TrainGNNConfig,
-    TrainTMLConfig,
     FeatureTransformConfig,
     GeneralConfig,
+    RepresentationConfig,
     SplitConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
 )
-from pydantic import BaseModel
-import dataclasses
-from typing import Any
+from polynet.config.schemas.base import PolynetBaseModel
 
 # ---------------------------------------------------------------------------
 # Logging setup — runs before any polynet imports so the root logger is

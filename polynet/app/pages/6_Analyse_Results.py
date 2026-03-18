@@ -27,10 +27,9 @@ from polynet.config.schemas import (
     DataConfig,
     GeneralConfig,
     RepresentationConfig,
-    TrainGNNConfig,
     SplitConfig,
+    TrainGNNConfig,
 )
-
 
 st.header("Representation of Polymers")
 
