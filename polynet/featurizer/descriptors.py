@@ -162,17 +162,20 @@ def build_vector_representation(
         descriptors[MolecularDescriptor.RDKit_DataFrame] = mixed_df
     # --- PolyBERT ---
     if MolecularDescriptor.PolyBERT in molecular_descriptors:
-        polyBERT_dict = calculate_polybert_df_dict(
-            unique_psmiles=unique_smiles, data=data, psmiles_cols=smiles_cols
-        )
-        polyBERT_df = _merge(
-            df_dict=polyBERT_dict,
-            data=data,
-            weights_col=weights_col,
-            data_index=data_index,
-            merging_approach=merging_approach,
-        )
-        descriptors[MolecularDescriptor.PolyBERT] = polyBERT_df
+        try:
+            polyBERT_dict = calculate_polybert_df_dict(
+                unique_psmiles=unique_smiles, data=data, psmiles_cols=smiles_cols
+            )
+            polyBERT_df = _merge(
+                df_dict=polyBERT_dict,
+                data=data,
+                weights_col=weights_col,
+                data_index=data_index,
+                merging_approach=merging_approach,
+            )
+            descriptors[MolecularDescriptor.PolyBERT] = polyBERT_df
+        except Exception as e:
+            print(e)
 
     if MolecularDescriptor.PolyMetriX in molecular_descriptors:
         pmx_dict = calculate_PMX_df_dict(
