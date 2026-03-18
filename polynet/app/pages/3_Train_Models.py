@@ -316,7 +316,7 @@ if experiment_name:
     train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
 
     if train_gnn_options.exists():
-        st.warning(
+        st.error(
             "GNN model options already exist for this experiment. "
             "You can modify the settings below, but be aware that this will overwrite the existing results."
         )
