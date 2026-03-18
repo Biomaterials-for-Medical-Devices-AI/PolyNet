@@ -614,6 +614,7 @@ def main() -> None:
     # Stage 1 — Load data
     # ------------------------------------------------------------------
     df = stage_load_data(cfg, root, out_dir)
+    df.to_csv(out_dir / cfg["data"]["data_name"])
 
     # ------------------------------------------------------------------
     # Stage 2 — Graph dataset
@@ -708,10 +709,9 @@ def main() -> None:
                 target_variable_name=cfg["data"]["target_variable_name"]
             )
             gnn_predictions = gnn_predictions.drop(columns=[label_col_name])
+            tml_predictions = tml_predictions.drop(columns=[ResultColumn.SET])
             predictions = pd.merge(
-                left=gnn_predictions,
-                right=tml_predictions,
-                on=[ResultColumn.INDEX, ResultColumn.SET, iterator],
+                left=gnn_predictions, right=tml_predictions, on=[ResultColumn.INDEX, iterator]
             )
         else:
             predictions = sources[0][0]
