@@ -14,6 +14,7 @@ from polynet.featurizer.descriptors import (
     calculate_descriptors,
     get_morgan_fingerprints,
     get_polybert_fingerprints,
+    get_rdkitfp_fingerprints,
 )
 from polynet.featurizer.graph import PolymerGraphDataset
 from polynet.featurizer.pmx import create_pmx_featurizer
@@ -30,6 +31,7 @@ __all__ = [
     "calculate_descriptors",
     "get_morgan_fingerprints",
     "get_polybert_fingerprints",
+    "get_rdkitfp_fingerprints",
     "create_pmx_featurizer",
     # Graph datasets
     "PolymerGraphDataset",
