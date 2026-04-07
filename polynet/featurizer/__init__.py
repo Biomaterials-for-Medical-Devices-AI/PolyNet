@@ -12,7 +12,9 @@ Molecular featurization utilities for the polynet pipeline.
 from polynet.featurizer.descriptors import (
     build_vector_representation,
     calculate_descriptors,
+    get_morgan_fingerprints,
     get_polybert_fingerprints,
+    get_rdkitfp_fingerprints,
 )
 from polynet.featurizer.graph import PolymerGraphDataset
 from polynet.featurizer.pmx import create_pmx_featurizer
@@ -27,7 +29,9 @@ __all__ = [
     # Descriptor computation and merging
     "build_vector_representation",
     "calculate_descriptors",
+    "get_morgan_fingerprints",
     "get_polybert_fingerprints",
+    "get_rdkitfp_fingerprints",
     "create_pmx_featurizer",
     # Graph datasets
     "PolymerGraphDataset",
