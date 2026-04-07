@@ -12,12 +12,8 @@ from polynet.app.components.forms.representation import (
 )
 from polynet.app.options.file_paths import (
     data_options_path,
-    gnn_raw_data_file,
-    gnn_raw_data_path,
     polynet_experiment_path,
     polynet_experiments_base_dir,
-    representation_file,
-    representation_file_path,
     representation_options_path,
     representation_parent_directory,
 )
@@ -25,12 +21,10 @@ from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.plot import plot_molecule_3d
-from polynet.app.utils import create_directory
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
-from polynet.featurizer.descriptors import build_vector_representation
-from polynet.featurizer.polymer_graph import CustomPolymerGraph
+from polynet.pipeline import build_graph_dataset, compute_descriptors
 
 
 def parse_representation_options(
@@ -43,8 +37,9 @@ def parse_representation_options(
     weights_col: Dict[str, str],
 ):
     """
-    Parse the representation options from the user input.
-    This function is a placeholder for future implementation.
+    Parse the representation options from the user input and run the
+    corresponding pipeline stages (descriptor computation and/or graph
+    dataset construction).
     """
 
     representation_options = RepresentationConfig(
@@ -82,76 +77,43 @@ def parse_representation_options(
     save_options(path=representation_opts_path, options=representation_options)
 
     if molecular_descriptors:
-
-        descriptor_dfs = build_vector_representation(
+        # compute_descriptors saves CSVs with index (fixes the previous index=False
+        # bug) and returns sanitised DataFrames ready for training.
+        compute_descriptors(
             data=data,
-            molecular_descriptors=representation_options.molecular_descriptors,
-            smiles_cols=data_options.smiles_cols,
-            id_col=data_options.id_col,
-            target_col=data_options.target_variable_col,
-            merging_approach=representation_options.smiles_merge_approach,
-            weights_col=representation_options.weights_col,
-            rdkit_independent=representation_options.rdkit_independent,
-            df_descriptors_independent=representation_options.df_descriptors_independent,
-            mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
+            data_cfg=data_options,
+            repr_cfg=representation_options,
+            out_dir=experiment_path,
         )
-
-        create_directory(representation_file_path(experiment_path=experiment_path))
-
-        for key, df in descriptor_dfs.items():
-            if df is not None:
-                df.to_csv(
-                    representation_file(file_name=f"{key}.csv", experiment_path=experiment_path),
-                    index=False,
-                )
 
     if node_feats:
-
-        data_for_GNN = data.copy()
-        data_for_GNN = data_for_GNN[
-            [data_options.id_col]
-            + data_options.smiles_cols
-            + list(weights_col.values())
-            + [data_options.target_variable_col]
-        ]
-
-        create_directory(gnn_raw_data_path(experiment_path=experiment_path))
-
-        # Save the raw data to a CSV file
-        data_for_GNN.to_csv(
-            gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
-            index=False,
+        # build_graph_dataset filters the DataFrame, saves the raw GNN CSV and
+        # constructs the CustomPolymerGraph, returning the dataset object.
+        dataset = build_graph_dataset(
+            data=data,
+            data_cfg=data_options,
+            repr_cfg=representation_options,
+            out_dir=experiment_path,
         )
 
-        dataset = CustomPolymerGraph(
-            root=gnn_raw_data_path(experiment_path=experiment_path).parent,
-            filename=data_options.data_name,
-            smiles_cols=data_options.smiles_cols,
-            weights_col=weights_col,
-            target_col=data_options.target_variable_col,
-            id_col=data_options.id_col,
-            node_feats=node_feats,
-            edge_feats=edge_feats,
-        )
+        # st.write(dataset[0])
 
-        st.write(dataset[0])
-
-        if st.selectbox(
-            "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
-        ):
-            if len(data_options.smiles_cols) > 1:
-                mol = st.selectbox(
-                    "Select which molecule to display",
-                    options=data_options.smiles_cols,
-                    key="smiles_selection",
-                )
-            else:
-                mol = data_options.smiles_cols[0]
-            smiles = data.loc[
-                data[data_options.id_col] == st.session_state["mol_selection"], mol
-            ].values[0]
-            st.write(f"Displaying molecule: {smiles}")
-            plot_molecule_3d(smiles=smiles)
+        # if st.selectbox(
+        #     "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
+        # ):
+        #     if len(data_options.smiles_cols) > 1:
+        #         mol = st.selectbox(
+        #             "Select which molecule to display",
+        #             options=data_options.smiles_cols,
+        #             key="smiles_selection",
+        #         )
+        #     else:
+        #         mol = data_options.smiles_cols[0]
+        #     smiles = data.loc[
+        #         data[data_options.id_col] == st.session_state["mol_selection"], mol
+        #     ].values[0]
+        #     st.write(f"Displaying molecule: {smiles}")
+        #     plot_molecule_3d(smiles=smiles)
 
 
 st.header("Representation of Polymers")
@@ -186,7 +148,7 @@ if experiment_name:
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
-    data = pd.read_csv(data_opts.data_path)
+    data = pd.read_csv(data_opts.data_path, index_col=0)
 
     st.write(data.describe())
 
