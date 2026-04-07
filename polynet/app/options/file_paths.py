@@ -275,6 +275,16 @@ def preprocessing_tml_model_options_path(experiment_path: Path) -> Path:
     return experiment_path / "preprocessing_tml_options.json"
 
 
+def data_spliting_options_path(experiment_path: Path) -> Path:
+    """
+    Return the path to the TML model options file in the experiment directory.
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    Returns:
+    """
+    return experiment_path / "split_options.json"
+
+
 def train_gnn_model_options_path(experiment_path: Path) -> Path:
     """
     Return the path to the GNN model options file in the experiment directory.
