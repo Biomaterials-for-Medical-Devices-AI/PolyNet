@@ -193,6 +193,22 @@ def build_vector_representation(
         )
         descriptors[MolecularDescriptor.PolyMetriX] = pmx_df
 
+    # --- RDKit fingerprints ---
+    if MolecularDescriptor.RDKitFP in molecular_descriptors:
+        rdkitfp_dict = calculate_rdkitfp_df_dict(
+            unique_smiles=unique_smiles,
+            data=data,
+            smiles_cols=smiles_cols,
+        )
+        rdkitfp_df = _merge(
+            df_dict=rdkitfp_dict,
+            data=data,
+            weights_col=weights_col,
+            data_index=data_index,
+            merging_approach=merging_approach,
+        )
+        descriptors[MolecularDescriptor.RDKitFP] = rdkitfp_df
+
     # --- Morgan fingerprints ---
     if MolecularDescriptor.Morgan in molecular_descriptors:
         morgan_dict = calculate_morgan_df_dict(
@@ -445,6 +461,64 @@ def get_morgan_fingerprints(smiles_list: list[str]) -> dict[str, list[int]]:
             continue
         fingerprints[smiles] = fp_gen.GetCountFingerprintAsNumPy(mol).astype(int).tolist()
     return fingerprints
+
+
+def get_rdkitfp_fingerprints(smiles_list: list[str]) -> dict[str, list[int]]:
+    """
+    Compute RDKit count fingerprints for a list of SMILES strings.
+
+    Uses RDKit's ``GetRDKitFPGenerator`` with default settings
+    (``fpSize=2048``) and returns integer count vectors.
+
+    Parameters
+    ----------
+    smiles_list:
+        SMILES strings to compute fingerprints for.
+
+    Returns
+    -------
+    dict[str, list[int]]
+        Mapping from each valid SMILES to its 2048-element count fingerprint.
+        Invalid SMILES are skipped with a warning.
+    """
+    fp_gen = rdFingerprintGenerator.GetRDKitFPGenerator()
+    fingerprints: dict[str, list[int]] = {}
+    for smiles in smiles_list:
+        mol = MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"Could not parse SMILES '{smiles}' — skipping.")
+            continue
+        fingerprints[smiles] = fp_gen.GetCountFingerprintAsNumPy(mol).astype(int).tolist()
+    return fingerprints
+
+
+def calculate_rdkitfp_df_dict(
+    unique_smiles: list[str], data: pd.DataFrame, smiles_cols: list[str]
+) -> dict[str, pd.DataFrame]:
+    """
+    Compute RDKit fingerprints once for unique SMILES and join to each
+    SMILES column in the dataset.
+
+    Returns dict[col] -> DataFrame containing only the fingerprint columns
+    aligned to `data`'s rows (via left join on that column).
+    """
+    fp_dict = get_rdkitfp_fingerprints(unique_smiles)
+
+    if not fp_dict:
+        return {col: pd.DataFrame(index=data.index) for col in smiles_cols}
+
+    first_vec = next(iter(fp_dict.values()))
+    dim = len(first_vec)
+    fp_cols = get_fp_col_names(prefix="rdkitfp", dim=dim)
+
+    rdkitfp_df = pd.DataFrame.from_dict(fp_dict, orient="index", columns=fp_cols)
+
+    rdkitfp_df_dict: dict[str, pd.DataFrame] = {}
+    for col in smiles_cols:
+        joined = data.join(rdkitfp_df, how="left", on=col)
+        rdkitfp_df_dict[col] = joined[fp_cols].copy()
+
+    return rdkitfp_df_dict
 
 
 def calculate_morgan_df_dict(
