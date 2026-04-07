@@ -42,7 +42,7 @@ import warnings
 
 import pandas as pd
 from polymetrix.featurizers.polymer import Polymer
-from rdkit.Chem import Descriptors, MolFromSmiles
+from rdkit.Chem import Descriptors, MolFromSmiles, rdFingerprintGenerator
 
 from polynet.config.column_names import get_fp_col_names
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
@@ -192,6 +192,22 @@ def build_vector_representation(
             merging_approach=merging_approach,
         )
         descriptors[MolecularDescriptor.PolyMetriX] = pmx_df
+
+    # --- Morgan fingerprints ---
+    if MolecularDescriptor.Morgan in molecular_descriptors:
+        morgan_dict = calculate_morgan_df_dict(
+            unique_smiles=unique_smiles,
+            data=data,
+            smiles_cols=smiles_cols,
+        )
+        morgan_df = _merge(
+            df_dict=morgan_dict,
+            data=data,
+            weights_col=weights_col,
+            data_index=data_index,
+            merging_approach=merging_approach,
+        )
+        descriptors[MolecularDescriptor.Morgan] = morgan_df
 
     return descriptors
 
@@ -395,6 +411,69 @@ def calculate_PMX_df_dict(
         pmx_df_dict[col] = joined[cols].copy()
 
     return pmx_df_dict
+
+
+# ---------------------------------------------------------------------------
+# Morgan fingerprint computation
+# ---------------------------------------------------------------------------
+
+
+def get_morgan_fingerprints(smiles_list: list[str]) -> dict[str, list[int]]:
+    """
+    Compute Morgan count fingerprints for a list of SMILES strings.
+
+    Uses RDKit's ``GetMorganGenerator`` with default settings
+    (``radius=2``, ``fpSize=2048``) and returns integer count vectors.
+
+    Parameters
+    ----------
+    smiles_list:
+        SMILES strings to compute fingerprints for.
+
+    Returns
+    -------
+    dict[str, list[int]]
+        Mapping from each valid SMILES to its 2048-element count fingerprint.
+        Invalid SMILES are skipped with a warning.
+    """
+    fp_gen = rdFingerprintGenerator.GetMorganGenerator()
+    fingerprints: dict[str, list[int]] = {}
+    for smiles in smiles_list:
+        mol = MolFromSmiles(smiles)
+        if mol is None:
+            logger.warning(f"Could not parse SMILES '{smiles}' — skipping.")
+            continue
+        fingerprints[smiles] = fp_gen.GetCountFingerprintAsNumPy(mol).astype(int).tolist()
+    return fingerprints
+
+
+def calculate_morgan_df_dict(
+    unique_smiles: list[str], data: pd.DataFrame, smiles_cols: list[str]
+) -> dict[str, pd.DataFrame]:
+    """
+    Compute Morgan fingerprints once for unique SMILES and join to each
+    SMILES column in the dataset.
+
+    Returns dict[col] -> DataFrame containing only the fingerprint columns
+    aligned to `data`'s rows (via left join on that column).
+    """
+    fp_dict = get_morgan_fingerprints(unique_smiles)
+
+    if not fp_dict:
+        return {col: pd.DataFrame(index=data.index) for col in smiles_cols}
+
+    first_vec = next(iter(fp_dict.values()))
+    dim = len(first_vec)
+    fp_cols = get_fp_col_names(prefix="morgan", dim=dim)
+
+    morgan_df = pd.DataFrame.from_dict(fp_dict, orient="index", columns=fp_cols)
+
+    morgan_df_dict: dict[str, pd.DataFrame] = {}
+    for col in smiles_cols:
+        joined = data.join(morgan_df, how="left", on=col)
+        morgan_df_dict[col] = joined[fp_cols].copy()
+
+    return morgan_df_dict
 
 
 # ---------------------------------------------------------------------------
