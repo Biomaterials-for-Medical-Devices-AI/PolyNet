@@ -124,20 +124,33 @@ def molecular_descriptor_representation(
             disabled = False
             message = "polyBERT fingerprints are numerical representations of PSMILES from a BERT model specialised on polymer grammar."
 
-        st.markdown("### polyBERT fingerprint")
+        st.markdown("### Fingerprints")
 
         polybert_fps = st.checkbox(
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
-            disabled=disabled,
-            help=message,
+            disabled=True,
+            help="polyBERT disabled as it was retired from Hugging Face",
         )
+
+        if st.checkbox(
+            "Calculate Morgan fingerprint",
+            value=False,
+            key=DescriptorCalculationStateKeys.Morganfp,
+            disabled=False,
+        ):
+            descriptors_dict[MolecularDescriptor.Morgan] = True
+
+        if st.checkbox(
+            "Calculate RDKit fingerprints", value=False, key=DescriptorCalculationStateKeys.RDKitfp
+        ):
+            descriptors_dict[MolecularDescriptor.RDKitFP] = True
 
         st.markdown("### PolyMetriX Descriptors")
 
         pmx_descriptors = st.checkbox(
-            "Calculate PolyMetrix fingerprint",
+            "Calculate PolyMetrix descriptors",
             value=False,
             key=DescriptorCalculationStateKeys.PMXDescriptors,
             disabled=disabled,
