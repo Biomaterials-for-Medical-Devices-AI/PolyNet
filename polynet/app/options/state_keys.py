@@ -38,6 +38,8 @@ class DescriptorCalculationStateKeys(StrEnum):
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
     polyBERTfp = "polyBERTfp"
+    Morganfp = "morganfp"
+    RDKitfp = "rdkitfp"
     PMXDescriptors = "pmx_descriptors"
     PMXSideChainDescriptors = "pmx_side_chain_descriptors"
     PMXBackboneDescriptors = "pmx_backbone_descriptors"
