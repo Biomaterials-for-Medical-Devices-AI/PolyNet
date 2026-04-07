@@ -13,6 +13,7 @@ from polynet.app.components.forms.train_models import (
 from polynet.app.components.plots import display_model_results
 from polynet.app.options.file_paths import (
     data_options_path,
+    data_spliting_options_path,
     general_options_path,
     gnn_raw_data_file,
     gnn_raw_data_path,
@@ -39,11 +40,15 @@ from polynet.app.services.model_training import load_dataframes, save_gnn_model,
 from polynet.app.utils import save_data
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
-from polynet.config.schemas.data import DataConfig
-from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
-from polynet.config.schemas.general import GeneralConfig
-from polynet.config.schemas.representation import RepresentationConfig
-from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
+from polynet.config.schemas import (
+    DataConfig,
+    FeatureTransformConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    SplitConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+)
 from polynet.factories.dataloader import get_data_split_indices
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.inference.gnn import get_predictions_df_gnn
@@ -69,8 +74,12 @@ def train_models(
     preprocessing_opts_path = preprocessing_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
+    split_cfg_path = data_spliting_options_path(experiment_path=experiment_path)
+    gen_options_path = general_options_path(experiment_path=experiment_path)
 
     # delete old options if it exists
+    if tml_training_opts_path.exists():
+        tml_training_opts_path.unlink()
     if tml_training_opts_path.exists():
         tml_training_opts_path.unlink()
     if preprocessing_opts_path.exists():
@@ -79,24 +88,27 @@ def train_models(
         gnn_training_opts_path.unlink()
     if ml_results_dir.exists():
         rmtree(ml_results_dir)
-    gen_options_path = general_options_path(experiment_path=experiment_path)
+    if split_cfg_path.exists():
+        split_cfg_path.unlink()
     if gen_options_path.exists():
         gen_options_path.unlink()
 
     # Get general experiment options
     general_experiment_options = GeneralConfig(
+        name="", output_dir="", random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed]
+    )
+    # save new options
+    save_options(path=gen_options_path, options=general_experiment_options)
+
+    split_cfg = SplitConfig(
         split_type=st.session_state[GeneralConfigStateKeys.SplitType],
         split_method=st.session_state[GeneralConfigStateKeys.SplitMethod],
         train_set_balance=st.session_state.get(GeneralConfigStateKeys.DesiredProportion, None),
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
-        random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed],
-        n_bootstrap_iterations=st.session_state.get(
-            GeneralConfigStateKeys.BootstrapIterations, None
-        ),
+        n_bootstrap_iterations=st.session_state.get(GeneralConfigStateKeys.BootstrapIterations, 1),
     )
-    # save new options
-    save_options(path=gen_options_path, options=general_experiment_options)
+    save_options(split_cfg_path, split_cfg)
 
     # read the data
     data = pd.read_csv(
@@ -106,13 +118,13 @@ def train_models(
     # generate indices to split data
     train_val_test_idxs = get_data_split_indices(
         data=data,
-        split_type=general_experiment_options.split_type,
-        n_bootstrap_iterations=general_experiment_options.n_bootstrap_iterations,
-        val_ratio=general_experiment_options.val_ratio,
-        test_ratio=general_experiment_options.test_ratio,
+        split_type=split_cfg.split_type,
+        n_bootstrap_iterations=split_cfg.n_bootstrap_iterations,
+        val_ratio=split_cfg.val_ratio,
+        test_ratio=split_cfg.test_ratio,
         target_variable_col=data_options.target_variable_col,
-        split_method=general_experiment_options.split_method,
-        train_set_balance=general_experiment_options.train_set_balance,
+        split_method=split_cfg.split_method,
+        train_set_balance=split_cfg.train_set_balance,
         random_seed=general_experiment_options.random_seed,
     )
 
@@ -128,9 +140,7 @@ def train_models(
     if tml_models:
         # get and save options
         train_tml_options = TrainTMLConfig(
-            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
-            selected_models=list(tml_models.keys()),
-            model_params=tml_models,
+            train_tml=st.session_state[TrainTMLStateKeys.TrainTML], selected_models=tml_models
         )
         save_options(path=tml_training_opts_path, options=train_tml_options)
         save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
@@ -165,7 +175,7 @@ def train_models(
         tml_predictions_df = get_predictions_df_tml(
             models=tml_models,
             training_data=dataframes,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_col=data_options.target_variable_col,
             problem_type=data_options.problem_type,
             target_variable_name=data_options.target_variable_name,
@@ -173,15 +183,15 @@ def train_models(
 
         metrics_tml = get_metrics(
             predictions=tml_predictions_df,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_name=data_options.target_variable_name,
-            trained_models=tml_models.keys(),
+            trained_models=list(tml_models.keys()),
             problem_type=data_options.problem_type,
         )
 
         plot_results(
             predictions=tml_predictions_df,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_name=data_options.target_variable_name,
             ml_algorithms=tml_models.keys(),
             problem_type=data_options.problem_type,
@@ -229,13 +239,13 @@ def train_models(
             models=gnn_models,
             loaders=loaders,
             problem_type=data_options.problem_type,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_name=data_options.target_variable_name,
         )
 
         metrics_gnn = get_metrics(
             predictions=gnn_predictions_df,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_name=data_options.target_variable_name,
             trained_models=gnn_models.keys(),
             problem_type=data_options.problem_type,
@@ -243,7 +253,7 @@ def train_models(
 
         plot_results(
             predictions=gnn_predictions_df,
-            split_type=general_experiment_options.split_type,
+            split_type=split_cfg.split_type,
             target_variable_name=data_options.target_variable_name,
             ml_algorithms=gnn_models.keys(),
             problem_type=data_options.problem_type,

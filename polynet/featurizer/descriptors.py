@@ -379,15 +379,10 @@ def get_polybert_fingerprints(
 
 
 def calculate_polybert_df_dict(
-    unique_psmiles: list[str],
-    data: pd.DataFrame,
-    psmiles_cols: list[str],
-    prefix: str = "polyBERT",
+    unique_psmiles: list[str], data: pd.DataFrame, psmiles_cols: list[str], prefix: str = "polyBERT"
 ) -> dict[str, pd.DataFrame]:
     """Compute PolyBERT fingerprints and join to each PSMILES column."""
-    return _build_fp_df_dict(
-        get_polybert_fingerprints(unique_psmiles), prefix, data, psmiles_cols
-    )
+    return _build_fp_df_dict(get_polybert_fingerprints(unique_psmiles), prefix, data, psmiles_cols)
 
 
 # ---------------------------------------------------------------------------
@@ -427,9 +422,7 @@ def calculate_PMX_df_dict(
 
     pmx_df = pd.DataFrame.from_dict(pmx_dict, orient="index", columns=cols)
 
-    return {
-        col: data.join(pmx_df, how="left", on=col)[cols].copy() for col in psmiles_cols
-    }
+    return {col: data.join(pmx_df, how="left", on=col)[cols].copy() for col in psmiles_cols}
 
 
 # ---------------------------------------------------------------------------
@@ -450,10 +443,7 @@ def _compute_count_fingerprints(smiles_list: list[str], fp_gen) -> dict[str, lis
 
 
 def _build_fp_df_dict(
-    fp_dict: dict[str, list],
-    prefix: str,
-    data: pd.DataFrame,
-    smiles_cols: list[str],
+    fp_dict: dict[str, list], prefix: str, data: pd.DataFrame, smiles_cols: list[str]
 ) -> dict[str, pd.DataFrame]:
     """
     Build a per-column DataFrame dict from a fingerprint dict.
