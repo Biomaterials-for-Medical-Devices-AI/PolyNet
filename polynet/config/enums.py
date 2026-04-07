@@ -80,6 +80,7 @@ class MolecularDescriptor(StrEnum):
     RDKit_DataFrame = "rdkit_dataframe"
     PolyMetriX = "polymetrix"
     Morgan = "morgan"
+    RDKitFP = "rdkitfp"
 
 
 class PMXAggMethod(StrEnum):
