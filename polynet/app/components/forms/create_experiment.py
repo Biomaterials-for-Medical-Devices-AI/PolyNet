@@ -66,7 +66,7 @@ def select_data_form():
         dataset = DatasetCreator(dataset_name)
         df = dataset.create_dataset()
 
-    if df is not None:
+    if df is not None and experiment_name != "":
         st.markdown("**Preview Data**")
         if st.checkbox("Show data provided"):
             st.write(df)
