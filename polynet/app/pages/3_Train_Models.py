@@ -89,14 +89,8 @@ def train_models(
         rmtree(ml_results_dir)
     if split_cfg_path.exists():
         split_cfg_path.unlink()
-    if gen_options_path.exists():
-        gen_options_path.unlink()
-
-    # Get general experiment options
-    general_experiment_options = GeneralConfig(
-        name="", output_dir="", random_seed=st.session_state[GeneralConfigStateKeys.RandomSeed]
-    )
-    save_options(path=gen_options_path, options=general_experiment_options)
+    # Load general experiment options saved by Page 1 (Create Experiment)
+    general_experiment_options = load_options(path=gen_options_path, options_class=GeneralConfig)
 
     split_cfg = SplitConfig(
         split_type=st.session_state[GeneralConfigStateKeys.SplitType],
