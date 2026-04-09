@@ -12,6 +12,12 @@ Usage
     python scripts/run_pipeline.py --config configs/experiment.yaml --task classification
     python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-explain
 
+    # Predict on an external dataset after training
+    python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/unseen.csv
+
+    # Predict only (skip training, models must already exist)
+    python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/unseen.csv
+
 Stages
 ------
     1.  Load & validate data
@@ -25,6 +31,7 @@ Stages
     9.  Compute metrics
     10. Plot results
     11. Run explainability           (if enabled)
+    12. Predict on external dataset  (if --predict-data or prediction.data_path set)
 
 All outputs are written under the directory specified by
 ``experiment.output_dir`` in the config file.
@@ -90,6 +97,9 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
         cfg.setdefault("tml_models", {})["train_tml"] = False
     if args.no_explain:
         cfg.setdefault("explainability", {})["enabled"] = False
+    if args.predict_data is not None:
+        cfg.setdefault("prediction", {})["data_path"] = args.predict_data
+        cfg.setdefault("prediction", {}).setdefault("enabled", True)
     return cfg
 
 
@@ -295,6 +305,14 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--no-tml", action="store_true", help="Skip all TML stages.")
     p.add_argument("--no-explain", action="store_true", help="Skip the explainability stage.")
     p.add_argument(
+        "--predict-data",
+        default=None,
+        metavar="PATH",
+        help="Path to a CSV file of unseen samples to predict after training. "
+        "Overrides prediction.data_path in the config. "
+        "Predictions are saved to {output_dir}/unseen_predictions/{filename}/.",
+    )
+    p.add_argument(
         "--root",
         default=".",
         help="Project root directory. Relative paths in config are resolved from here. "
@@ -315,6 +333,7 @@ def main() -> None:
         compute_descriptors,
         compute_metrics,
         plot_results_stage,
+        predict_external,
         run_explainability,
         run_gnn_inference,
         run_tml_inference,
@@ -527,6 +546,46 @@ def main() -> None:
             done(t0)
         except Exception as e:
             logger.error(f"Explainability failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stage 12 — Predict on external dataset
+    # ------------------------------------------------------------------
+    pred_cfg = cfg.get("prediction", {})
+    predict_enabled = pred_cfg.get("enabled", False)
+    predict_data_path_str = pred_cfg.get("data_path")
+
+    if predict_enabled and predict_data_path_str:
+        t0 = announce("12. Predict on external dataset")
+        try:
+            from polynet.data.loader import load_dataset
+
+            predict_data_path = resolve_path(predict_data_path_str, root)
+            predict_df = load_dataset(
+                path=predict_data_path,
+                smiles_cols=data_cfg.smiles_cols,
+                target_col=data_cfg.target_variable_col,
+                id_col=data_cfg.id_col,
+                problem_type=data_cfg.problem_type,
+            )
+            logger.info(f"  Loaded {len(predict_df)} unseen samples from {predict_data_path}")
+
+            dataset_name = predict_data_path.name
+            predict_out_dir = out_dir / "unseen_predictions" / predict_data_path.stem
+
+            predictions, metrics = predict_external(
+                data=predict_df,
+                data_cfg=data_cfg,
+                repr_cfg=repr_cfg,
+                experiment_path=out_dir,
+                out_dir=predict_out_dir,
+                dataset_name=dataset_name,
+            )
+            logger.info(f"  Saved predictions ({len(predictions)} rows) to {predict_out_dir}")
+            if metrics is not None:
+                logger.info("  Metrics computed (target column was present in unseen data)")
+            done(t0)
+        except Exception as e:
+            logger.error(f"External prediction failed: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
     # Done
