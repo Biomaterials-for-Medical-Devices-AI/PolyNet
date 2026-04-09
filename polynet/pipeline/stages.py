@@ -536,6 +536,330 @@ def plot_results_stage(
 
 
 # ---------------------------------------------------------------------------
+# External prediction stage
+# ---------------------------------------------------------------------------
+
+
+def predict_external(
+    data: pd.DataFrame,
+    data_cfg: DataConfig,
+    repr_cfg: RepresentationConfig,
+    experiment_path: Path,
+    out_dir: Path,
+    dataset_name: str,
+) -> tuple[pd.DataFrame, dict | None]:
+    """
+    Predict properties for an external (unseen) dataset using models from a
+    trained experiment.
+
+    Both GNN and TML models found under ``experiment_path/ml_results/models/``
+    are loaded automatically.  If the target column is present in ``data``,
+    per-model metrics are computed and returned; otherwise metrics are ``None``.
+
+    Parameters
+    ----------
+    data:
+        Unseen DataFrame.  Must contain the SMILES column(s) and, optionally,
+        the target variable column and weight fraction columns.  The id column
+        may be a regular column or the DataFrame index.
+    data_cfg:
+        DataConfig from the training experiment.
+    repr_cfg:
+        RepresentationConfig from the training experiment.
+    experiment_path:
+        Root directory of the trained experiment (models are loaded from
+        ``experiment_path/ml_results/models/``).
+    out_dir:
+        Directory where ``predictions.csv`` (and ``metrics.json`` when the
+        target is present) will be written.  Created if it does not exist.
+    dataset_name:
+        File name of the unseen dataset (e.g. ``"test_set.csv"``).  Used as
+        the graph dataset filename so the GNN featuriser saves raw data under
+        ``out_dir/representation/GNN/raw/``.
+
+    Returns
+    -------
+    tuple[pd.DataFrame, dict | None]
+        ``(predictions, metrics)`` — metrics is ``None`` when the target column
+        is absent from ``data``.
+    """
+    import json
+
+    import joblib
+    import torch
+
+    from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
+    from polynet.config.constants import ResultColumn
+    from polynet.config.enums import ProblemType
+    from polynet.data.preprocessing import sanitise_df
+    from polynet.featurizer.descriptors import build_vector_representation
+    from polynet.featurizer.polymer_graph import CustomPolymerGraph
+    from polynet.inference.utils import prepare_probs_df
+    from polynet.training.metrics import calculate_metrics
+    from torch_geometric.loader import DataLoader
+
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    # ------------------------------------------------------------------
+    # Normalise: bring id_col from index into columns if needed
+    # ------------------------------------------------------------------
+    df = data.copy()
+    if data_cfg.id_col and df.index.name == data_cfg.id_col:
+        df = df.reset_index()
+
+    has_target = data_cfg.target_variable_col in df.columns
+
+    # ------------------------------------------------------------------
+    # Build id_df — carries index, SMILES, weights, optional true label
+    # ------------------------------------------------------------------
+    id_cols = []
+    if data_cfg.id_col and data_cfg.id_col in df.columns:
+        id_cols.append(data_cfg.id_col)
+    id_cols += [c for c in data_cfg.smiles_cols if c in df.columns]
+    if repr_cfg.weights_col:
+        id_cols += [c for c in repr_cfg.weights_col.values() if c in df.columns]
+    if has_target:
+        id_cols.append(data_cfg.target_variable_col)
+
+    id_df = df[id_cols].copy().reset_index(drop=True)
+    true_label_name = get_true_label_column_name(data_cfg.target_variable_name)
+    id_df = id_df.rename(
+        columns={
+            data_cfg.id_col: ResultColumn.INDEX,
+            data_cfg.target_variable_col: true_label_name,
+        }
+    )
+
+    # ------------------------------------------------------------------
+    # Load models
+    # ------------------------------------------------------------------
+    models_dir = experiment_path / "ml_results" / "models"
+    gnn_model_files = sorted(models_dir.glob("*.pt"))
+    tml_model_files = sorted(models_dir.glob("*.joblib"))
+
+    gnn_models = {
+        f.stem: torch.load(f, weights_only=False, map_location="cpu")
+        for f in gnn_model_files
+    }
+    tml_models = {f.stem: joblib.load(f) for f in tml_model_files}
+
+    # Scalers: one .pkl per descriptor type, named by the last '-' segment of
+    # the model stem (e.g. "rf-Morgan_1" → "Morgan_1.pkl").
+    scalers: dict = {}
+    seen_scaler_names: set = set()
+    for f in tml_model_files:
+        scaler_name = f.stem.rsplit("-", 1)[-1]
+        scaler_path = models_dir / f"{scaler_name}.pkl"
+        if scaler_name not in seen_scaler_names and scaler_path.exists():
+            scalers[scaler_name] = joblib.load(scaler_path)
+            seen_scaler_names.add(scaler_name)
+
+    logger.info(f"Loaded {len(gnn_models)} GNN model(s), {len(tml_models)} TML model(s)")
+
+    predictions_tml: pd.DataFrame | None = None
+    predictions_gnn: pd.DataFrame | None = None
+
+    # ------------------------------------------------------------------
+    # TML path: descriptors → predict
+    # ------------------------------------------------------------------
+    if tml_models:
+        weights_cols = list(repr_cfg.weights_col.values()) if repr_cfg.weights_col else None
+        raw_desc_dfs = build_vector_representation(
+            data=df,
+            molecular_descriptors=repr_cfg.molecular_descriptors,
+            smiles_cols=data_cfg.smiles_cols,
+            id_col=data_cfg.id_col,
+            target_col=data_cfg.target_variable_col,
+            merging_approach=repr_cfg.smiles_merge_approach,
+            weights_col=repr_cfg.weights_col,
+            rdkit_independent=repr_cfg.rdkit_independent,
+            df_descriptors_independent=repr_cfg.df_descriptors_independent,
+            mix_rdkit_df_descriptors=repr_cfg.mix_rdkit_df_descriptors,
+        )
+        descriptor_dfs = {
+            name: sanitise_df(
+                df=desc_df,
+                smiles_cols=data_cfg.smiles_cols,
+                target_variable_col=data_cfg.target_variable_col,
+                weights_cols=weights_cols,
+            )
+            for name, desc_df in raw_desc_dfs.items()
+            if desc_df is not None
+        }
+
+        preds_all = None
+        for model_name, model in tml_models.items():
+            model_log_name = model_name.replace("_", " ")
+            predicted_col = get_predicted_label_column_name(
+                target_variable_name=data_cfg.target_variable_name,
+                model_name=model_log_name,
+            )
+            ml_model = model_name.rsplit("_", 1)[0]   # e.g. "rf-Morgan"
+            df_name = ml_model.rsplit("-", 1)[1]       # e.g. "Morgan"
+            desc_df = descriptor_dfs[df_name]
+
+            if scalers:
+                scaler_name = model_name.rsplit("-", 1)[-1]
+                scaler = scalers[scaler_name]
+                desc_arr = scaler.transform(desc_df)
+                desc_df = pd.DataFrame(desc_arr, columns=scaler.get_feature_names_out())
+
+            preds = model.predict(desc_df)
+            preds_df = pd.DataFrame({predicted_col: preds})
+
+            if data_cfg.problem_type == ProblemType.Classification:
+                probs_df = prepare_probs_df(
+                    probs=model.predict_proba(desc_df),
+                    target_variable_name=data_cfg.target_variable_name,
+                    model_name=model_log_name,
+                )
+                preds_df[probs_df.columns] = probs_df.to_numpy()
+
+            preds_all = preds_df if preds_all is None else pd.concat([preds_all, preds_df], axis=1)
+
+        if preds_all is not None:
+            predictions_tml = pd.concat([id_df, preds_all], axis=1, ignore_index=False)
+
+    # ------------------------------------------------------------------
+    # GNN path: graph dataset → predict → ensemble voting
+    # ------------------------------------------------------------------
+    if gnn_models:
+        raw_gnn_dir = out_dir / "representation" / "GNN" / "raw"
+        raw_gnn_dir.mkdir(parents=True, exist_ok=True)
+
+        keep = []
+        if data_cfg.id_col and data_cfg.id_col in df.columns:
+            keep.append(data_cfg.id_col)
+        keep += data_cfg.smiles_cols + [data_cfg.target_variable_col]
+        if repr_cfg.weights_col:
+            keep += [c for c in repr_cfg.weights_col.values() if c in df.columns]
+        df[keep].to_csv(raw_gnn_dir / dataset_name, index=False)
+
+        dataset = CustomPolymerGraph(
+            filename=dataset_name,
+            root=str(raw_gnn_dir.parent),
+            smiles_cols=data_cfg.smiles_cols,
+            target_col=data_cfg.target_variable_col,
+            id_col=data_cfg.id_col,
+            weights_col=repr_cfg.weights_col,
+            node_feats=repr_cfg.node_features,
+            edge_feats=repr_cfg.edge_features,
+        )
+
+        preds_all = None
+        for model_name, model in gnn_models.items():
+            model_log_name = model_name.replace("_", " ")
+            predicted_col = get_predicted_label_column_name(
+                target_variable_name=data_cfg.target_variable_name,
+                model_name=model_log_name,
+            )
+            loader = DataLoader(dataset)
+            preds = model.predict_loader(loader)
+            preds_df = pd.DataFrame({ResultColumn.INDEX: preds[0], predicted_col: preds[1]})
+
+            if data_cfg.problem_type == ProblemType.Classification:
+                probs_df = prepare_probs_df(
+                    probs=preds[-1],
+                    target_variable_name=data_cfg.target_variable_name,
+                    model_name=model_log_name,
+                )
+                preds_df[probs_df.columns] = probs_df.to_numpy()
+
+            preds_all = (
+                preds_df if preds_all is None
+                else pd.merge(preds_all, preds_df, on=[ResultColumn.INDEX])
+            )
+
+        if preds_all is not None:
+            # Ensemble voting per architecture
+            pred_cols = [c for c in preds_all.columns if ResultColumn.PREDICTED in c]
+            arch_groups: dict[str, list[str]] = {}
+            for col in pred_cols:
+                arch = col.split(" ")[0]
+                arch_groups.setdefault(arch, []).append(col)
+            arch_groups["GNN"] = pred_cols  # all GNN models together
+
+            ensemble_series = []
+            for arch, cols in arch_groups.items():
+                if len(cols) < 2:
+                    continue
+                arch_preds = preds_all[cols]
+                if data_cfg.problem_type == ProblemType.Classification:
+                    from scipy.stats import mode as scipy_mode
+                    votes, _ = scipy_mode(arch_preds.values, axis=1, keepdims=False)
+                    ensemble_series.append(
+                        pd.Series(votes, index=arch_preds.index,
+                                  name=f"{arch} Ensemble {ResultColumn.PREDICTED}")
+                    )
+                else:
+                    ensemble_series.append(
+                        pd.Series(arch_preds.mean(axis=1), index=arch_preds.index,
+                                  name=f"{arch} Ensemble {ResultColumn.PREDICTED}")
+                    )
+            if ensemble_series:
+                preds_all = pd.concat([preds_all] + ensemble_series, axis=1)
+
+            predictions_gnn = pd.merge(id_df, preds_all, on=[ResultColumn.INDEX])
+
+    # ------------------------------------------------------------------
+    # Merge TML + GNN predictions
+    # ------------------------------------------------------------------
+    if predictions_tml is not None and predictions_gnn is not None:
+        predictions = pd.merge(
+            left=predictions_tml,
+            right=predictions_gnn,
+            on=list(id_df.columns),
+        )
+    elif predictions_gnn is not None:
+        predictions = predictions_gnn
+    elif predictions_tml is not None:
+        predictions = predictions_tml
+    else:
+        raise RuntimeError(
+            f"No trained models found in {models_dir}. "
+            "Run the training pipeline first."
+        )
+
+    # ------------------------------------------------------------------
+    # Save predictions
+    # ------------------------------------------------------------------
+    predictions.to_csv(out_dir / "predictions.csv", index=False)
+    logger.info(f"Predictions saved to {out_dir / 'predictions.csv'}")
+
+    # ------------------------------------------------------------------
+    # Metrics (only when true labels are available)
+    # ------------------------------------------------------------------
+    metrics: dict | None = None
+    if has_target:
+        label_col = true_label_name
+        metrics = {}
+        for col in predictions.columns:
+            if ResultColumn.PREDICTED not in col or "Ensemble" in col:
+                continue
+            split_name = col.rsplit(" ", 3)
+            model, number = split_name[0], split_name[1]
+            model_name_key = f"{model} {number}"
+            probs_cols = [
+                c for c in predictions.columns
+                if ResultColumn.SCORE in c and model_name_key in c
+            ]
+            metrics.setdefault(number, {}).setdefault(model, {})[
+                dataset_name.split(".")[0]
+            ] = calculate_metrics(
+                y_true=predictions[label_col],
+                y_pred=predictions[col],
+                y_probs=predictions[probs_cols] if probs_cols else None,
+                problem_type=data_cfg.problem_type,
+            )
+
+        with open(out_dir / "metrics.json", "w") as f:
+            json.dump(metrics, f, indent=4)
+        logger.info(f"Metrics saved to {out_dir / 'metrics.json'}")
+
+    return predictions, metrics
+
+
+# ---------------------------------------------------------------------------
 # Explainability stage
 # ---------------------------------------------------------------------------
 
