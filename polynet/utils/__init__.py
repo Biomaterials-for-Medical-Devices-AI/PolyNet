@@ -1,3 +1,6 @@
+import re
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -51,3 +54,65 @@ def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_
             probs_df[f"{col_name} {i}"] = probs[:, i]
 
     return probs_df
+
+
+def create_directory(path: Path):
+    """Create a directory at the specified path, including any intermediate directories.
+
+    If the path already exists, no action is taken.
+
+    Args:
+        path (Path): The path of the directory to create.
+    """
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+
+
+def save_data(data_path: Path, data: pd.DataFrame):
+    """Save a DataFrame to a CSV or Excel file.
+
+    Args:
+        data_path (Path): The path to save the data to (.csv or .xlsx).
+        data (pd.DataFrame): The data to save.
+
+    Raises:
+        ValueError: If the file extension is not .csv or .xlsx.
+    """
+    if data_path.suffix == ".csv":
+        data.to_csv(data_path, index=False)
+    elif data_path.suffix == ".xlsx":
+        data.to_excel(data_path, index=False)
+    else:
+        raise ValueError("data_path must be to a '.csv' or '.xlsx' file")
+
+
+def filter_dataset_by_ids(dataset, ids):
+    """Filter a graph dataset to only include samples whose idx is in ids.
+
+    Args:
+        dataset: Iterable of graph data objects with an ``idx`` attribute.
+        ids: Collection of ids to keep.
+
+    Returns:
+        list: Filtered list of data objects.
+    """
+    return [data for data in dataset if data.idx in ids]
+
+
+def extract_number(filename):
+    """Extract the trailing integer from a model filename like ``model_3.pt``.
+
+    Args:
+        filename (str): The filename to parse.
+
+    Returns:
+        int: The extracted number.
+
+    Raises:
+        ValueError: If no trailing number is found.
+    """
+    match = re.search(r"_(\d+)\.pt$", filename)
+    if match:
+        return int(match.group(1))
+    else:
+        raise ValueError(f"No number found in filename: {filename}")
