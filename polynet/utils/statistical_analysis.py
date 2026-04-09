@@ -98,3 +98,23 @@ def mcnemar_pvalue_matrix(y_true, predictions):
                 p_matrix[i, j] = result.pvalue
 
     return p_matrix
+
+
+def significance_marker(p) -> str:
+    """Return a significance marker string for a given p-value.
+
+    Args:
+        p: The p-value to evaluate.
+
+    Returns:
+        str: ``"***"`` (p < 0.001), ``"**"`` (p < 0.01), ``"*"`` (p < 0.05),
+        or ``""`` (not significant).
+    """
+    if p < 0.001:
+        return "***"
+    elif p < 0.01:
+        return "**"
+    elif p < 0.05:
+        return "*"
+    else:
+        return ""
