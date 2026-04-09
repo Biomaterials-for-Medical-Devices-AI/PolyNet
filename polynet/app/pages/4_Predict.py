@@ -47,6 +47,7 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.data.preprocessing import sanitise_df
 from polynet.featurizer.descriptors import build_vector_representation
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
@@ -106,7 +107,8 @@ def predict(
 
     if tml_models:
         # calculate descriptors
-        descriptor_dfs = build_vector_representation(
+        weights_cols = list(representation_options.weights_col.values()) if representation_options.weights_col else None
+        raw_descriptor_dfs = build_vector_representation(
             data=df,
             molecular_descriptors=representation_options.molecular_descriptors,
             smiles_cols=data_options.smiles_cols,
@@ -119,11 +121,16 @@ def predict(
             mix_rdkit_df_descriptors=representation_options.mix_rdkit_df_descriptors,
         )
 
-        for df_name, df in descriptor_dfs.items():
-            if df is None:
+        descriptor_dfs = {}
+        for df_name, desc_df in raw_descriptor_dfs.items():
+            if desc_df is None:
                 continue
-            new_cols = [col for col in df.columns if col not in id_cols]
-            descriptor_dfs[df_name] = df[new_cols]
+            descriptor_dfs[df_name] = sanitise_df(
+                df=desc_df,
+                smiles_cols=data_options.smiles_cols,
+                target_variable_col=data_options.target_variable_col,
+                weights_cols=weights_cols,
+            )
 
         # load the models and scalers
         models = load_models_from_experiment(
