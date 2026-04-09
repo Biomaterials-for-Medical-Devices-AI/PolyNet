@@ -17,6 +17,7 @@ Import from this package for convenience::
         compute_metrics,
         plot_results_stage,
         run_explainability,
+        predict_external,
     )
 """
 
@@ -26,6 +27,7 @@ from polynet.pipeline.stages import (
     compute_descriptors,
     compute_metrics,
     plot_results_stage,
+    predict_external,
     run_explainability,
     run_gnn_inference,
     run_tml_inference,
@@ -44,4 +46,5 @@ __all__ = [
     "compute_metrics",
     "plot_results_stage",
     "run_explainability",
+    "predict_external",
 ]
