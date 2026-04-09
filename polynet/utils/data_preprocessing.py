@@ -4,6 +4,38 @@ import random
 import pandas as pd
 
 
+def keep_only_numerical_columns(df: pd.DataFrame) -> pd.DataFrame:
+    """Convert DataFrame columns to numeric where possible, dropping non-convertible ones.
+
+    Args:
+        df (pd.DataFrame): Input DataFrame.
+
+    Returns:
+        pd.DataFrame: DataFrame containing only numerical columns.
+    """
+    numeric_df = pd.DataFrame()
+    for col in df.columns:
+        try:
+            numeric_col = pd.to_numeric(df[col], errors="raise")
+            numeric_df[col] = numeric_col
+        except (ValueError, TypeError):
+            continue
+    return numeric_df
+
+
+def check_column_is_numeric(df: pd.DataFrame, column_name: str) -> bool:
+    """Check if a column in a DataFrame is numeric.
+
+    Args:
+        df (pd.DataFrame): The DataFrame to check.
+        column_name (str): The name of the column to check.
+
+    Returns:
+        bool: True if the column is numeric, False otherwise.
+    """
+    return pd.api.types.is_numeric_dtype(df[column_name]) if column_name in df.columns else False
+
+
 def print_class_balance(data: pd.DataFrame, target: str):
     """
     Prints the class balance of the target variable in the
