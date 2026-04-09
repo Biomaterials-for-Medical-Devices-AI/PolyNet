@@ -107,7 +107,11 @@ def predict(
 
     if tml_models:
         # calculate descriptors
-        weights_cols = list(representation_options.weights_col.values()) if representation_options.weights_col else None
+        weights_cols = (
+            list(representation_options.weights_col.values())
+            if representation_options.weights_col
+            else None
+        )
         raw_descriptor_dfs = build_vector_representation(
             data=df,
             molecular_descriptors=representation_options.molecular_descriptors,
@@ -343,7 +347,7 @@ if experiment_name:
 
     # load tml options
     path_to_train_tml_options = train_tml_model_options_path(experiment_path=experiment_path)
-    if path_to_train_tml_options.exists:
+    if path_to_train_tml_options.exists():
         train_tml_options = load_options(
             path=path_to_train_tml_options, options_class=TrainTMLConfig
         )
@@ -356,7 +360,7 @@ if experiment_name:
         )
 
     if (
-        not (path_to_train_gnn_options.exists() or path_to_train_tml_options.exists)
+        not (path_to_train_gnn_options.exists() or path_to_train_tml_options.exists())
         or not path_to_general_opts.exists()
     ):
         st.error(
@@ -400,15 +404,17 @@ if experiment_name:
                 st.error(f"Column '{col}' not found in the uploaded data.")
                 st.stop()
             elif weights_col:
-                col = weights_col[col]
-                if col not in df.columns:
-                    st.error(f"Column '{col}' for weights not found in the uploaded data.")
+                weight_col_name = weights_col.get(col)
+                if weight_col_name is not None and weight_col_name not in df.columns:
+                    st.error(
+                        f"Column '{weight_col_name}' for weights not found in the uploaded data."
+                    )
                     st.stop()
 
         # check if smiles are valid
         invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
         if invalid_smiles:
-            for col, smiles in invalid_smiles.values():
+            for col, smiles in invalid_smiles.items():
                 st.error(f"Invalid SMILES found in column '{col}': {', '.join(smiles)}")
             st.stop()
 
