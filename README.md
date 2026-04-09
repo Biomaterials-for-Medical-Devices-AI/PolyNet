@@ -345,6 +345,7 @@ python scripts/run_pipeline.py --config configs/experiment.yaml
 | `--no-gnn` | Skip all GNN stages |
 | `--no-tml` | Skip all TML stages |
 | `--no-explain` | Skip the explainability stage |
+| `--predict-data PATH` | Path to a CSV of unseen samples to predict after training |
 | `--root PATH` | Project root for resolving relative paths (default: current directory) |
 
 ### Examples
@@ -361,7 +362,44 @@ python scripts/run_pipeline.py --config configs/experiment.yaml --root /path/to/
 
 # Classification task, overriding the config
 python scripts/run_pipeline.py --config configs/experiment.yaml --task classification
+
+# Train and then predict on an external dataset in one command
+python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/test_set.csv
+
+# Predict only on an already-trained experiment (skip all training stages)
+python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/test_set.csv
 ```
+
+### Predicting on external data
+
+After training, PolyNet can predict the target property for new, unseen samples. The unseen CSV must contain the same SMILES column(s) used during training. The target column is optional — if present, per-model metrics are computed automatically.
+
+**Via CLI flag:**
+
+```bash
+python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/new_polymers.csv
+```
+
+**Via YAML config** (`prediction` section):
+
+```yaml
+prediction:
+  enabled: true
+  data_path: "data/new_polymers.csv"
+```
+
+Outputs are written to `{output_dir}/unseen_predictions/{filename}/`:
+
+```
+results/my_experiment/unseen_predictions/new_polymers/
+├── predictions.csv          # Predictions for every model + ensemble columns
+├── metrics.json             # Per-model metrics (only when target column is present)
+└── representation/
+    └── GNN/
+        └── raw/             # Raw graph data used by the GNN featuriser
+```
+
+The same stage (`polynet.pipeline.predict_external`) is used by both the CLI and the **Predict** page in the Streamlit app, guaranteeing identical results regardless of entry point.
 
 ### Triggering automatic HPO
 
@@ -389,27 +427,24 @@ Everything written under `experiment.output_dir`:
 results/my_experiment/
 ├── config_used.yaml             # Exact configuration for reproducibility
 ├── split_indices.json           # Train/val/test sample IDs for each iteration
-├── predictions_gnn.csv          # Full predictions DataFrame (GNN)
-├── predictions_tml.csv          # Full predictions DataFrame (TML)
-├── metrics_gnn.json             # All metrics by iteration, model, and split
-├── metrics_tml.json
-├── gnn/
+├── ml_results/
+│   ├── predictions.csv          # Full predictions DataFrame (all trained models)
+│   ├── metrics.json             # All metrics by iteration, model, and split
+│   ├── models/                  # Saved model files (.pt for GNN, .joblib for TML)
 │   └── plots/
 │       ├── GCN_1_learning_curve.png
 │       ├── GCN_1_parity_plot.png          # regression
 │       ├── GCN_1_confusion_matrix.png     # classification
-│       └── GCN_1_class_1_roc_curve.png   # classification
-├── tml/
-│   └── plots/
-│       └── RandomForest-descriptors_1_parity_plot.png
+│       └── RandomForest-Morgan_1_parity_plot.png
+├── unseen_predictions/          # Written when --predict-data is used
+│   └── new_polymers/
+│       ├── predictions.csv      # Predictions for every model + ensemble columns
+│       ├── metrics.json         # Per-model metrics (only when target column present)
+│       └── representation/GNN/raw/
 ├── explanations/
-│   ├── explanations.json                  # Cached raw attribution masks
-│   ├── fragment_attributions.png          # Attribution distribution by functional group
-│   └── poly_0001_heatmap.png             # Per-atom heatmap for each explained molecule
-└── gnn_hyp_opt/                           # Ray Tune HPO results (if HPO was triggered)
-    └── iteration_1/
-        └── GCN/
-            └── GCN.csv
+│   ├── fragment_attributions.png
+│   └── poly_0001_heatmap.png
+└── gnn_hyp_opt/                 # Ray Tune HPO results (if HPO was triggered)
 ```
 
 ---
