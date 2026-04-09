@@ -40,17 +40,15 @@ All outputs are written under the directory specified by
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import logging
 from pathlib import Path
 import time
-from typing import Any
 
 import pandas as pd
-from pydantic import BaseModel, ValidationError
 import yaml
 
+from polynet.config.io import save_options
 from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
@@ -60,7 +58,6 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
-from polynet.config.schemas.base import PolynetBaseModel
 
 # ---------------------------------------------------------------------------
 # Logging setup — runs before any polynet imports so the root logger is
@@ -106,46 +103,6 @@ def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
 def resolve_path(path: str, root: Path) -> Path:
     p = Path(path)
     return p if p.is_absolute() else root / p
-
-
-def validate_configs(config_type: PolynetBaseModel, cfg: dict):
-    try:
-        config_type.model_validate(cfg)
-        logger.info("Valid config")
-        return True
-    except ValidationError as e:
-        logger.warning(
-            "Invalid config. While experiments might run, it is expected no compatibility with app."
-        )
-        logger.warning(e)
-
-
-def save_options(path: Path, options: Any, config_type: PolynetBaseModel) -> None:
-    """Save options/config to a JSON file at the specified path.
-
-    Supports:
-      - dataclass instances
-      - Pydantic v2 models (BaseModel)
-      - plain dicts
-    """
-    validate_configs(config_type, options)
-
-    if dataclasses.is_dataclass(options):
-        payload = dataclasses.asdict(options)
-    elif BaseModel is not None and isinstance(options, BaseModel):
-        # Pydantic v2
-        payload = options.model_dump(mode="json")
-    elif isinstance(options, dict):
-        payload = options
-    else:
-        raise TypeError(
-            f"Unsupported options type: {type(options)!r}. "
-            "Expected dataclass, pydantic BaseModel, or dict."
-        )
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(payload, f, indent=4, ensure_ascii=False)
 
 
 # ---------------------------------------------------------------------------
@@ -255,7 +212,7 @@ def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
     )
     logger.info(f"  Loaded {len(df)} samples from {data_path}")
     logger.info(f"  Columns: {list(df.columns)}")
-    save_options(path=out_dir / "data_options.json", options=data_cfg, config_type=DataConfig)
+    save_options(path=out_dir / "data_options.json", options=data_cfg)
     return df
 
 
@@ -355,7 +312,7 @@ def main() -> None:
     logger.info(f"Output dir : {out_dir}")
     logger.info(f"Task       : {cfg['data']['problem_type']}")
 
-    save_options(out_dir / "general_options.json", options=exp_cfg, config_type=GeneralConfig)
+    save_options(out_dir / "general_options.json", options=exp_cfg)
 
     # Persist resolved config alongside outputs for reproducibility
     with open(out_dir / "config_used.yaml", "w") as f:
@@ -412,7 +369,7 @@ def main() -> None:
             logger.error(f"Descriptor computation failed: {e}. TML stages will be skipped.")
             tml_enabled = False
 
-    save_options(out_dir / "representation_options.json", repr_cfg, RepresentationConfig)
+    save_options(out_dir / "representation_options.json", repr_cfg)
 
     # ------------------------------------------------------------------
     # Stage 4 — Data splits
@@ -426,7 +383,7 @@ def main() -> None:
         out_dir=out_dir,
     )
     split_indexes = (train_idxs, val_idxs, test_idxs)
-    save_options(out_dir / "split_options.json", split_cfg, SplitConfig)
+    save_options(out_dir / "split_options.json", split_cfg)
     done(t0)
 
     all_predictions = []
@@ -440,7 +397,7 @@ def main() -> None:
     if gnn_enabled and dataset is not None:
         t0 = announce("5. Train GNN ensemble")
         gnn_cfg = _build_gnn_config(cfg)
-        save_options(out_dir / "train_gnn_options.json", gnn_cfg, TrainGNNConfig)
+        save_options(out_dir / "train_gnn_options.json", gnn_cfg)
         try:
             gnn_trained, gnn_loaders = train_gnn(
                 dataset, split_indexes, data_cfg, gnn_cfg, random_seed, out_dir
@@ -464,10 +421,8 @@ def main() -> None:
         t0 = announce("7. Train TML ensemble")
         tml_cfg = _build_tml_config(cfg)
         preprocessing_cfg = _build_preprocessing_config(cfg)
-        save_options(out_dir / "train_tml_options.json", tml_cfg, TrainTMLConfig)
-        save_options(
-            out_dir / "preprocessing_tml_options.json", preprocessing_cfg, FeatureTransformConfig
-        )
+        save_options(out_dir / "train_tml_options.json", tml_cfg)
+        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
         try:
             tml_trained, tml_training_data, _ = train_tml(
                 desc_dfs, split_indexes, data_cfg, tml_cfg, preprocessing_cfg, random_seed, out_dir
