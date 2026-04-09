@@ -81,15 +81,15 @@ def load_config(path: str | Path) -> dict:
 def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
     """Apply CLI flags over the loaded YAML config."""
     if args.epochs is not None:
-        cfg["training"]["epochs"] = args.epochs
+        cfg.setdefault("training", {})["epochs"] = args.epochs
     if args.task is not None:
-        cfg["data"]["problem_type"] = args.task
+        cfg.setdefault("data", {})["problem_type"] = args.task
     if args.no_gnn:
-        cfg["gnn_training"]["train_gnn"] = False
+        cfg.setdefault("gnn_training", {})["train_gnn"] = False
     if args.no_tml:
-        cfg["tml_models"]["train_tml"] = False
+        cfg.setdefault("tml_models", {})["train_tml"] = False
     if args.no_explain:
-        cfg["explainability"]["enabled"] = False
+        cfg.setdefault("explainability", {})["enabled"] = False
     return cfg
 
 
