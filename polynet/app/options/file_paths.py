@@ -1,4 +1,3 @@
-from polynet.config.paths import *  # noqa: F401, F403
 from polynet.config.paths import (
     data_file_path,
     data_options_path,
@@ -34,6 +33,7 @@ from polynet.config.paths import (
     unseen_predictions_ml_results_path,
     unseen_predictions_parent_path,
 )
+from polynet.config.paths import *  # noqa: F401, F403
 
 __all__ = [
     "data_file_path",

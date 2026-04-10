@@ -34,7 +34,6 @@ from polynet.pipeline import predict_external
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
 
-
 st.header("Predict on New Data")
 
 st.markdown(

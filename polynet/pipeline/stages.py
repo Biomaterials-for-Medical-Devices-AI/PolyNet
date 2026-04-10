@@ -587,8 +587,12 @@ def predict_external(
 
     import joblib
     import torch
+    from torch_geometric.loader import DataLoader
 
-    from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
+    from polynet.config.column_names import (
+        get_predicted_label_column_name,
+        get_true_label_column_name,
+    )
     from polynet.config.constants import ResultColumn
     from polynet.config.enums import ProblemType
     from polynet.data.preprocessing import sanitise_df
@@ -596,7 +600,6 @@ def predict_external(
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
     from polynet.inference.utils import prepare_probs_df
     from polynet.training.metrics import calculate_metrics
-    from torch_geometric.loader import DataLoader
 
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -624,10 +627,7 @@ def predict_external(
     id_df = df[id_cols].copy().reset_index(drop=True)
     true_label_name = get_true_label_column_name(data_cfg.target_variable_name)
     id_df = id_df.rename(
-        columns={
-            data_cfg.id_col: ResultColumn.INDEX,
-            data_cfg.target_variable_col: true_label_name,
-        }
+        columns={data_cfg.id_col: ResultColumn.INDEX, data_cfg.target_variable_col: true_label_name}
     )
 
     # ------------------------------------------------------------------
@@ -638,8 +638,7 @@ def predict_external(
     tml_model_files = sorted(models_dir.glob("*.joblib"))
 
     gnn_models = {
-        f.stem: torch.load(f, weights_only=False, map_location="cpu")
-        for f in gnn_model_files
+        f.stem: torch.load(f, weights_only=False, map_location="cpu") for f in gnn_model_files
     }
     tml_models = {f.stem: joblib.load(f) for f in tml_model_files}
 
@@ -691,11 +690,10 @@ def predict_external(
         for model_name, model in tml_models.items():
             model_log_name = model_name.replace("_", " ")
             predicted_col = get_predicted_label_column_name(
-                target_variable_name=data_cfg.target_variable_name,
-                model_name=model_log_name,
+                target_variable_name=data_cfg.target_variable_name, model_name=model_log_name
             )
-            ml_model = model_name.rsplit("_", 1)[0]   # e.g. "rf-Morgan"
-            df_name = ml_model.rsplit("-", 1)[1]       # e.g. "Morgan"
+            ml_model = model_name.rsplit("_", 1)[0]  # e.g. "rf-Morgan"
+            df_name = ml_model.rsplit("-", 1)[1]  # e.g. "Morgan"
             desc_df = descriptor_dfs[df_name]
 
             if scalers:
@@ -750,8 +748,7 @@ def predict_external(
         for model_name, model in gnn_models.items():
             model_log_name = model_name.replace("_", " ")
             predicted_col = get_predicted_label_column_name(
-                target_variable_name=data_cfg.target_variable_name,
-                model_name=model_log_name,
+                target_variable_name=data_cfg.target_variable_name, model_name=model_log_name
             )
             loader = DataLoader(dataset)
             preds = model.predict_loader(loader)
@@ -766,7 +763,8 @@ def predict_external(
                 preds_df[probs_df.columns] = probs_df.to_numpy()
 
             preds_all = (
-                preds_df if preds_all is None
+                preds_df
+                if preds_all is None
                 else pd.merge(preds_all, preds_df, on=[ResultColumn.INDEX])
             )
 
@@ -786,15 +784,22 @@ def predict_external(
                 arch_preds = preds_all[cols]
                 if data_cfg.problem_type == ProblemType.Classification:
                     from scipy.stats import mode as scipy_mode
+
                     votes, _ = scipy_mode(arch_preds.values, axis=1, keepdims=False)
                     ensemble_series.append(
-                        pd.Series(votes, index=arch_preds.index,
-                                  name=f"{arch} Ensemble {ResultColumn.PREDICTED}")
+                        pd.Series(
+                            votes,
+                            index=arch_preds.index,
+                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
+                        )
                     )
                 else:
                     ensemble_series.append(
-                        pd.Series(arch_preds.mean(axis=1), index=arch_preds.index,
-                                  name=f"{arch} Ensemble {ResultColumn.PREDICTED}")
+                        pd.Series(
+                            arch_preds.mean(axis=1),
+                            index=arch_preds.index,
+                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
+                        )
                     )
             if ensemble_series:
                 preds_all = pd.concat([preds_all] + ensemble_series, axis=1)
@@ -805,19 +810,14 @@ def predict_external(
     # Merge TML + GNN predictions
     # ------------------------------------------------------------------
     if predictions_tml is not None and predictions_gnn is not None:
-        predictions = pd.merge(
-            left=predictions_tml,
-            right=predictions_gnn,
-            on=list(id_df.columns),
-        )
+        predictions = pd.merge(left=predictions_tml, right=predictions_gnn, on=list(id_df.columns))
     elif predictions_gnn is not None:
         predictions = predictions_gnn
     elif predictions_tml is not None:
         predictions = predictions_tml
     else:
         raise RuntimeError(
-            f"No trained models found in {models_dir}. "
-            "Run the training pipeline first."
+            f"No trained models found in {models_dir}. " "Run the training pipeline first."
         )
 
     # ------------------------------------------------------------------
@@ -840,16 +840,15 @@ def predict_external(
             model, number = split_name[0], split_name[1]
             model_name_key = f"{model} {number}"
             probs_cols = [
-                c for c in predictions.columns
-                if ResultColumn.SCORE in c and model_name_key in c
+                c for c in predictions.columns if ResultColumn.SCORE in c and model_name_key in c
             ]
-            metrics.setdefault(number, {}).setdefault(model, {})[
-                dataset_name.split(".")[0]
-            ] = calculate_metrics(
-                y_true=predictions[label_col],
-                y_pred=predictions[col],
-                y_probs=predictions[probs_cols] if probs_cols else None,
-                problem_type=data_cfg.problem_type,
+            metrics.setdefault(number, {}).setdefault(model, {})[dataset_name.split(".")[0]] = (
+                calculate_metrics(
+                    y_true=predictions[label_col],
+                    y_pred=predictions[col],
+                    y_probs=predictions[probs_cols] if probs_cols else None,
+                    problem_type=data_cfg.problem_type,
+                )
             )
 
         with open(out_dir / "metrics.json", "w") as f:
