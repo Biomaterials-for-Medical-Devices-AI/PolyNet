@@ -12,16 +12,16 @@ from polynet.config.column_names import (
 from polynet.config.constants import DataSet, ResultColumn
 from polynet.config.enums import Plot, ProblemType, SplitType
 from polynet.config.schemas import DataConfig, TrainGNNConfig
+from polynet.utils.statistical_analysis import (
+    mcnemar_pvalue_matrix,
+    metrics_pvalue_matrix,
+    regression_pvalue_matrix,
+)
 from polynet.visualization import (
     plot_bootstrap_boxplots,
     plot_confusion_matrix,
     plot_parity,
     plot_pvalue_matrix,
-)
-from polynet.utils.statistical_analysis import (
-    mcnemar_pvalue_matrix,
-    metrics_pvalue_matrix,
-    regression_pvalue_matrix,
 )
 
 
