@@ -25,13 +25,18 @@ from polynet.data import sanitise_df
 
 logger = logging.getLogger(__name__)
 
-# Registry of descriptors whose features are inferred directly from the saved CSV
-# (all non-target columns after sanitising), rather than specified by name in the config.
-# Mirrors _COUNT_FP_REGISTRY in polynet.featurizer.descriptors.
-_AUTO_FEATURE_DESCRIPTORS: dict[MolecularDescriptor, str] = {
-    MolecularDescriptor.PolyBERT: "polyBERT",
-    MolecularDescriptor.Morgan: "morgan",
-    MolecularDescriptor.RDKitFP: "rdkitfp",
+# Descriptors whose feature column names are determined by the featurizer
+# implementation rather than the user config, so we read them from the saved
+# CSV directly instead of trying to reconstruct them.
+# PolyMetriX is included because its column naming depends on internal
+# PolyMetriX class names (e.g. "num_diverse_sidechains", "numbackbonefeaturizer")
+# and some featurizers (e.g. BondCounts) expand to multiple output columns —
+# making reconstruction from config keys unreliable.
+_AUTO_FEATURE_DESCRIPTORS: set[MolecularDescriptor] = {
+    MolecularDescriptor.PolyBERT,
+    MolecularDescriptor.Morgan,
+    MolecularDescriptor.RDKitFP,
+    MolecularDescriptor.PolyMetriX,
 }
 
 
@@ -151,26 +156,13 @@ def _resolve_features(
     Returns ``None`` to signal that this descriptor should be skipped.
     """
     if representation in _AUTO_FEATURE_DESCRIPTORS:
+        # Column names are determined by the featurizer implementation, not the
+        # config. Read them directly from the saved CSV.
         return [c for c in sanitised_cols if c != target_col]
-
-    if representation == MolecularDescriptor.PolyMetriX:
-        return _pmx_feature_names(features)
 
     if not features:
         return None
     return list(features)
-
-
-def _pmx_feature_names(features: dict) -> list[str]:
-    """Reconstruct PolyMetriX column names from the features configuration dict."""
-    agg_method = features["agg"]
-    side_feats = features["side_chain"]
-    back_feats = features["backbone"]
-    feats_side_chain = [
-        f"{feat}_sidechainfeaturizer_{agg}" for agg in agg_method for feat in side_feats
-    ]
-    feats_backbone = [f"{feat}_sum_backbonefeaturizer" for feat in back_feats]
-    return feats_side_chain + feats_backbone
 
 
 # ---------------------------------------------------------------------------
