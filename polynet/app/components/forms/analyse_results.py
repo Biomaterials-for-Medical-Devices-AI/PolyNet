@@ -460,9 +460,6 @@ def confusion_matrix_plot_form(
         target_variable_name=data_options.target_variable_name
     )
 
-    st.write(predictions_df[ResultColumn.SET].unique())
-    st.write(DataSet.Test)
-
     set_name = st.multiselect(
         "Select the set to display parity plot",
         options=predictions_df[ResultColumn.SET].unique(),
