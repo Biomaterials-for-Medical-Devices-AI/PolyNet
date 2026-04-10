@@ -18,6 +18,7 @@ Functions
 from __future__ import annotations
 
 import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
 from sklearn.metrics import (
     ConfusionMatrixDisplay,
@@ -26,6 +27,8 @@ from sklearn.metrics import (
     roc_auc_score,
     roc_curve,
 )
+
+from polynet.utils.statistical_analysis import significance_marker
 
 # ---------------------------------------------------------------------------
 # Training diagnostics
@@ -317,4 +320,149 @@ def plot_confusion_matrix(
     if title:
         ax.set_title(title, fontsize=title_fontsize, fontweight="bold")
 
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Statistical comparison
+# ---------------------------------------------------------------------------
+
+
+def plot_pvalue_matrix(
+    p_matrix,
+    model_names=None,
+    alpha: float = 0.05,
+    decimals: int = 3,
+    dpi: int = 300,
+    height: int = 11,
+    width: int = 9,
+    title: str | None = None,
+    title_fontsize: int = 25,
+    x_label_fontsize: int = 20,
+    y_label_fontsize: int = 20,
+    tick_size: int = 15,
+    signifficant_colour: str = "#D73027",
+    non_signifficant_colour: str = "#4575B4",
+    mask_upper_triangle: bool = True,
+) -> plt.Figure:
+    """
+    Plot a lower-triangular p-value matrix with significance colours and stars.
+
+    Parameters
+    ----------
+    p_matrix:
+        Symmetric matrix of p-values (n_models × n_models).
+    model_names:
+        Names of the models. Defaults to "Model 1", "Model 2", …
+    alpha:
+        Significance threshold for colouring.
+    decimals:
+        Decimal places to display.
+    """
+    n = p_matrix.shape[0]
+    if model_names is None:
+        model_names = [f"Model {i + 1}" for i in range(n)]
+
+    annot_matrix = np.empty_like(p_matrix, dtype=object)
+    for i in range(n):
+        for j in range(n):
+            if i == j:
+                annot_matrix[i, j] = ""
+            else:
+                p = p_matrix[i, j]
+                if p < 0.001:
+                    annot_matrix[i, j] = significance_marker(p) + "\n<0.001"
+                else:
+                    annot_matrix[i, j] = f"{significance_marker(p)}\n{p:.{decimals}f}"
+
+    if mask_upper_triangle:
+        mask = np.triu(np.ones_like(p_matrix, dtype=bool))
+    else:
+        mask = np.zeros_like(p_matrix, dtype=bool)
+    np.fill_diagonal(mask, True)
+
+    cmap = sns.color_palette([signifficant_colour, non_signifficant_colour])
+
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+    sns.heatmap(
+        p_matrix,
+        mask=mask,
+        cmap=cmap,
+        annot=annot_matrix,
+        fmt="",
+        linewidths=0.5,
+        cbar=False,
+        vmin=0,
+        vmax=1,
+        center=alpha,
+        annot_kws={"fontsize": tick_size},
+        xticklabels=model_names,
+        yticklabels=model_names,
+        ax=ax,
+    )
+
+    ax.set_xticklabels(model_names, fontsize=x_label_fontsize, rotation=45, ha="right")
+    ax.set_yticklabels(model_names, fontsize=y_label_fontsize, rotation=0)
+
+    if title is None:
+        title = "Pairwise Model Comparison (p-values)"
+    ax.set_title(title, fontsize=title_fontsize)
+
+    fig.tight_layout()
+    return fig
+
+
+def plot_bootstrap_boxplots(
+    metrics_dict: dict,
+    metric_name: str = "Metric",
+    height: int = 9,
+    width: int = 7,
+    title: str | None = None,
+    title_fontsize: int = 25,
+    x_label_fontsize: int = 20,
+    y_label_fontsize: int = 20,
+    tick_size: int = 15,
+    fill_colour: str = "lightgray",
+    border_colour: str = "black",
+    median_colour: str = "red",
+    dpi: int = 350,
+) -> plt.Figure:
+    """
+    Boxplots of bootstrap metric distributions for multiple models with
+    overlaid mean ± 95 % CI.
+
+    Parameters
+    ----------
+    metrics_dict:
+        ``{model_name: list/array of bootstrap metric values}``
+    metric_name:
+        Y-axis label.
+    title:
+        Optional plot title. Defaults to "Bootstrap Distributions of {metric_name}".
+    """
+    model_names = list(metrics_dict.keys())
+    data = [np.array(vals) for vals in metrics_dict.values()]
+
+    fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
+    ax.boxplot(
+        data,
+        labels=model_names,
+        patch_artist=True,
+        boxprops=dict(facecolor=fill_colour, color=border_colour),
+        medianprops=dict(color=median_colour, linewidth=2),
+    )
+
+    ax.set_ylabel(metric_name, fontsize=y_label_fontsize)
+    ax.tick_params(axis="y", which="major", labelsize=tick_size)
+    for label in ax.get_xticklabels():
+        label.set_rotation(45)
+        label.set_horizontalalignment("right")
+        label.set_fontsize(x_label_fontsize)
+
+    ax.set_title(
+        f"Bootstrap Distributions of {metric_name}" if title is None else title,
+        fontsize=title_fontsize,
+    )
+
+    fig.tight_layout()
     return fig
