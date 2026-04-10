@@ -5,7 +5,7 @@ st.set_page_config(page_title="PolyNet", page_icon="🧪")
 
 
 # Main title
-st.title("Welcome to PolyNet!🤩")
+st.title("Welcome to PolyNet!")
 
 # Load and display the logo
 st.image("static/logo.png", width=500)
@@ -13,46 +13,57 @@ st.image("static/logo.png", width=500)
 # Description of the app
 st.markdown(
     """
-**Welcome to PolyNet! 🤩**
+**PolyNet** is a no-code platform for training and applying machine learning models to predict polymer properties from molecular structure.
+It supports both **Graph Neural Networks (GNNs)**, which learn directly from molecular graphs, and **traditional ML models (TML)** such as Random Forest and Support Vector Machines, which operate on pre-computed molecular descriptors.
+You can train either model family independently or both together and compare results.
 
-This platform enables chemists to **train Graph Neural Networks (GNNs)** on their own molecular datasets to predict properties of polymers (yes, on your own dataset! 🥳). Through this tool, you can generate insights and predictions on polymer properties, even without prior knowledge of machine learning models. The app is designed to be intuitive and chemist-friendly, allowing you to focus on the chemistry while the platform takes care of the computations.
+---
 
-### How to Prepare Your Dataset
+### What PolyNet expects
 
-To use this platform, your dataset should be organized as a **CSV file** with specific columns that represent both molecular structures and the property you aim to model/predict. Here's how your CSV file should be structured:
+Your dataset must be a **CSV file** where each row represents one polymer sample. The file must contain:
 
-1. **SMILES column(s)**: The molecular structures of the monomers must be provided as **SMILES strings**. SMILES is a way to represent a molecule's structure using a line of text, which allows the model to read and process the molecule. Each polymer in your dataset should be placed in a separate row. If your polymer includes multiple molecules (e.g., copolymers), you can use multiple columns for SMILES.
+| Column | Required | Description |
+|--------|----------|-------------|
+| **SMILES column(s)** | Yes | One column per monomer unit (e.g. `SMILES_1`, `SMILES_2`). Both SMILES and pSMILES notation are supported. |
+| **Target property column** | Yes | The property to predict. Use continuous numerical values for **regression** tasks (e.g. glass transition temperature), or integer/string class labels for **classification** tasks (e.g. biodegradable / not biodegradable). |
+| **Sample ID column** | Recommended | A unique identifier per row (e.g. `polymer_id`). If omitted, row indices are used. |
+| **Weight/fraction columns** | Optional | For copolymers, one column per monomer giving its molar fraction or weight fraction (e.g. `weight_1`, `weight_2`). |
+| **Extra descriptor columns** | Optional | Any additional numerical features (e.g. dispersity, mean molar mass) that SMILES alone cannot encode. These can be included as custom descriptors. |
 
-2. **Target property column**: This column represents the property you are trying to predict. It can be a wide variety of molecular properties, such as solubility, toxicity, biodegradability, etc. This value should be included in a separate column and associated with each polymer.
+#### Example CSV structure
 
-#### Important Note on Molecular Features
+| id    | SMILES_1        | SMILES_2        | weight_1 | Tg    |
+|-------|-----------------|-----------------|----------|-------|
+| P001  | CCO             | CCC             | 0.6      | 120.5 |
+| P002  | CCN             | c1ccccc1        | 0.4      | 85.2  |
+| ...   | ...             | ...             | ...      | ...   |
 
-While SMILES strings can represent many molecular features, they **cannot fully capture certain structural aspects**, such as **axial chirality**, dispersity, mean molar mass, and other 3D conformations that are critical for some molecular properties. If such features are important for your study, you may need to include additional information in your dataset or preprocess your molecules to ensure these aspects are accurately represented.
+> **Note:** SMILES strings capture connectivity and atom types but cannot encode certain structural features such as dispersity, mean molar mass, or tacticity. Include these as extra columns if they are relevant to your property of interest.
 
-For example, features like stereochemistry might need to be explicitly encoded, and this could be done by adding additional columns that detail such molecular characteristics. GNNs rely on how molecules are represented in these datasets, so the completeness and accuracy of this representation are crucial.
+---
 
-#### Example CSV Structure:
+### Workflow
 
-| SMILES_1         | SMILES_2        | Mol 2 Axial Chirality | Target_Property |
-|------------------|-----------------|-----------------------|-----------------|
-| CCO              | CCC             | 1.4                   | 12.5            |
-| CCN              | C1=CC=CC=C1     | 1.8                   | 8.4             |
-| ...              | ...             | ...                   | ...             |
+The app is organised as a sequential pipeline. Work through the pages in order:
 
-### Navigation
+1. **Create Experiment** — Name your experiment and select your data file. All outputs (models, results, plots) are saved under this experiment.
 
-To make your experience smoother, we’ve organized the platform into three key sections, accessible from the **left side menu**:
-1. **👀 Hyperparameter Opt**: This is an optional (but highly recommended) section. Here, you can search for the best hyperparameters to model your specific problem.
+2. **Representation** — Choose how to represent your molecules. Select molecular descriptor sets for TML models (e.g. Morgan fingerprints, RDKit descriptors) and/or graph node/edge features for GNNs.
 
-2. **👩‍💻 Train GNN**: In this section, you can upload your dataset and configure the settings to train your GNN model (if you didn't do hyperparameter optimization). You will be able to adjust hyperparameters, track progress, and analyze the results.
+3. **Train Models** — Configure your data splitting strategy (random, scaffold, or bootstrap), then train TML models, GNN models, or both. Evaluation metrics and result plots are generated automatically.
 
-3. **🫣 Predict**: After training your model, you can use this section to make predictions on new molecules, for which you don't know the property of interest. Simply upload a CSV file with the molecular structures, and the trained GNN will provide predictions for the desired property.
+4. **Predict** — Upload a new CSV file (same column structure as your training data, target column optional) to obtain predictions from your trained models.
 
-4. **🕵️‍♀️ Explain GNN**: This section offers explainability tools that allow you to understand the rationale behind your GNN’s predictions. Using visualization techniques, you can see which molecular features influence predictions, giving you deeper insights into how the model interprets molecular data.
+5. **Explain Models** — Visualise which molecular fragments drive GNN predictions using attribution-based explainability methods.
 
-### Get Started!
+6. **Analyse Results** — Explore and compare model performance across metrics, splits, and model types.
 
-Choose a page from the menu to begin training your GNN models or make predictions. We're excited to see how you apply this tool to your molecular studies!
+---
+
+### Get Started
+
+Select **Create Experiment** from the left-hand menu to begin.
 """
 )
 
@@ -60,10 +71,8 @@ Choose a page from the menu to begin training your GNN models or make prediction
 st.markdown(
     """
 ---
-This application was designed to empower chemists to leverage the power of **Graph Neural Networks** in their molecular studies.
+If you encounter any issues or have suggestions, please reach out to: eduardo.aguilar-bejarano@nottingham.ac.uk
 
-If you come across any issues or have suggestions for improvements, please feel free to reach out to us at: eduardo.aguilar-bejarano@nottingham.ac.uk
-
-If you found our tool useful, please consider citing our work:
+If you found PolyNet useful in your research, please consider citing our work:
 """
 )
