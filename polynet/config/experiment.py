@@ -157,27 +157,22 @@ class ExperimentConfig(PolynetBaseModel):
     @model_validator(mode="after")
     def tml_requires_non_graph_representation(self) -> "ExperimentConfig":
         """
-        Enforce that TML training is paired with a descriptor or fingerprint
-        representation, not a pure graph representation.
+        Enforce that TML training is paired with a descriptor representation,
+        not a pure graph representation.
 
         Traditional ML models cannot consume molecular graphs directly —
-        they require a fixed-length vector input. If TML is active, at
-        least one of: molecular descriptors or PolyBERT fingerprints must
-        be configured.
+        they require a fixed-length vector input. If TML is active,
+        molecular_descriptors must be configured.
         """
         tml_active = self.train_tml is not None and self.train_tml.train_tml
         if not tml_active:
             return self
 
-        has_descriptors = bool(self.representation.molecular_descriptors)
-        has_polybert = self.representation.polybert_fp
-
-        if not has_descriptors and not has_polybert:
+        if not bool(self.representation.molecular_descriptors):
             raise ValueError(
                 "train_tml is active but the representation config provides no "
                 "fixed-length vector inputs for traditional ML models. "
-                "Add molecular_descriptors or set polybert_fp=True in the "
-                "representation config, or disable train_tml."
+                "Add molecular_descriptors to the representation config, or disable train_tml."
             )
         return self
 
@@ -190,17 +185,15 @@ class ExperimentConfig(PolynetBaseModel):
         SMILES will produce unreliable embeddings. Raise a hard error to
         prevent silent quality issues.
         """
-        from polynet.config.enums import StringRepresentation
+        from polynet.config.enums import MolecularDescriptor, StringRepresentation
 
-        if (
-            self.representation.polybert_fp
-            and self.data.string_representation != StringRepresentation.PSMILES
-        ):
+        uses_polybert = MolecularDescriptor.PolyBERT in self.representation.molecular_descriptors
+        if uses_polybert and self.data.string_representation != StringRepresentation.PSMILES:
             raise ValueError(
-                "representation.polybert_fp is True but data.string_representation "
+                "molecular_descriptors includes 'polybert' but data.string_representation "
                 f"is '{self.data.string_representation}'. PolyBERT requires PSMILES "
                 "notation. Set data.string_representation to StringRepresentation.PSMILES "
-                "or disable polybert_fp."
+                "or remove polybert from molecular_descriptors."
             )
         return self
 
