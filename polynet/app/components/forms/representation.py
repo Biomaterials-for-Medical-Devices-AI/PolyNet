@@ -269,10 +269,9 @@ def molecular_descriptor_representation(
                 When dealing with polymer datasets, it is often necessary to merge multiple SMILES strings into a single representation. This is particularly useful when the dataset contains polymers represented by multiple monomers.
                 In this section, you can specify how to merge the numerical representations of the molecules.
 
-                For molecular descriptor approaches, three strategies are available:
-                1. **Average**: The numerical representations of the molecules are averaged across all molecules in each column. This is useful when you want to capture the overall properties of the polymer.
-                2. **Weighted Average**: representations of the molecules are multiplied by a weighting factor before adding the properties. This is useful when you want to give more importance to certain monomers in the polymer. The weighting factor can be specified in the dataset, and it is typically a column that contains the ratio of each monomer in the polymer.
-                3. **Concatenation**: The numerical representations of the molecules are concatenated together. This method shall be used carefully, as it does not ensure permutation invariance, meaning that the order of the monomers matters.
+                For molecular descriptor approaches, two strategies are available:
+                1. **Weighted Average**: representations of the molecules are multiplied by a weighting factor before adding the properties. This is useful when you want to give more importance to certain monomers in the polymer. The weighting factor can be specified in the dataset, and it is typically a column that contains the ratio of each monomer in the polymer.
+                2. **Concatenation**: The numerical representations of the molecules are concatenated together. This method shall be used carefully, as it does not ensure permutation invariance, meaning that the order of the monomers matters.
 
                 """
             )
