@@ -237,6 +237,47 @@ def _normalise_representation(raw: dict[str, Any]) -> dict[str, Any]:
             _DESCRIPTOR_KEY_COMPAT.get(k, k): v for k, v in out["molecular_descriptors"].items()
         }
 
+    # ---------------------------------------------------------------------------
+    # Backward-compat: migrate deprecated top-level fields into molecular_descriptors
+    # Old configs may contain rdkit_descriptors, df_descriptors, or polybert_fp.
+    # These are no longer schema fields — strip them and fold their data into
+    # molecular_descriptors so the rest of the pipeline is unaffected.
+    # ---------------------------------------------------------------------------
+    mol_desc = out.setdefault("molecular_descriptors", {})
+
+    if "rdkit_descriptors" in out:
+        value = out.pop("rdkit_descriptors")
+        warnings.warn(
+            "Config field 'rdkit_descriptors' is deprecated. "
+            "Use molecular_descriptors[rdkit] instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if value and "rdkit" not in mol_desc:
+            mol_desc["rdkit"] = value
+
+    if "df_descriptors" in out:
+        value = out.pop("df_descriptors")
+        warnings.warn(
+            "Config field 'df_descriptors' is deprecated. "
+            "Use molecular_descriptors[dataframe] instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if value and "dataframe" not in mol_desc:
+            mol_desc["dataframe"] = value
+
+    if "polybert_fp" in out:
+        value = out.pop("polybert_fp")
+        warnings.warn(
+            "Config field 'polybert_fp' is deprecated. "
+            "Use molecular_descriptors[polybert] instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        if value and "polybert" not in mol_desc:
+            mol_desc["polybert"] = value
+
     return out
 
 
