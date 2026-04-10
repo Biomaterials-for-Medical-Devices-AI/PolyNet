@@ -15,11 +15,8 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-from scipy.stats import mode
 
 from polynet.config.column_names import get_score_column_name
-from polynet.config.constants import ResultColumn
-from polynet.config.enums import ProblemType
 
 
 def prepare_probs_df(probs: np.ndarray, target_variable_name: str, model_name: str) -> pd.DataFrame:
@@ -109,65 +106,3 @@ def assemble_predictions(
         all_dfs.append(current_df)
 
     return pd.concat(all_dfs, ignore_index=False)
-
-
-def merge_model_predictions(dfs: list[pd.DataFrame]) -> pd.DataFrame:
-    """Merge per-model prediction DataFrames into one wide DataFrame by index.
-
-    Each input DataFrame must contain a ``ResultColumn.INDEX`` column and at
-    least one prediction column. Prediction columns from later DataFrames are
-    joined onto the first DataFrame by index.
-
-    Args:
-        dfs: List of per-model prediction DataFrames.
-
-    Returns:
-        pd.DataFrame: Wide DataFrame with all prediction columns.
-    """
-    base_df = dfs[0].copy()
-    new_pred_cols = []
-
-    for df in dfs[1:]:
-        pred_col = [col for col in df.columns if col not in base_df.columns][0]
-        new_pred_cols.append(pred_col)
-        base_df = base_df.merge(
-            df[[ResultColumn.INDEX.value, pred_col]], on=ResultColumn.INDEX.value
-        )
-
-    existing_cols = [col for col in base_df.columns if col not in new_pred_cols]
-    return base_df[existing_cols + new_pred_cols]
-
-
-def ensemble_predictions(pred_dfs: list[pd.DataFrame], problem_type: ProblemType) -> pd.DataFrame:
-    """Compute ensemble predictions from a list of single-prediction DataFrames.
-
-    For classification, uses majority vote. For regression, uses the mean.
-
-    Args:
-        pred_dfs: List of DataFrames each containing one prediction column
-            and a ``ResultColumn.INDEX`` column.
-        problem_type: Whether this is a classification or regression task.
-
-    Returns:
-        pd.DataFrame: DataFrame with ``ResultColumn.INDEX`` and
-        ``"Ensemble Prediction"`` columns.
-    """
-    combined = pred_dfs[0].copy()
-
-    for df in pred_dfs[1:]:
-        pred_col = [col for col in df.columns if col not in combined.columns][0]
-        combined = combined.merge(
-            df[[ResultColumn.INDEX.value, pred_col]], on=ResultColumn.INDEX.value, how="left"
-        )
-
-    combined = combined.set_index(ResultColumn.INDEX.value, drop=True)
-
-    if problem_type == ProblemType.Classification:
-        majority_vote, _ = mode(combined.values, axis=1, keepdims=False)
-        result = pd.Series(majority_vote, index=combined.index, name="Ensemble Prediction")
-    elif problem_type == ProblemType.Regression:
-        result = pd.Series(combined.mean(axis=1), index=combined.index, name="Ensemble Prediction")
-    else:
-        raise ValueError("problem_type must be Classification or Regression.")
-
-    return pd.DataFrame(result).reset_index()
