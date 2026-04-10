@@ -121,7 +121,6 @@ CHEMICAL_FEATURIZER_REGISTRY = {
 TOPOLOGICAL_FEATURIZER_REGISTRY = {
     PMXTopoFeature.NumSideChainFeaturizer: NumSideChainFeaturizer,
     PMXTopoFeature.NumBackBoneFeaturizer: NumBackBoneFeaturizer,
-    PMXTopoFeature.SideChainLengthFeaturizer: SideChainFeaturizer,
 }
 
 
