@@ -20,6 +20,37 @@ from polynet.inference.utils import prepare_probs_df
 from polynet.models.base import BaseNetwork
 
 
+def _parse_tml_model_name(model_name: str) -> tuple[str, str, str]:
+    """Parse a TML model name into its components.
+
+    Expected format: ``<algorithm>-<descriptor>_<iteration>``
+    Example: ``'RandomForest-rdkit_0'`` → ``('RandomForest', 'rdkit', '0')``
+
+    Returns:
+        Tuple of ``(ml_algorithm, df_name, iteration)``.
+
+    Raises:
+        ValueError: If the name does not match the expected format.
+    """
+    parts = model_name.rsplit("_", 1)
+    if len(parts) != 2:
+        raise ValueError(
+            f"Cannot parse model name '{model_name}': expected format "
+            "'<algorithm>-<descriptor>_<iteration>' (e.g. 'RandomForest-rdkit_0')."
+        )
+    ml_model, iteration = parts
+
+    ml_parts = ml_model.rsplit("-", 1)
+    if len(ml_parts) != 2:
+        raise ValueError(
+            f"Cannot parse model name '{model_name}': the algorithm-descriptor segment "
+            f"'{ml_model}' must contain a '-' separator (e.g. 'RandomForest-rdkit')."
+        )
+    ml_algorithm, df_name = ml_parts
+
+    return ml_algorithm, df_name, iteration
+
+
 def predict_unseen_tml(
     models: dict[str, object],
     scalers: dict[str, FeatureTransformer],
@@ -41,9 +72,7 @@ def predict_unseen_tml(
 
     for model_name, model in models.items():
 
-        ml_model, iteration = model_name.rsplit("_", 1)
-        ml_algorithm, df_name = ml_model.rsplit("-", 1)
-
+        ml_algorithm, df_name, iteration = _parse_tml_model_name(model_name)
         model_log_name = model_name.replace("_", " ")
 
         predicted_col_name = get_predicted_label_column_name(
