@@ -127,11 +127,19 @@ class PMXChemFeature(StrEnum):
 class PMXTopoFeature(StrEnum):
     """
     Topology-aware featurizers for polymer representation.
+
+    Sidechain features: NumSideChainFeaturizer, SideChainLengthFeaturizer,
+        SidechainLengthToStarAttachmentDistanceRatioFeaturizer,
+        StarToSidechainMinDistanceFeaturizer, SidechainDiversityFeaturizer
+    Backbone features: NumBackBoneFeaturizer
     """
 
     NumSideChainFeaturizer = "num_sidechains"
     NumBackBoneFeaturizer = "num_backbone"
     SideChainLengthFeaturizer = "sidechain_length"
+    SidechainLengthToStarAttachmentDistanceRatioFeaturizer = "sidechain_length_to_star_attachment_distance_ratio"
+    StarToSidechainMinDistanceFeaturizer = "star_to_sidechain_min_distance"
+    SidechainDiversityFeaturizer = "sidechain_diversity"
 
 
 class AtomFeature(StrEnum):
