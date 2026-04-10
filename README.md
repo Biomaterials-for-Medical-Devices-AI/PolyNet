@@ -5,6 +5,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
 [![RDKit](https://img.shields.io/badge/RDKit-supported-informational)](https://www.rdkit.org/)
+[![Tests](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml/badge.svg)](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Poetry](https://img.shields.io/badge/dependency%20management-poetry-60A5FA)](https://python-poetry.org/)
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
