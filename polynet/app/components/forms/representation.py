@@ -17,7 +17,11 @@ from polynet.config.enums import (
     StringRepresentation,
 )
 from polynet.config.schemas.data import DataConfig
-from polynet.featurizer.pmx import CHEMICAL_FEATURIZER_REGISTRY, TOPOLOGICAL_FEATURIZER_REGISTRY
+from polynet.featurizer.pmx import (
+    BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY,
+    CHEMICAL_FEATURIZER_REGISTRY,
+    SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
+)
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
@@ -160,17 +164,16 @@ def molecular_descriptor_representation(
         if pmx_descriptors:
             descriptors_dict[MolecularDescriptor.PolyMetriX] = {}
 
-            # TODO: think of a way to only show topological options related to side chain or backbone
             side_chain_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the side chain of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
-                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
+                + list(SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
                 key=DescriptorCalculationStateKeys.PMXSideChainDescriptors,
             )
             backbone_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the backbone of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
-                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
+                + list(BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
                 key=DescriptorCalculationStateKeys.PMXBackboneDescriptors,
             )
 
