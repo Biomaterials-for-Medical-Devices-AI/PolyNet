@@ -135,7 +135,7 @@ def build_vector_representation(
         )
 
     data_index = get_data_index(data, id_col, smiles_cols, weights_col, target_col)
-    unique_smiles = get_unique_smiles(data, smiles_cols)
+    unique_smiles = _get_unique_smiles(data, smiles_cols)
 
     descriptors = {}
 
@@ -144,7 +144,7 @@ def build_vector_representation(
     rdkit_desc_list = molecular_descriptors.get(MolecularDescriptor.RDKit, [])
 
     if rdkit_desc_list and (rdkit_independent or mix_rdkit_df_descriptors):
-        rdkit_df_dict = calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_desc_list)
+        rdkit_df_dict = _calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_desc_list)
         rdkit_descriptors_df = _merge(
             rdkit_df_dict, data, weights_col, data_index, merging_approach
         )
@@ -470,8 +470,7 @@ def _build_fp_df_dict(
     return {col: data.join(fp_df, how="left", on=col)[fp_cols].copy() for col in smiles_cols}
 
 
-# TODO check if new function name with no underscore is adequate in this file
-def get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
+def _get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
     """Return all unique SMILES strings across all SMILES columns."""
     unique: list[str] = []
     for col in smiles_cols:
@@ -479,17 +478,13 @@ def get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
     return list(dict.fromkeys(unique))  # preserve order, deduplicate
 
 
-# TODO check if new function name with no underscore is adequate in this file
-def calculate_rdkit_df_dict(
+def _calculate_rdkit_df_dict(
     unique_smiles: list[str],
     data: pd.DataFrame,
     smiles_cols: list[str],
     rdkit_descriptors: list[str],
 ) -> dict[str, pd.DataFrame]:
-    """
-    Compute RDKit descriptors once for unique SMILES and join to each
-    SMILES column in the dataset.
-    """
+    """Compute RDKit descriptors once for unique SMILES and join to each SMILES column."""
     desc_dict, columns = calculate_descriptors(unique_smiles, rdkit_descriptors)
     descriptors_df = pd.DataFrame.from_dict(desc_dict, orient="index", columns=columns)
 
@@ -499,6 +494,46 @@ def calculate_rdkit_df_dict(
         rdkit_df_dict[col] = joined.drop(columns=data.columns)
 
     return rdkit_df_dict
+
+
+def compute_rdkit_descriptors(
+    data: pd.DataFrame,
+    smiles_cols: list[str],
+    descriptor_names: list[str],
+    merging_approach: DescriptorMergingMethod,
+    weights_col: dict[str, str] | None = None,
+) -> pd.DataFrame:
+    """
+    Compute RDKit descriptors for a dataset and merge across SMILES columns.
+
+    This is the public entry point for on-demand RDKit descriptor calculation
+    outside the full training pipeline (e.g. for visualisation). It handles
+    deduplication, per-SMILES computation, and merging in one call.
+
+    Parameters
+    ----------
+    data:
+        Dataset DataFrame containing the SMILES columns.
+    smiles_cols:
+        Column names containing SMILES strings.
+    descriptor_names:
+        RDKit descriptor names to compute (e.g. ``["MolWt", "TPSA"]``).
+    merging_approach:
+        How to merge per-monomer values into a single polymer-level value.
+    weights_col:
+        Mapping from SMILES column to weight-fraction column.
+        Required when ``merging_approach`` is ``WeightedAverage``.
+
+    Returns
+    -------
+    pd.DataFrame
+        Merged descriptor values, indexed like ``data``, with one column
+        per requested descriptor.
+    """
+    unique = _get_unique_smiles(data, smiles_cols)
+    df_dict = _calculate_rdkit_df_dict(unique, data, smiles_cols, descriptor_names)
+    empty_index = data[[]]  # preserves index, carries no columns
+    return _merge(df_dict, data, weights_col, empty_index, merging_approach)
 
 
 def _merge(
