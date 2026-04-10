@@ -32,7 +32,7 @@ from polynet.config.enums import (
     ImportanceNormalisationMethod,
     ProblemType,
 )
-from polynet.explain.explain_mol import (
+from polynet.explainability import (
     get_fragment_importance,
     plot_attribution_distribution,
     plot_mols_with_numeric_weights,
@@ -237,8 +237,8 @@ def explain_model(
     frags_importances = get_fragment_importance(
         mols=mols,
         node_masks=node_masks,
-        explain_algorithm=explain_algorithm,
-        fragmentation_approach=fragmentation_approach,
+        algorithm=explain_algorithm,
+        fragmentation_method=fragmentation_approach,
     )
 
     fig = plot_attribution_distribution(
