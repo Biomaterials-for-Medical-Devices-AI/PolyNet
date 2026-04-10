@@ -182,8 +182,13 @@ def build_vector_representation(
                 data_index=data_index,
                 merging_approach=merging_approach,
             )
-        except Exception:
-            logger.exception("PolyBERT fingerprint computation failed.")
+        except Exception as e:
+            logger.warning(
+                "PolyBERT fingerprint computation failed (%s: %s). "
+                "Continuing without PolyBERT features.",
+                type(e).__name__,
+                e,
+            )
 
     # --- PolyMetriX ---
     if MolecularDescriptor.PolyMetriX in molecular_descriptors:
@@ -345,8 +350,14 @@ def get_polybert_fingerprints(
         p_str = str(p)
         try:
             c = canonicalize(p_str)
-        except Exception:
-            # If canonicalization fails, keep original; embedding may still work
+        except Exception as e:
+            logger.warning(
+                "pSMILES canonicalization failed for '%s' (%s: %s). "
+                "Falling back to original string — embedding quality may be reduced.",
+                p_str,
+                type(e).__name__,
+                e,
+            )
             c = p_str
         orig_to_canon[p_str] = c
         canon_list.append(c)
