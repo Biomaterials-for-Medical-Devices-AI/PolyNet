@@ -141,6 +141,7 @@ if experiment_name:
         data_options=data_options,
         random_seed=general_experiment_options.random_seed,
         weights_col=representation_options.weights_col,
+        merging_approach=representation_options.smiles_merge_approach,
     )
 
     st.subheader("Explain GNN Model Predictions")
