@@ -137,7 +137,9 @@ class PMXTopoFeature(StrEnum):
     NumSideChainFeaturizer = "num_sidechains"
     NumBackBoneFeaturizer = "num_backbone"
     SideChainLengthFeaturizer = "sidechain_length"
-    SidechainLengthToStarAttachmentDistanceRatioFeaturizer = "sidechain_length_to_star_attachment_distance_ratio"
+    SidechainLengthToStarAttachmentDistanceRatioFeaturizer = (
+        "sidechain_length_to_star_attachment_distance_ratio"
+    )
     StarToSidechainMinDistanceFeaturizer = "star_to_sidechain_min_distance"
     SidechainDiversityFeaturizer = "sidechain_diversity"
 

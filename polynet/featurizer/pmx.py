@@ -82,8 +82,8 @@ from polymetrix.featurizers.sidechain_backbone_featurizer import (
     BackBoneFeaturizer,
     NumBackBoneFeaturizer,
     NumSideChainFeaturizer,
-    SideChainFeaturizer,
     SidechainDiversityFeaturizer,
+    SideChainFeaturizer,
     SidechainLengthToStarAttachmentDistanceRatioFeaturizer,
     StarToSidechainMinDistanceFeaturizer,
 )
@@ -129,7 +129,7 @@ SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY = {
 }
 
 BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY = {
-    PMXTopoFeature.NumBackBoneFeaturizer: NumBackBoneFeaturizer,
+    PMXTopoFeature.NumBackBoneFeaturizer: NumBackBoneFeaturizer
 }
 
 # Combined registry used by the factory — preserves backwards compatibility.
