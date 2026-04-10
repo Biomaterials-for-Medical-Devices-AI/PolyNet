@@ -12,7 +12,7 @@ from polynet.config.column_names import (
 from polynet.config.constants import DataSet, ResultColumn
 from polynet.config.enums import Plot, ProblemType, SplitType
 from polynet.config.schemas import DataConfig, TrainGNNConfig
-from polynet.utils.plot_utils import (
+from polynet.visualization import (
     plot_bootstrap_boxplots,
     plot_confusion_matrix,
     plot_parity,
