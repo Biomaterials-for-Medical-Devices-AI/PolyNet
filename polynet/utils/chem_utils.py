@@ -1,4 +1,5 @@
 from collections import defaultdict
+import logging
 from typing import Optional
 
 from canonicalize_psmiles.canonicalize import canonicalize
@@ -8,6 +9,8 @@ from rdkit.Chem import BRICS
 from rdkit.Chem.Scaffolds import MurckoScaffold
 
 from polynet.config.enums import AtomFeature, BondFeature, FragmentationMethod, StringRepresentation
+
+logger = logging.getLogger(__name__)
 
 
 def check_smiles(smiles: str) -> bool:
@@ -135,7 +138,9 @@ def fragment_and_match(
     for frag in frags:
         try:
             Chem.SanitizeMol(frag)
-        except:
+        except (ValueError, RuntimeError) as e:
+            frag_smi = Chem.MolToSmiles(frag, sanitize=False) or "<unknown>"
+            logger.warning("Skipping fragment '%s': sanitization failed — %s", frag_smi, e)
             continue
 
         m = mol.GetSubstructMatches(frag, uniquify=True)
