@@ -14,7 +14,7 @@ that downstream metric calculation and plotting are model-agnostic.
 from polynet.inference.gnn import get_predictions_df_gnn
 from polynet.inference.predict import predict_unseen_gnn, predict_unseen_tml
 from polynet.inference.tml import get_predictions_df_tml
-from polynet.inference.utils import ensemble_predictions, merge_model_predictions, prepare_probs_df
+from polynet.inference.utils import prepare_probs_df
 
 __all__ = [
     "get_predictions_df_gnn",
@@ -22,6 +22,4 @@ __all__ = [
     "prepare_probs_df",
     "predict_unseen_gnn",
     "predict_unseen_tml",
-    "merge_model_predictions",
-    "ensemble_predictions",
 ]
