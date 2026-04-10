@@ -83,6 +83,9 @@ from polymetrix.featurizers.sidechain_backbone_featurizer import (
     NumBackBoneFeaturizer,
     NumSideChainFeaturizer,
     SideChainFeaturizer,
+    SidechainDiversityFeaturizer,
+    SidechainLengthToStarAttachmentDistanceRatioFeaturizer,
+    StarToSidechainMinDistanceFeaturizer,
 )
 
 from polynet.config.enums import PMXAggMethod, PMXChemFeature, PMXTopoFeature
@@ -118,9 +121,21 @@ CHEMICAL_FEATURIZER_REGISTRY = {
     PMXChemFeature.HeteroatomDensity: HeteroatomDensity,
 }
 
-TOPOLOGICAL_FEATURIZER_REGISTRY = {
+SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY = {
     PMXTopoFeature.NumSideChainFeaturizer: NumSideChainFeaturizer,
+    PMXTopoFeature.SidechainLengthToStarAttachmentDistanceRatioFeaturizer: SidechainLengthToStarAttachmentDistanceRatioFeaturizer,
+    PMXTopoFeature.StarToSidechainMinDistanceFeaturizer: StarToSidechainMinDistanceFeaturizer,
+    PMXTopoFeature.SidechainDiversityFeaturizer: SidechainDiversityFeaturizer,
+}
+
+BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY = {
     PMXTopoFeature.NumBackBoneFeaturizer: NumBackBoneFeaturizer,
+}
+
+# Combined registry used by the factory — preserves backwards compatibility.
+TOPOLOGICAL_FEATURIZER_REGISTRY = {
+    **SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
+    **BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY,
 }
 
 
