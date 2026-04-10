@@ -1,24 +1,10 @@
 from pathlib import Path
 import re
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
 from polynet.config.column_names import get_score_column_name
-
-
-def save_plot(fig, path, dpi=300):
-    """
-    Saves the plot to the specified path.
-
-    Args:
-        fig: The figure to save.
-        path (str): The path where the plot will be saved.
-    """
-    fig.savefig(path, bbox_inches="tight", dpi=dpi)
-    print(f"Plot saved to {path}")
-    plt.close()
 
 
 def prepare_probs_df(probs: np.ndarray, target_variable_name: str = None, model_name: str = None):
