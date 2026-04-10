@@ -547,8 +547,6 @@ def _merge(
     match merging_approach:
         case DescriptorMergingMethod.WeightedAverage:
             return merge_weighted(df_dict, data, weights_col, data_index)
-        case DescriptorMergingMethod.Average:
-            return _merge_average(df_dict, data_index)
         case DescriptorMergingMethod.Concatenate:
             return _merge_concatenate(df_dict, data_index)
         case DescriptorMergingMethod.NoMerging:
@@ -560,7 +558,7 @@ def _merge(
             )
 
 
-# TODO check if new function name with no underscore is adequate in this file
+# TODO make sure this is public and not private
 def merge_weighted(
     df_dict: dict[str, pd.DataFrame],
     data: pd.DataFrame,
@@ -572,11 +570,6 @@ def merge_weighted(
     }
     combined = sum(weighted.values())
     return pd.concat([data_index, combined], axis=1)
-
-
-def _merge_average(df_dict: dict[str, pd.DataFrame], data_index: pd.DataFrame) -> pd.DataFrame:
-    avg = sum(df_dict.values()) / len(df_dict)
-    return pd.concat([data_index, avg], axis=1)
 
 
 def _merge_concatenate(df_dict: dict[str, pd.DataFrame], data_index: pd.DataFrame) -> pd.DataFrame:

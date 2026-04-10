@@ -170,7 +170,6 @@ class BondFeature(StrEnum):
 class DescriptorMergingMethod(StrEnum):
     """How per-monomer descriptors are merged into a single polymer representation."""
 
-    Average = "average"
     WeightedAverage = "weighted_average"
     Concatenate = "concatenate"
     NoMerging = "no_merging"
