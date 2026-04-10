@@ -55,7 +55,6 @@ _WEIGHTING_COMPAT: dict[str, str] = {
 }
 
 _MERGING_COMPAT: dict[str, str] = {
-    "Average": "average",
     "Weighted Average": "weighted_average",
     "Concatenate": "concatenate",
     "No Merging": "no_merging",

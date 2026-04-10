@@ -5,6 +5,7 @@
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
 [![RDKit](https://img.shields.io/badge/RDKit-supported-informational)](https://www.rdkit.org/)
+[![Tests](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml/badge.svg)](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Poetry](https://img.shields.io/badge/dependency%20management-poetry-60A5FA)](https://python-poetry.org/)
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
@@ -273,8 +274,7 @@ polynet/
 │   ├── gnn.py                 # get_predictions_df_gnn() — GNN predictions over splits
 │   ├── tml.py                 # get_predictions_df_tml() — TML predictions over splits
 │   ├── predict.py             # predict_unseen_tml(), predict_unseen_gnn()
-│   └── utils.py               # prepare_probs_df(), assemble_predictions(),
-│                              # merge_model_predictions(), ensemble_predictions()
+│   └── utils.py               # prepare_probs_df(), assemble_predictions()
 │
 ├── pipeline/                  # Shared pipeline stage functions
 │   ├── __init__.py            # Public API for all stages
@@ -296,17 +296,17 @@ polynet/
 │   └── results.py             # Result-specific plotting helpers
 │
 ├── visualization/             # Low-level plot rendering
-│   ├── plots.py               # Learning curves, parity plots, ROC curves, confusion matrices
+│   ├── plots.py               # Learning curves, parity plots, ROC curves, confusion matrices,
+│   │                          # plot_pvalue_matrix(), plot_bootstrap_boxplots()
 │   └── utils.py               # save_plot()
 │
 ├── utils/                     # General utilities
 │   ├── __init__.py            # create_directory(), save_data(), filter_dataset_by_ids(),
-│   │                          # extract_number(), save_plot(), prepare_probs_df()
+│   │                          # extract_number(), prepare_probs_df()
 │   ├── chem_utils.py          # check_smiles_cols(), determine_string_representation()
 │   ├── data_preprocessing.py  # keep_only_numerical_columns(), check_column_is_numeric(),
 │   │                          # class_balancer(), print_class_balance()
-│   ├── statistical_analysis.py # metrics_pvalue_matrix(), significance_marker(), mcnemar_*
-│   └── plot_utils.py          # Low-level matplotlib helpers
+│   └── statistical_analysis.py # metrics_pvalue_matrix(), significance_marker(), mcnemar_*
 │
 └── app/                       # Streamlit GUI (optional, requires streamlit)
     ├── Welcome_to_PolyNet.py  # App entry point and landing page
@@ -342,6 +342,15 @@ scripts/
 
 configs/
 └── experiment.yaml        # Template experiment configuration
+
+tests/                     # pytest suite (see Testing section)
+├── conftest.py            # Shared fixtures
+├── fixtures/              # Reference CSVs for regression tests
+├── test_merging.py        # Unit tests for merging strategies
+├── test_compute_rdkit.py  # Integration tests for compute_rdkit_descriptors
+├── test_config_loader.py  # Tests for config normalisation pipeline
+├── test_persistence.py    # Tests for load_dataframes column validation
+└── test_descriptors_regression.py  # Numerical regression tests vs reference CSVs
 ```
 
 ---
@@ -445,14 +454,12 @@ preds_df = predict_unseen_gnn(models, dataset, data_cfg)
 
 ### `polynet.inference.utils`
 
-Utilities for assembling and ensembling prediction DataFrames.
+Utilities for assembling prediction DataFrames.
 
 ```python
 from polynet.inference.utils import (
     prepare_probs_df,          # Convert probability arrays to named DataFrame columns
     assemble_predictions,      # Merge per-model per-iteration DataFrames into one wide table
-    merge_model_predictions,   # Join multiple single-model prediction DataFrames by index
-    ensemble_predictions,      # Majority vote (classification) or mean (regression) ensemble
 )
 ```
 
@@ -524,7 +531,7 @@ representations:
     RDKit: []                      # Include RDKit descriptors
     Morgan: []                     # Morgan fingerprints
     PolyBERT: []                   # PolyBERT fingerprints (requires psmiles)
-  smiles_merge_approach: "weighted_average"   # weighted_average | average | concatenate
+  smiles_merge_approach: "weighted_average"   # weighted_average | concatenate | no_merging
 ```
 
 ### `splitting`
@@ -855,6 +862,103 @@ Example output:
 
   Total: 14 passed, 0 failed, 0 skipped
 ```
+
+---
+
+## Testing
+
+PolyNet ships with a [pytest](https://docs.pytest.org/) suite under `tests/`. The suite is split into fast unit tests (no RDKit, no GPU) and slightly slower integration tests (RDKit only, ~4 s total). No network access, PolyBERT model, or PolyMetriX installation is required to run most tests.
+
+### Running the tests
+
+```bash
+# Activate your environment first, then:
+python -m pytest tests/ -v
+```
+
+To run individual modules:
+
+```bash
+python -m pytest tests/test_merging.py -v          # Merging logic only  (~0.5 s)
+python -m pytest tests/test_compute_rdkit.py -v    # RDKit integration   (~2 s)
+python -m pytest tests/test_config_loader.py -v    # Config normalisation (~0.5 s)
+python -m pytest tests/test_persistence.py -v      # Persistence layer    (~0.5 s)
+python -m pytest tests/test_descriptors_regression.py -v  # Regression vs reference CSVs (~2 s)
+```
+
+To list all collected tests without running them:
+
+```bash
+python -m pytest tests/ --co -q
+```
+
+### Test modules
+
+| Module | What it covers | External deps |
+|--------|----------------|--------------|
+| `test_merging.py` | Unit tests for `merge_weighted`, `_merge_concatenate`, `_single_smiles`, and the `_merge` dispatch — no RDKit, uses manually constructed DataFrames | None |
+| `test_compute_rdkit.py` | Output shape, column cleanliness, numeric sanity, and index preservation for `compute_rdkit_descriptors` across all merging strategies | RDKit |
+| `test_config_loader.py` | Deprecated field migration (`rdkit_descriptors`, `df_descriptors`, `polybert_fp`), enum compatibility maps, field renames, and unrecognised-key handling in `build_experiment_config` | None |
+| `test_persistence.py` | `_resolve_features` (pure function) and `load_dataframes` column validation — I/O is fully mocked | None |
+| `test_descriptors_regression.py` | Numerical regression against user-supplied reference CSVs in `tests/fixtures/`; locks in exact pipeline outputs across all merging strategies | RDKit |
+
+### Shared fixtures
+
+Common fixtures are defined in `tests/conftest.py` and are automatically available to all test modules:
+
+| Fixture | Type | Description |
+|---------|------|-------------|
+| `two_monomer_df` | `pd.DataFrame` | Two-monomer polymer dataset with percentage-scale weight columns |
+| `single_monomer_df` | `pd.DataFrame` | Single-monomer dataset for `NoMerging` tests |
+| `known_df_dict` | `dict[str, pd.DataFrame]` | Manually constructed df_dict with integer-friendly values for exact arithmetic assertions |
+| `single_key_df_dict` | `dict[str, pd.DataFrame]` | Single-key df_dict |
+| `empty_data_index` | `pd.DataFrame` | Empty-column DataFrame mirroring `compute_rdkit_descriptors`'s internal `data[[]]` pattern |
+
+### Regression test fixtures
+
+The regression tests in `test_descriptors_regression.py` compare live pipeline output against reference CSVs in `tests/fixtures/`:
+
+| File | Contents |
+|------|----------|
+| `input_polymers.csv` | Input dataset — columns: `smiles_A`, `smiles_B`, `weight_A`, `weight_B`, target |
+| `expected_weighted_average.csv` | Reference output for `WeightedAverage` merging |
+| `expected_concatenate.csv` | Reference output for `Concatenate` merging |
+| `expected_no_merging.csv` | Reference output for `NoMerging` on `smiles_A` only |
+
+Weight columns are in **percentage scale (0–100)**, matching the pipeline formula `weight / 100`. To regenerate the reference files after an intentional change to descriptor logic, run:
+
+```python
+# scripts/generate_test_fixtures.py
+import pandas as pd
+from polynet.config.enums import DescriptorMergingMethod
+from polynet.featurizer import compute_rdkit_descriptors
+
+DESCRIPTORS = ["MolWt", "TPSA", "NumRotatableBonds"]
+FIXTURES = "tests/fixtures"
+
+df = pd.read_csv(f"{FIXTURES}/input_polymers.csv", index_col=0)
+
+compute_rdkit_descriptors(df, ["smiles_A", "smiles_B"], DESCRIPTORS,
+    DescriptorMergingMethod.WeightedAverage,
+    weights_col={"smiles_A": "weight_A", "smiles_B": "weight_B"},
+).to_csv(f"{FIXTURES}/expected_weighted_average.csv")
+
+compute_rdkit_descriptors(df, ["smiles_A", "smiles_B"], DESCRIPTORS,
+    DescriptorMergingMethod.Concatenate,
+).to_csv(f"{FIXTURES}/expected_concatenate.csv")
+
+compute_rdkit_descriptors(df, ["smiles_A"], DESCRIPTORS,
+    DescriptorMergingMethod.NoMerging,
+).to_csv(f"{FIXTURES}/expected_no_merging.csv")
+```
+
+### Writing new tests
+
+- Place test files in `tests/` with the `test_` prefix.
+- Add shared fixtures to `tests/conftest.py`.
+- Tests that require RDKit but not GPU, PolyBERT, or PolyMetriX are fine in the main suite — they run in ~2 s.
+- Tests that require PolyBERT or a GPU should be decorated with `@pytest.mark.slow` and skipped in CI by default.
+- Always prefer testing public API (`compute_rdkit_descriptors`, `build_vector_representation`) over private helpers unless the private function has complex logic that warrants direct testing (e.g. `_merge_concatenate`).
 
 ---
 

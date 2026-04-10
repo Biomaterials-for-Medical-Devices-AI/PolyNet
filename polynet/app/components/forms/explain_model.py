@@ -12,6 +12,7 @@ from polynet.app.utils import extract_number
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import DataSet, ResultColumn
 from polynet.config.enums import (
+    DescriptorMergingMethod,
     DimensionalityReduction,
     ExplainAlgorithm,
     FragmentationMethod,
@@ -19,11 +20,7 @@ from polynet.config.enums import (
     ProblemType,
 )
 from polynet.config.schemas import DataConfig
-from polynet.featurizer.descriptors import (
-    calculate_rdkit_df_dict,
-    get_unique_smiles,
-    merge_weighted,
-)
+from polynet.featurizer import compute_rdkit_descriptors
 
 
 def explain_mols_widget(
@@ -80,6 +77,7 @@ def embedding_projection(
     data_options: DataConfig,
     random_seed: int,
     weights_col: dict,
+    merging_approach: DescriptorMergingMethod,
 ):
     if st.checkbox(
         "Plot projection of graph embeddings",
@@ -170,13 +168,14 @@ def embedding_projection(
             )
 
             if descriptor:
-                unique_smiles = get_unique_smiles(projection_data, data_options.smiles_cols)
-                descriptors = calculate_rdkit_df_dict(
-                    unique_smiles, projection_data, data_options.smiles_cols, [descriptor]
+                descriptor_df = compute_rdkit_descriptors(
+                    data=projection_data,
+                    smiles_cols=data_options.smiles_cols,
+                    descriptor_names=[descriptor],
+                    merging_approach=merging_approach,
+                    weights_col=weights_col,
                 )
-                projection_data = merge_weighted(
-                    descriptors, projection_data, weights_col, projection_data
-                )
+                projection_data = projection_data.join(descriptor_df)
                 colour_projection_by = descriptor
 
         style_by = st.selectbox(

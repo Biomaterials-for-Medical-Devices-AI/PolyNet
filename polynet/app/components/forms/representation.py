@@ -17,7 +17,11 @@ from polynet.config.enums import (
     StringRepresentation,
 )
 from polynet.config.schemas.data import DataConfig
-from polynet.featurizer.pmx import CHEMICAL_FEATURIZER_REGISTRY, TOPOLOGICAL_FEATURIZER_REGISTRY
+from polynet.featurizer.pmx import (
+    BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY,
+    CHEMICAL_FEATURIZER_REGISTRY,
+    SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
+)
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
 
@@ -160,17 +164,16 @@ def molecular_descriptor_representation(
         if pmx_descriptors:
             descriptors_dict[MolecularDescriptor.PolyMetriX] = {}
 
-            # TODO: think of a way to only show topological options related to side chain or backbone
             side_chain_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the side chain of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
-                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
+                + list(SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
                 key=DescriptorCalculationStateKeys.PMXSideChainDescriptors,
             )
             backbone_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the backbone of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
-                # + list(TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
+                + list(BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
                 key=DescriptorCalculationStateKeys.PMXBackboneDescriptors,
             )
 
@@ -266,10 +269,9 @@ def molecular_descriptor_representation(
                 When dealing with polymer datasets, it is often necessary to merge multiple SMILES strings into a single representation. This is particularly useful when the dataset contains polymers represented by multiple monomers.
                 In this section, you can specify how to merge the numerical representations of the molecules.
 
-                For molecular descriptor approaches, three strategies are available:
-                1. **Average**: The numerical representations of the molecules are averaged across all molecules in each column. This is useful when you want to capture the overall properties of the polymer.
-                2. **Weighted Average**: representations of the molecules are multiplied by a weighting factor before adding the properties. This is useful when you want to give more importance to certain monomers in the polymer. The weighting factor can be specified in the dataset, and it is typically a column that contains the ratio of each monomer in the polymer.
-                3. **Concatenation**: The numerical representations of the molecules are concatenated together. This method shall be used carefully, as it does not ensure permutation invariance, meaning that the order of the monomers matters.
+                For molecular descriptor approaches, two strategies are available:
+                1. **Weighted Average**: representations of the molecules are multiplied by a weighting factor before adding the properties. This is useful when you want to give more importance to certain monomers in the polymer. The weighting factor can be specified in the dataset, and it is typically a column that contains the ratio of each monomer in the polymer.
+                2. **Concatenation**: The numerical representations of the molecules are concatenated together. This method shall be used carefully, as it does not ensure permutation invariance, meaning that the order of the monomers matters.
 
                 """
             )

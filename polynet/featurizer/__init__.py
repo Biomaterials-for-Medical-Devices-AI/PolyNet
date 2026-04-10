@@ -12,6 +12,7 @@ Molecular featurization utilities for the polynet pipeline.
 from polynet.featurizer.descriptors import (
     build_vector_representation,
     calculate_descriptors,
+    compute_rdkit_descriptors,
     get_morgan_fingerprints,
     get_polybert_fingerprints,
     get_rdkitfp_fingerprints,
@@ -29,6 +30,7 @@ __all__ = [
     # Descriptor computation and merging
     "build_vector_representation",
     "calculate_descriptors",
+    "compute_rdkit_descriptors",
     "get_morgan_fingerprints",
     "get_polybert_fingerprints",
     "get_rdkitfp_fingerprints",

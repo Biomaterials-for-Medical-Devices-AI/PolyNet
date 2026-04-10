@@ -210,7 +210,7 @@ def get_metrics(
             metrics[iteration] = {}
 
         iteration_df = predictions.loc[predictions[iterator] == iteration]
-        result_cols = [col for col in iteration_df.columns if algorithm in col]
+        result_cols = [col for col in iteration_df.columns if col.startswith(algorithm + " ")]
         predicted_col = result_cols.pop(0)
 
         metrics[iteration][algorithm] = {}
