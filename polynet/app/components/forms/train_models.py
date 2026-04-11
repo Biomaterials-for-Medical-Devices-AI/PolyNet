@@ -14,12 +14,14 @@ from polynet.config.enums import (
     ProblemType,
     SplitMethod,
     SplitType,
+    TargetTransformDescriptor,
     TraditionalMLModel,
     TrainingParam,
     TransformDescriptor,
 )
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
 from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.target_preprocessing import TargetTransformConfig
 
 
 def train_TML_models(problem_type: ProblemType):
@@ -329,6 +331,54 @@ def feature_transformer_widgets() -> FeatureTransformConfig:
 
     # Return a validated config object (matches your updated schema)
     return FeatureTransformConfig(scaler=scaler, selectors=selectors, random_state=42)
+
+
+def target_transform_widget() -> TargetTransformConfig:
+    """
+    Render the target variable scaling widget for regression experiments.
+
+    Returns a :class:`TargetTransformConfig` built from the user's choices.
+    The widget is always rendered; callers are responsible for only calling
+    this function when the problem type is regression.
+    """
+    st.markdown("### Target variable scaling")
+    st.caption(
+        "Optionally scale the target variable before training. "
+        "The scaler is fitted on the training set only and inverse-transformed "
+        "before metrics and plots are computed, so all reported values remain "
+        "in the original target range."
+    )
+
+    _STRATEGY_LABELS: dict[TargetTransformDescriptor, str] = {
+        TargetTransformDescriptor.NoTransformation: "No scaling",
+        TargetTransformDescriptor.StandardScaler: "Standardisation  (zero mean, unit variance)",
+        TargetTransformDescriptor.MinMaxScaler: "Min–Max  (scale to [0, 1])",
+        TargetTransformDescriptor.RobustScaler: "Robust scaler  (IQR-based, outlier-resistant)",
+        TargetTransformDescriptor.Log10: "Log₁₀  (requires all targets > 0)",
+        TargetTransformDescriptor.Log1p: "Log(1 + y)  (requires all targets > −1)",
+    }
+
+    strategy = st.selectbox(
+        "Scaling strategy",
+        options=list(_STRATEGY_LABELS.keys()),
+        format_func=lambda s: _STRATEGY_LABELS[s],
+        index=0,
+        key=TrainTMLStateKeys.TargetTransformStrategy,
+        help=(
+            "Choose how the target variable is scaled before model training. "
+            "Log₁₀ and Log(1+y) are useful for targets spanning several orders "
+            "of magnitude."
+        ),
+    )
+
+    if strategy in (TargetTransformDescriptor.Log10, TargetTransformDescriptor.Log1p):
+        st.info(
+            f"{'Log₁₀' if strategy == TargetTransformDescriptor.Log10 else 'Log(1+y)'} "
+            "will be applied. Make sure all training target values satisfy the "
+            f"domain constraint ({'> 0' if strategy == TargetTransformDescriptor.Log10 else '> −1'})."
+        )
+
+    return TargetTransformConfig(strategy=strategy)
 
 
 def train_GNN_models_form(representation_opts: RepresentationConfig, problem_type: ProblemType):
