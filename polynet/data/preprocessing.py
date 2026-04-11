@@ -32,7 +32,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from polynet.config.enums import TransformDescriptor
+from polynet.config.enums import TargetTransformDescriptor, TransformDescriptor
 
 logger = logging.getLogger(__name__)
 
@@ -322,3 +322,159 @@ def get_data_index(
         idx_cols.append(target_col)
 
     return data[idx_cols].copy()
+
+
+# ---------------------------------------------------------------------------
+# Target variable scaling
+# ---------------------------------------------------------------------------
+
+
+class TargetScaler:
+    """
+    Scaler for regression target variables.
+
+    Fits exclusively on training targets and provides consistent
+    ``transform`` / ``inverse_transform`` methods used to recover
+    the original value range before metrics and plots are computed.
+
+    Parameters
+    ----------
+    strategy:
+        Scaling strategy. ``TargetTransformDescriptor.NoTransformation``
+        (the default) leaves values unchanged.
+
+    Examples
+    --------
+    >>> from polynet.data.preprocessing import TargetScaler
+    >>> from polynet.config.enums import TargetTransformDescriptor
+    >>> scaler = TargetScaler(TargetTransformDescriptor.StandardScaler)
+    >>> scaler.fit(y_train)
+    >>> y_train_scaled = scaler.transform(y_train)
+    >>> y_pred_original = scaler.inverse_transform(y_pred_scaled)
+    """
+
+    _SKLEARN_STRATEGIES = {
+        TargetTransformDescriptor.StandardScaler,
+        TargetTransformDescriptor.MinMaxScaler,
+        TargetTransformDescriptor.RobustScaler,
+    }
+
+    def __init__(self, strategy: TargetTransformDescriptor = TargetTransformDescriptor.NoTransformation) -> None:
+        self.strategy = TargetTransformDescriptor(strategy) if isinstance(strategy, str) else strategy
+        self._scaler = None
+
+    def fit(self, y: np.ndarray) -> "TargetScaler":
+        """
+        Fit the scaler on training target values.
+
+        Parameters
+        ----------
+        y:
+            1-D array of training target values.
+
+        Returns
+        -------
+        TargetScaler
+            The fitted scaler (for method chaining).
+
+        Raises
+        ------
+        ValueError
+            If ``strategy`` is ``Log10`` and any value in ``y`` is ≤ 0,
+            or if ``strategy`` is ``Log1p`` and any value in ``y`` is ≤ -1.
+        """
+        from sklearn.preprocessing import MinMaxScaler, RobustScaler, StandardScaler
+
+        _SKLEARN_MAP = {
+            TargetTransformDescriptor.StandardScaler: StandardScaler,
+            TargetTransformDescriptor.MinMaxScaler: MinMaxScaler,
+            TargetTransformDescriptor.RobustScaler: RobustScaler,
+        }
+
+        y = np.asarray(y, dtype=float).ravel()
+
+        if self.strategy == TargetTransformDescriptor.NoTransformation:
+            return self
+
+        if self.strategy in self._SKLEARN_STRATEGIES:
+            self._scaler = _SKLEARN_MAP[self.strategy]()
+            self._scaler.fit(y.reshape(-1, 1))
+            return self
+
+        if self.strategy == TargetTransformDescriptor.Log10:
+            if np.any(y <= 0):
+                raise ValueError(
+                    "TargetScaler with strategy 'log10' requires all training target "
+                    f"values to be strictly positive, but found values ≤ 0 in y."
+                )
+            return self
+
+        if self.strategy == TargetTransformDescriptor.Log1p:
+            if np.any(y <= -1):
+                raise ValueError(
+                    "TargetScaler with strategy 'log1p' requires all training target "
+                    f"values to be > -1, but found values ≤ -1 in y."
+                )
+            return self
+
+        raise ValueError(f"Unsupported TargetTransformDescriptor: '{self.strategy}'.")
+
+    def transform(self, y: np.ndarray) -> np.ndarray:
+        """
+        Apply the fitted scaling to ``y``.
+
+        Parameters
+        ----------
+        y:
+            Target values to scale (1-D array or array-like).
+
+        Returns
+        -------
+        np.ndarray
+            Scaled values with the same shape as the input.
+        """
+        y = np.asarray(y, dtype=float).ravel()
+
+        if self.strategy == TargetTransformDescriptor.NoTransformation:
+            return y
+
+        if self.strategy in self._SKLEARN_STRATEGIES:
+            return self._scaler.transform(y.reshape(-1, 1)).ravel()
+
+        if self.strategy == TargetTransformDescriptor.Log10:
+            return np.log10(y)
+
+        if self.strategy == TargetTransformDescriptor.Log1p:
+            return np.log1p(y)
+
+        raise ValueError(f"Unsupported TargetTransformDescriptor: '{self.strategy}'.")
+
+    def inverse_transform(self, y: np.ndarray) -> np.ndarray:
+        """
+        Reverse the scaling applied by ``transform``.
+
+        Parameters
+        ----------
+        y:
+            Scaled target values to invert (1-D array or array-like).
+
+        Returns
+        -------
+        np.ndarray
+            Values in the original target range.
+        """
+        y = np.asarray(y, dtype=float).ravel()
+
+        if self.strategy == TargetTransformDescriptor.NoTransformation:
+            return y
+
+        if self.strategy in self._SKLEARN_STRATEGIES:
+            return self._scaler.inverse_transform(y.reshape(-1, 1)).ravel()
+
+        if self.strategy == TargetTransformDescriptor.Log10:
+            return 10.0 ** y
+
+        if self.strategy == TargetTransformDescriptor.Log1p:
+            return np.expm1(y)
+
+        raise ValueError(f"Unsupported TargetTransformDescriptor: '{self.strategy}'.")
