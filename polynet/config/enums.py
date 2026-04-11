@@ -189,6 +189,17 @@ class TransformDescriptor(StrEnum):
     Normalizer = "normalizer"
 
 
+class TargetTransformDescriptor(StrEnum):
+    """Target variable scaling applied during regression training."""
+
+    NoTransformation = "no_transformation"
+    StandardScaler = "standard_scaler"
+    MinMaxScaler = "min_max_scaler"
+    RobustScaler = "robust_scaler"
+    Log10 = "log10"
+    Log1p = "log1p"
+
+
 class FeatureSelection(StrEnum):
     NoSelection = "no_selection"
     Variance = "variance"
