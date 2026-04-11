@@ -62,7 +62,7 @@ def get_graph_embeddings(dataset, model) -> pd.DataFrame:
                 edge_index=batch.edge_index,
                 edge_attr=batch.edge_attr,
                 batch_index=batch.batch,
-                monomer_weight=batch.weight_monomer,
+                monomer_weight=getattr(batch, "weight_monomer", None),
             )
             embeddings.append(embedding.cpu().numpy())
             ids.append(batch.idx)

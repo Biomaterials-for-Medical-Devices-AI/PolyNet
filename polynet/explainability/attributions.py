@@ -191,7 +191,7 @@ def calculate_attributions(
                         edge_index=mol.edge_index,
                         batch_index=None,
                         edge_attr=mol.edge_attr,
-                        monomer_weight=mol.weight_monomer,
+                        monomer_weight=getattr(mol, "weight_monomer", None),
                         index=0,
                     )
                     .node_mask.detach()

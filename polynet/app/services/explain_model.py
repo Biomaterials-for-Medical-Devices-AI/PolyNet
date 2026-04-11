@@ -326,7 +326,7 @@ def calculate_attributions(
                         edge_index=mol.edge_index,
                         batch_index=None,
                         edge_attr=mol.edge_attr,
-                        monomer_weight=mol.weight_monomer,
+                        monomer_weight=getattr(mol, "weight_monomer", None),
                         index=0,
                     )
                     .node_mask.detach()
@@ -378,7 +378,7 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> np.ndarray:
                 edge_index=batch.edge_index,
                 edge_attr=batch.edge_attr,
                 batch_index=batch.batch,
-                monomer_weight=batch.weight_monomer,
+                monomer_weight=getattr(batch, "weight_monomer", None),
             )
             embeddings.append(embedding.cpu().numpy())
             idx.append(batch.idx)

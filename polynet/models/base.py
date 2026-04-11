@@ -314,7 +314,7 @@ class BaseNetwork(nn.Module):
                     edge_index=batch.edge_index,
                     batch_index=batch.batch,
                     edge_attr=batch.edge_attr,
-                    monomer_weight=batch.weight_monomer,
+                    monomer_weight=getattr(batch, "weight_monomer", None),
                 )
                 y_pred.append(out.cpu().detach().numpy().flatten())
                 idx.append(batch.idx)
@@ -448,7 +448,7 @@ class BaseNetworkClassifier(BaseNetwork):
                         edge_index=batch.edge_index,
                         batch_index=batch.batch,
                         edge_attr=batch.edge_attr,
-                        monomer_weight=batch.weight_monomer,
+                        monomer_weight=getattr(batch, "weight_monomer", None),
                     )
                     .cpu()
                     .detach()

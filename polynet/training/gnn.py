@@ -400,7 +400,7 @@ def train_network(
             edge_index=batch.edge_index,
             batch_index=batch.batch,
             edge_attr=batch.edge_attr,
-            monomer_weight=batch.weight_monomer,
+            monomer_weight=getattr(batch, "weight_monomer", None),
         )
 
         loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
@@ -444,7 +444,7 @@ def eval_network(
                 edge_index=batch.edge_index,
                 batch_index=batch.batch,
                 edge_attr=batch.edge_attr,
-                monomer_weight=batch.weight_monomer,
+                monomer_weight=getattr(batch, "weight_monomer", None),
             )
             loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
             total_loss += loss.item() * batch.num_graphs
