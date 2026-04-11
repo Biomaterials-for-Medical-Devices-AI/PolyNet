@@ -7,6 +7,7 @@ import streamlit as st
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
     split_data_form,
+    target_transform_widget,
     train_GNN_models_form,
     train_TML_models,
 )
@@ -25,6 +26,7 @@ from polynet.app.options.file_paths import (
     preprocessing_tml_model_options_path,
     representation_file_path,
     representation_options_path,
+    target_transform_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
@@ -45,6 +47,7 @@ from polynet.config.schemas import (
     GeneralConfig,
     RepresentationConfig,
     SplitConfig,
+    TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
 )
@@ -67,13 +70,18 @@ def train_models(
     gnn_conv_params: dict,
     representation_options: RepresentationConfig,
     data_options: DataConfig,
+    target_cfg: TargetTransformConfig | None = None,
 ):
+
+    if target_cfg is None:
+        target_cfg = TargetTransformConfig()
 
     # paths for options and experiments
     experiment_path = polynet_experiment_path(experiment_name=experiment_name)
     tml_training_opts_path = train_tml_model_options_path(experiment_path=experiment_path)
     preprocessing_opts_path = preprocessing_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
+    target_transform_opts_path = target_transform_options_path(experiment_path=experiment_path)
     ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
     split_cfg_path = data_spliting_options_path(experiment_path=experiment_path)
     gen_options_path = general_options_path(experiment_path=experiment_path)
@@ -85,6 +93,8 @@ def train_models(
         preprocessing_opts_path.unlink()
     if gnn_training_opts_path.exists():
         gnn_training_opts_path.unlink()
+    if target_transform_opts_path.exists():
+        target_transform_opts_path.unlink()
     if ml_results_dir.exists():
         rmtree(ml_results_dir)
     if split_cfg_path.exists():
@@ -101,6 +111,7 @@ def train_models(
         n_bootstrap_iterations=st.session_state.get(GeneralConfigStateKeys.BootstrapIterations, 1),
     )
     save_options(split_cfg_path, split_cfg)
+    save_options(target_transform_opts_path, target_cfg)
 
     # read the data
     data = pd.read_csv(
@@ -141,7 +152,7 @@ def train_models(
         )
 
         # train via shared stage (also saves .joblib/.pkl model files)
-        tml_trained, tml_training_data, _ = train_tml(
+        tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
             desc_dfs=dataframes,
             split_indexes=train_val_test_idxs,
             data_cfg=data_options,
@@ -149,14 +160,16 @@ def train_models(
             preprocessing_cfg=preprocessing_cfg,
             random_seed=general_experiment_options.random_seed,
             out_dir=experiment_path,
+            target_cfg=target_cfg,
         )
 
-        # generate predictions DataFrame
+        # generate predictions DataFrame (inverse-transform via target_scalers)
         tml_predictions_df = run_tml_inference(
             trained=tml_trained,
             training_data=tml_training_data,
             data_cfg=data_options,
             split_cfg=split_cfg,
+            target_scalers=tml_target_scalers,
         )
 
         metrics_tml = compute_metrics(
@@ -197,13 +210,14 @@ def train_models(
         )
 
         # train via shared stage (also saves .pt model files)
-        gnn_trained, gnn_loaders = train_gnn(
+        gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
             dataset=dataset,
             split_indexes=train_val_test_idxs,
             data_cfg=data_options,
             gnn_cfg=gnn_cfg,
             random_seed=general_experiment_options.random_seed,
             out_dir=experiment_path,
+            target_cfg=target_cfg,
         )
 
         gnn_predictions_df = run_gnn_inference(
@@ -211,6 +225,7 @@ def train_models(
             loaders=gnn_loaders,
             data_cfg=data_options,
             split_cfg=split_cfg,
+            target_scalers=gnn_target_scalers,
         )
 
         metrics_gnn = compute_metrics(
@@ -328,6 +343,14 @@ if experiment_name:
     st.markdown("## Data Splitting Options")
     split_data_form(problem_type=data_opts.problem_type)
 
+    # ------------------------------------------------------------------
+    # Target variable scaling (regression only)
+    # ------------------------------------------------------------------
+    target_cfg = TargetTransformConfig()
+    if data_opts.problem_type.lower() == "regression":
+        st.markdown("## Target Variable Scaling")
+        target_cfg = target_transform_widget()
+
     if gnn_conv_params or tml_models:
         disabled = False
     else:
@@ -343,6 +366,7 @@ if experiment_name:
             gnn_conv_params=gnn_conv_params,
             representation_options=representation_opts,
             data_options=data_opts,
+            target_cfg=target_cfg,
         )
 
         st.success("Models trained successfully!")
