@@ -20,16 +20,26 @@ Public API
 
 from __future__ import annotations
 
+import copy
 from copy import deepcopy
 import logging
 from pathlib import Path
 
+import numpy as np
 import torch
 from torch.nn import Module
 from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
-from polynet.config.enums import Network, Optimizer, ProblemType, Scheduler, TrainingParam
+from polynet.config.enums import (
+    Network,
+    Optimizer,
+    ProblemType,
+    Scheduler,
+    TargetTransformDescriptor,
+    TrainingParam,
+)
+from polynet.data.preprocessing import TargetScaler
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import create_optimizer, create_scheduler
@@ -49,6 +59,31 @@ def filter_dataset_by_ids(dataset, ids: list) -> list:
     return [data for data in dataset if data.idx in id_set]
 
 
+def _scale_dataset_targets(dataset: list, scaler: "TargetScaler") -> list:
+    """
+    Return deep copies of each Data object with the ``y`` attribute scaled.
+
+    Parameters
+    ----------
+    dataset:
+        List of PyG ``Data`` objects.
+    scaler:
+        A fitted ``TargetScaler`` instance.
+
+    Returns
+    -------
+    list
+        New list of Data objects with scaled ``y`` values.
+    """
+    scaled = []
+    for d in dataset:
+        d_copy = copy.copy(d)
+        scaled_y = float(scaler.transform(np.array([d.y.item()]))[0])
+        d_copy.y = torch.tensor([scaled_y], dtype=torch.float)
+        scaled.append(d_copy)
+    return scaled
+
+
 # ---------------------------------------------------------------------------
 # Ensemble training
 # ---------------------------------------------------------------------------
@@ -62,7 +97,8 @@ def train_gnn_ensemble(
     problem_type: ProblemType | str,
     num_classes: int,
     random_seed: int,
-) -> tuple[dict, dict]:
+    target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
+) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
 
@@ -88,18 +124,29 @@ def train_gnn_ensemble(
         Number of output classes (1 for regression).
     random_seed:
         Base random seed. Each iteration uses ``random_seed + i``.
+    target_transform:
+        Optional scaling strategy for the target variable. The scaler is
+        fitted on training y values per iteration. The ``loaders`` dict
+        always stores the **original** (unscaled) Data objects so that
+        ``y_true`` during inference is always in the original target range.
 
     Returns
     -------
-    tuple[dict, dict]
-        ``(trained_models, loaders)`` where:
+    tuple[dict, dict, dict]
+        ``(trained_models, loaders, target_scalers)`` where:
         - ``trained_models``: ``{"{arch}_{iteration}": fitted_model}``
         - ``loaders``: ``{"{iteration}": (train_loader, val_loader, test_loader)}``
+        - ``target_scalers``: ``{"{iteration}": TargetScaler}``
     """
     # Deferred import to avoid circular dependency with hyperopt
     from polynet.training.hyperopt import gnn_hyp_opt
 
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
+    target_transform = (
+        TargetTransformDescriptor(target_transform)
+        if isinstance(target_transform, str)
+        else target_transform
+    )
 
     train_ids, val_ids, test_ids = deepcopy(split_indexes)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -107,6 +154,7 @@ def train_gnn_ensemble(
 
     trained_models: dict = {}
     loaders: dict = {}
+    target_scalers: dict = {}
 
     # Cache non-HPO training params per architecture across iterations
     arch_lr: dict[Network, float] = {}
@@ -121,12 +169,31 @@ def train_gnn_ensemble(
         val_set = filter_dataset_by_ids(dataset, val_idxs)
         test_set = filter_dataset_by_ids(dataset, test_idxs)
 
-        # Prediction-only loaders (batch_size=1, no shuffle)
+        # Prediction-only loaders always use the ORIGINAL (unscaled) Data
+        # objects so that y_true during inference is in the original target range.
         loaders[str(iteration)] = (
             DataLoader(train_set, shuffle=False),
             DataLoader(val_set, shuffle=False),
             DataLoader(test_set, shuffle=False),
         )
+
+        # Fit target scaler on training y values; create scaled copies for training.
+        target_scaler = TargetScaler(strategy=target_transform)
+
+        if (
+            problem_type == ProblemType.Regression
+            and target_transform != TargetTransformDescriptor.NoTransformation
+        ):
+            y_train_vals = np.array([d.y.item() for d in train_set])
+            target_scaler.fit(y_train_vals)
+            train_set_fit = _scale_dataset_targets(train_set, target_scaler)
+            val_set_fit = _scale_dataset_targets(val_set, target_scaler)
+            test_set_fit = _scale_dataset_targets(test_set, target_scaler)
+        else:
+            train_set_fit = train_set
+            val_set_fit = val_set
+            test_set_fit = test_set
+        target_scalers[str(iteration)] = target_scaler
 
         for gnn_arch, arch_params in gnn_conv_params.items():
             arch_params = arch_params or {}
@@ -176,13 +243,13 @@ def train_gnn_ensemble(
             ).to(device)
 
             train_loader = DataLoader(
-                train_set,
+                train_set_fit,
                 batch_size=batch_size,
                 shuffle=True,
-                drop_last=len(train_set) % batch_size == 1,
+                drop_last=len(train_set_fit) % batch_size == 1,
             )
-            val_loader = DataLoader(val_set, shuffle=False)
-            test_loader = DataLoader(test_set, shuffle=False)
+            val_loader = DataLoader(val_set_fit, shuffle=False)
+            test_loader = DataLoader(test_set_fit, shuffle=False)
 
             class_weights = None
             if problem_type == ProblemType.Classification and loss_strength is not None:
@@ -211,7 +278,7 @@ def train_gnn_ensemble(
             )
             trained_models[f"{gnn_arch.value}_{iteration}"] = model
 
-    return trained_models, loaders
+    return trained_models, loaders, target_scalers
 
 
 # ---------------------------------------------------------------------------
