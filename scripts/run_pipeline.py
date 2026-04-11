@@ -175,10 +175,12 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
         params = dict(arch_params) if arch_params else {}
         layers[net] = {_KEY_MAP.get(k, k): v for k, v in params.items()}
 
+    epochs = cfg.get("training", {}).get("epochs", 250)
     return TrainGNNConfig(
         train_gnn=gnn_dict.get("train_gnn", True),
         gnn_convolutional_layers=layers,
         share_gnn_parameters=gnn_dict.get("share_gnn_parameters", True),
+        epochs=epochs,
     )
 
 
