@@ -295,7 +295,6 @@ def train_gnn(
         ``(trained_models, loaders, target_scalers)``
     """
     import joblib
-
     from torch import save as torch_save
 
     from polynet.training.gnn import train_gnn_ensemble
