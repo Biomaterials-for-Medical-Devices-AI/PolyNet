@@ -119,7 +119,7 @@ def get_predictions_df_gnn(
             y_pred = preds[1]
             y_true = np.concatenate([mol.y.cpu().detach().numpy() for mol in loader])
 
-            if target_scaler is not None:
+            if target_scaler is not None and problem_type == ProblemType.Regression:
                 y_pred = target_scaler.inverse_transform(y_pred)
 
             split_df = pd.DataFrame(

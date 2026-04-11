@@ -117,7 +117,7 @@ def get_predictions_df_tml(
             y_true = df[target_variable_col]
             y_pred = model.predict(X)
 
-            if target_scaler is not None:
+            if target_scaler is not None and problem_type == ProblemType.Regression:
                 y_pred = target_scaler.inverse_transform(y_pred)
 
             split_df = pd.DataFrame(
