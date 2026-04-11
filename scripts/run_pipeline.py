@@ -55,6 +55,7 @@ from polynet.config.schemas import (
     GeneralConfig,
     RepresentationConfig,
     SplitConfig,
+    TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
 )
@@ -189,6 +190,15 @@ def _build_tml_config(cfg: dict) -> TrainTMLConfig:
 def _build_preprocessing_config(cfg: dict) -> FeatureTransformConfig:
     """Build FeatureTransformConfig from the 'feature_preprocessing' section."""
     return FeatureTransformConfig.model_validate(cfg["feature_preprocessing"])
+
+
+def _build_target_config(cfg: dict) -> TargetTransformConfig:
+    """Build TargetTransformConfig from the optional 'target_transform' section.
+
+    Falls back to the default (no transformation) when the section is absent,
+    so existing YAML configs remain fully compatible.
+    """
+    return TargetTransformConfig.model_validate(cfg.get("target_transform", {}))
 
 
 # ---------------------------------------------------------------------------
@@ -397,15 +407,18 @@ def main() -> None:
     if gnn_enabled and dataset is not None:
         t0 = announce("5. Train GNN ensemble")
         gnn_cfg = _build_gnn_config(cfg)
+        target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_gnn_options.json", gnn_cfg)
         try:
-            gnn_trained, gnn_loaders = train_gnn(
-                dataset, split_indexes, data_cfg, gnn_cfg, random_seed, out_dir
+            gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
+                dataset, split_indexes, data_cfg, gnn_cfg, random_seed, out_dir, target_cfg
             )
             done(t0)
 
             t0 = announce("6. GNN inference")
-            gnn_predictions = run_gnn_inference(gnn_trained, gnn_loaders, data_cfg, split_cfg)
+            gnn_predictions = run_gnn_inference(
+                gnn_trained, gnn_loaders, data_cfg, split_cfg, gnn_target_scalers
+            )
             all_predictions.append(gnn_predictions)
             all_trained_models.update(gnn_trained)
             done(t0)
@@ -421,16 +434,26 @@ def main() -> None:
         t0 = announce("7. Train TML ensemble")
         tml_cfg = _build_tml_config(cfg)
         preprocessing_cfg = _build_preprocessing_config(cfg)
+        target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_tml_options.json", tml_cfg)
         save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
         try:
-            tml_trained, tml_training_data, _ = train_tml(
-                desc_dfs, split_indexes, data_cfg, tml_cfg, preprocessing_cfg, random_seed, out_dir
+            tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
+                desc_dfs,
+                split_indexes,
+                data_cfg,
+                tml_cfg,
+                preprocessing_cfg,
+                random_seed,
+                out_dir,
+                target_cfg,
             )
             done(t0)
 
             t0 = announce("8. TML inference")
-            tml_predictions = run_tml_inference(tml_trained, tml_training_data, data_cfg, split_cfg)
+            tml_predictions = run_tml_inference(
+                tml_trained, tml_training_data, data_cfg, split_cfg, tml_target_scalers
+            )
             all_predictions.append(tml_predictions)
             all_trained_models.update(tml_trained)
             done(t0)
