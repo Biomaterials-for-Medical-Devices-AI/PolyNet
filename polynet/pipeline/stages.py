@@ -29,6 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from polynet.config.enums import ProblemType, TargetTransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
@@ -302,6 +303,18 @@ def train_gnn(
     if target_cfg is None:
         target_cfg = TargetTransformConfig()
 
+    if (
+        data_cfg.problem_type != ProblemType.Regression
+        and target_cfg.strategy != TargetTransformDescriptor.NoTransformation
+    ):
+        logger.warning(
+            "Target variable scaling ('%s') is only supported for regression problems. "
+            "The scaling setting will be ignored for this %s experiment.",
+            target_cfg.strategy,
+            data_cfg.problem_type,
+        )
+        target_cfg = TargetTransformConfig()  # reset to NoTransformation
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
@@ -423,6 +436,18 @@ def train_tml(
 
     if target_cfg is None:
         target_cfg = TargetTransformConfig()
+
+    if (
+        data_cfg.problem_type != ProblemType.Regression
+        and target_cfg.strategy != TargetTransformDescriptor.NoTransformation
+    ):
+        logger.warning(
+            "Target variable scaling ('%s') is only supported for regression problems. "
+            "The scaling setting will be ignored for this %s experiment.",
+            target_cfg.strategy,
+            data_cfg.problem_type,
+        )
+        target_cfg = TargetTransformConfig()  # reset to NoTransformation
 
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
@@ -635,7 +660,6 @@ def predict_external(
         get_true_label_column_name,
     )
     from polynet.config.constants import ResultColumn
-    from polynet.config.enums import ProblemType
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
