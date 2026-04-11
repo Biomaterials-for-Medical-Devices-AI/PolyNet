@@ -98,6 +98,7 @@ def train_gnn_ensemble(
     num_classes: int,
     random_seed: int,
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
+    epochs: int = 250,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -129,6 +130,8 @@ def train_gnn_ensemble(
         fitted on training y values per iteration. The ``loaders`` dict
         always stores the **original** (unscaled) Data objects so that
         ``y_true`` during inference is always in the original target range.
+    epochs:
+        Number of training epochs per model (default 250).
 
     Returns
     -------
@@ -275,6 +278,7 @@ def train_gnn_ensemble(
                 optimizer=optimizer,
                 scheduler=scheduler,
                 device=device,
+                epochs=epochs,
             )
             trained_models[f"{gnn_arch.value}_{iteration}"] = model
 
