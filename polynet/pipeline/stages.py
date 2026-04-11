@@ -327,6 +327,7 @@ def train_gnn(
         num_classes=data_cfg.num_classes,
         random_seed=random_seed,
         target_transform=target_cfg.strategy,
+        epochs=gnn_cfg.epochs,
     )
 
     for model_name, model in trained_models.items():
