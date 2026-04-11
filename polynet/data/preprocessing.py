@@ -7,10 +7,13 @@ Covers three distinct preprocessing concerns:
 
 1. **Class balancing** — undersampling the majority class for imbalanced
    classification datasets.
-2. **Feature transformation** — scaling and transforming descriptor vectors
-   before traditional ML training.
+2. **Target variable scaling** — fitting and applying a ``TargetScaler``
+   to regression targets before training, with inverse-transform support.
 3. **DataFrame sanitisation** — dropping NaN columns, subsetting to
    relevant columns, extracting index metadata.
+
+Note: feature (X) scaling is handled by ``FeatureTransformer`` in
+``polynet.data.feature_transformer``.
 
 Public API
 ----------
@@ -18,7 +21,7 @@ Public API
 
     from polynet.data.preprocessing import (
         class_balancer,
-        transform_features,
+        TargetScaler,
         sanitise_df,
         get_data_index,
     )
@@ -32,7 +35,7 @@ import logging
 import numpy as np
 import pandas as pd
 
-from polynet.config.enums import TargetTransformDescriptor, TransformDescriptor
+from polynet.config.enums import TargetTransformDescriptor
 
 logger = logging.getLogger(__name__)
 
@@ -138,87 +141,6 @@ def _log_class_balance(data: pd.DataFrame, target: str) -> None:
         f"[{cls}]: {count} ({count / total:.2f})" for cls, count in sorted(counts.items())
     )
     logger.info(f"Class balance after balancing → {summary}")
-
-
-# ---------------------------------------------------------------------------
-# Feature transformation
-# ---------------------------------------------------------------------------
-
-
-def transform_features(
-    fit_data: pd.DataFrame, transform_data: pd.DataFrame, transform_type: TransformDescriptor | str
-) -> tuple[np.ndarray, object]:
-    """
-    Fit a feature scaler on ``fit_data`` and apply it to ``transform_data``.
-
-    The scaler is fitted on the training set and applied to any other set
-    (validation, test) to prevent data leakage.
-
-    Parameters
-    ----------
-    fit_data:
-        DataFrame used to fit the scaler (typically the training set).
-    transform_data:
-        DataFrame to transform (may be the same as ``fit_data`` for
-        the training set, or a held-out set).
-    transform_type:
-        The transformation to apply. Use ``TransformDescriptor.NoTransformation``
-        to return the data unchanged.
-
-    Returns
-    -------
-    tuple[np.ndarray, object]
-        A tuple of ``(transformed_array, fitted_scaler)``. The scaler is
-        returned so it can be saved and applied to future predictions.
-        For ``NoTransformation``, the scaler is ``None``.
-
-    Raises
-    ------
-    ValueError
-        If ``transform_type`` is not recognised.
-
-    Examples
-    --------
-    >>> from polynet.data.preprocessing import transform_features
-    >>> from polynet.config.enums import TransformDescriptor
-    >>> X_train_scaled, scaler = transform_features(X_train, X_train, TransformDescriptor.StandardScaler)
-    >>> X_test_scaled, _ = transform_features(X_train, X_test, TransformDescriptor.StandardScaler)
-    """
-    from sklearn.preprocessing import (
-        MinMaxScaler,
-        Normalizer,
-        PowerTransformer,
-        QuantileTransformer,
-        RobustScaler,
-        StandardScaler,
-    )
-
-    transform_type = (
-        TransformDescriptor(transform_type) if isinstance(transform_type, str) else transform_type
-    )
-
-    _SCALER_REGISTRY: dict[TransformDescriptor, object] = {
-        TransformDescriptor.StandardScaler: StandardScaler(),
-        TransformDescriptor.MinMaxScaler: MinMaxScaler(),
-        TransformDescriptor.RobustScaler: RobustScaler(),
-        TransformDescriptor.PowerTransformer: PowerTransformer(),
-        TransformDescriptor.QuantileTransformer: QuantileTransformer(),
-        TransformDescriptor.Normalizer: Normalizer(),
-    }
-
-    if transform_type == TransformDescriptor.NoTransformation:
-        return transform_data.values if hasattr(transform_data, "values") else transform_data, None
-
-    if transform_type not in _SCALER_REGISTRY:
-        raise ValueError(
-            f"Unsupported transformation type: '{transform_type}'. "
-            f"Available: {[t.value for t in _SCALER_REGISTRY]}."
-        )
-
-    scaler = _SCALER_REGISTRY[transform_type]
-    scaler.fit(fit_data)
-    transformed = scaler.transform(transform_data)
-    return transformed, scaler
 
 
 # ---------------------------------------------------------------------------
@@ -359,8 +281,12 @@ class TargetScaler:
         TargetTransformDescriptor.RobustScaler,
     }
 
-    def __init__(self, strategy: TargetTransformDescriptor = TargetTransformDescriptor.NoTransformation) -> None:
-        self.strategy = TargetTransformDescriptor(strategy) if isinstance(strategy, str) else strategy
+    def __init__(
+        self, strategy: TargetTransformDescriptor = TargetTransformDescriptor.NoTransformation
+    ) -> None:
+        self.strategy = (
+            TargetTransformDescriptor(strategy) if isinstance(strategy, str) else strategy
+        )
         self._scaler = None
 
     def fit(self, y: np.ndarray) -> "TargetScaler":
@@ -472,7 +398,7 @@ class TargetScaler:
             return self._scaler.inverse_transform(y.reshape(-1, 1)).ravel()
 
         if self.strategy == TargetTransformDescriptor.Log10:
-            return 10.0 ** y
+            return 10.0**y
 
         if self.strategy == TargetTransformDescriptor.Log1p:
             return np.expm1(y)
