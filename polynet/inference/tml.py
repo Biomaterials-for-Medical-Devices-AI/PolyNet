@@ -43,6 +43,7 @@ def get_predictions_df_tml(
     target_variable_col: str,
     problem_type: ProblemType | str,
     target_variable_name: str | None = None,
+    target_scalers: dict | None = None,
 ) -> pd.DataFrame:
     """
     Collect TML predictions across all models and iterations into a DataFrame.
@@ -73,6 +74,11 @@ def get_predictions_df_tml(
     target_variable_name:
         Human-readable name of the target property for column naming.
         Defaults to ``target_variable_col`` if not provided.
+    target_scalers:
+        Optional dict of ``{"{df_name}_{iteration}": TargetScaler}`` as
+        returned by ``train_tml_ensemble``. When provided, predicted values
+        are inverse-transformed before being written to the DataFrame so
+        that all reported values are in the original target range.
 
     Returns
     -------
@@ -104,10 +110,15 @@ def get_predictions_df_tml(
 
         split_dfs: list[pd.DataFrame] = []
 
+        target_scaler = (target_scalers or {}).get(f"{df_name}_{iteration}")
+
         for df, set_label in splits:
             X = df.iloc[:, :-1]
             y_true = df[target_variable_col]
             y_pred = model.predict(X)
+
+            if target_scaler is not None:
+                y_pred = target_scaler.inverse_transform(y_pred)
 
             split_df = pd.DataFrame(
                 {
