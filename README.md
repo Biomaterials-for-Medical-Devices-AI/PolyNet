@@ -41,6 +41,7 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **Cross-monomer attention** — optional attention mechanism that models interactions between monomer subgraphs
 - **Automatic HPO** — Ray Tune with ASHA early stopping when no hyperparameters are provided
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
+- **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
 - **Fragment-level explainability** — node attribution via Captum (IntegratedGradients, Saliency, GuidedBackprop, etc.) and GNNExplainer, aggregated to functional group level using BRICS or RECAP fragmentation
 - **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
@@ -205,7 +206,7 @@ Polymers with more than two monomers are supported by adding additional SMILES a
 ```
 polynet/
 ├── config/                    # Schemas, enums, constants, IO, and path helpers
-│   ├── enums.py               # ProblemType, MolecularDescriptor, Network, AtomFeature, etc.
+│   ├── enums.py               # ProblemType, MolecularDescriptor, Network, AtomFeature, TargetTransformDescriptor, etc.
 │   ├── constants.py           # ResultColumn, shared string constants
 │   ├── column_names.py        # Standardised prediction/score column name builders
 │   ├── experiment.py          # ExperimentConfig (top-level Pydantic schema)
@@ -222,13 +223,14 @@ polynet/
 │       ├── training.py        # TrainGNNConfig, TrainTMLConfig
 │       ├── split_data.py      # SplitConfig
 │       ├── feature_preprocessing.py  # FeatureTransformConfig
+│       ├── target_preprocessing.py   # TargetTransformConfig
 │       ├── plotting.py        # PlottingConfig
 │       └── base.py            # PolynetBaseModel (shared Pydantic base)
 │
 ├── data/                      # Data loading and preprocessing
 │   ├── __init__.py            # sanitise_df() — strip SMILES/weight cols, ensure target last
 │   ├── loader.py              # load_dataset() — CSV loading with validation
-│   ├── preprocessing.py       # sanitise_df(), scaling, SMILES-to-string conversion
+│   ├── preprocessing.py       # sanitise_df(), SMILES-to-string conversion, TargetScaler
 │   ├── feature_transformer.py # FeatureTransformer (sklearn scaler wrapper)
 │   └── creator.py             # Synthetic dataset generation (for testing)
 │
@@ -366,14 +368,49 @@ from polynet.pipeline import (
     build_graph_dataset,    # Featurise data into a PyG graph dataset
     compute_descriptors,    # Compute molecular descriptor vectors and save CSVs
     compute_data_splits,    # Generate bootstrap train/val/test split indices
-    train_gnn,              # Train a GNN ensemble, save .pt model files
+    train_gnn,              # Train a GNN ensemble, save .pt model files → (trained, loaders, target_scalers)
     run_gnn_inference,      # Run GNN inference on all splits → predictions DataFrame
-    train_tml,              # Train a TML ensemble, save .joblib + .pkl scaler files
+    train_tml,              # Train a TML ensemble, save .joblib + .pkl files → (trained, data, scalers, target_scalers)
     run_tml_inference,      # Run TML inference on all splits → predictions DataFrame
     compute_metrics,        # Compute evaluation metrics from predictions DataFrame
     plot_results_stage,     # Generate learning curves and result plots
     predict_external,       # Predict on unseen data using a trained experiment
     run_explainability,     # Run attribution-based explainability and save heatmaps
+)
+from polynet.config.schemas import TargetTransformConfig   # Target scaling config (regression)
+from polynet.config.enums import TargetTransformDescriptor # Enum of scaling strategies
+```
+
+Key signatures for the training and inference stages:
+
+```python
+# train_gnn returns a 3-tuple; pass target_cfg to enable target scaling
+gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
+    dataset, split_indexes, data_cfg, gnn_cfg,
+    random_seed=42, out_dir=experiment_path,
+    target_cfg=TargetTransformConfig(strategy=TargetTransformDescriptor.StandardScaler),
+)
+
+# run_gnn_inference — pass target_scalers to inverse-transform predictions
+gnn_preds_df = run_gnn_inference(
+    trained_models=gnn_trained, loaders=gnn_loaders,
+    data_cfg=data_cfg, split_cfg=split_cfg,
+    target_scalers=gnn_target_scalers,
+)
+
+# train_tml returns a 4-tuple
+tml_trained, tml_training_data, tml_scalers, tml_target_scalers = train_tml(
+    desc_dfs=dataframes, split_indexes=split_indexes,
+    data_cfg=data_cfg, tml_cfg=tml_cfg, preprocessing_cfg=preprocessing_cfg,
+    random_seed=42, out_dir=experiment_path,
+    target_cfg=TargetTransformConfig(strategy=TargetTransformDescriptor.Log10),
+)
+
+# run_tml_inference — pass target_scalers to inverse-transform predictions
+tml_preds_df = run_tml_inference(
+    trained=tml_trained, training_data=tml_training_data,
+    data_cfg=data_cfg, split_cfg=split_cfg,
+    target_scalers=tml_target_scalers,
 )
 ```
 
@@ -401,6 +438,7 @@ from polynet.config.paths import (
     general_options_path,                   # <experiment>/general_options.json
     train_gnn_model_options_path,           # <experiment>/train_gnn_options.json
     train_tml_model_options_path,           # <experiment>/train_tml_options.json
+    target_transform_options_path,          # <experiment>/target_transform_options.json
     model_dir,                              # <experiment>/ml_results/models/
     plots_directory,                        # <experiment>/ml_results/plots/
     ml_results_file_path,                   # <experiment>/ml_results/predictions.csv
@@ -612,6 +650,28 @@ feature_preprocessing:
 
 **Available models:** `RandomForest`, `XGBoost`, `SupportVectorMachine`, `LogisticRegression`, `LinearRegression`
 
+### `target_transform`
+
+Applies scaling to the **regression target variable**. The scaler is fit on the training set only; validation and test predictions are inverse-transformed before metrics and plots so all results remain in the original target units. This section is ignored for classification problems.
+
+```yaml
+target_transform:
+  strategy: "standard_scaler"   # See available strategies below
+```
+
+**Available strategies:**
+
+| Strategy | Description |
+|---|---|
+| `no_transformation` | No scaling (default) |
+| `standard_scaler` | Standardise to zero mean and unit variance |
+| `min_max_scaler` | Scale to the [0, 1] interval |
+| `robust_scaler` | IQR-based scaling; outlier-resistant |
+| `log10` | Apply log₁₀ transform — **requires all targets > 0** |
+| `log1p` | Apply log(1 + y) transform — **requires all targets > −1** |
+
+> **Note:** Using `log10` or `log1p` with non-positive target values will raise a `ValueError` at fit time with a descriptive message.
+
 ### `explainability`
 
 ```yaml
@@ -633,6 +693,61 @@ prediction:
   enabled: true
   data_path: "data/new_polymers.csv"
 ```
+
+---
+
+## Target Variable Scaling
+
+For regression experiments, PolyNet can scale the target variable before training and automatically recover the original scale before computing metrics and generating plots. This can stabilise training (especially for targets spanning several orders of magnitude) without affecting how results are reported.
+
+### How it works
+
+1. A `TargetScaler` is **fit on the training set only** — no information from the validation or test sets leaks into the scaler.
+2. The scaler transforms `y_train` (and `y_val` / `y_test` during training) so the model optimises on the scaled values.
+3. At inference time, all predictions are **inverse-transformed back to the original target range** before metrics (R², RMSE, MAE) and plots (parity plots) are computed.
+4. `y_true` values in the predictions DataFrame are always in the original scale.
+5. Each bootstrap iteration has its own independently fitted `TargetScaler`.
+
+### Available strategies
+
+| Strategy | Enum value | Description |
+|---|---|---|
+| No scaling (default) | `no_transformation` | Identity — no change to y |
+| Standardisation | `standard_scaler` | Subtract mean, divide by std (sklearn `StandardScaler`) |
+| Min–Max | `min_max_scaler` | Scale to [0, 1] (sklearn `MinMaxScaler`) |
+| Robust | `robust_scaler` | IQR-based — outlier-resistant (sklearn `RobustScaler`) |
+| Log₁₀ | `log10` | `y → log₁₀(y)`; **all training targets must be > 0** |
+| Log(1 + y) | `log1p` | `y → log(1 + y)`; **all training targets must be > −1** |
+
+### Usage
+
+**YAML config (CLI):**
+
+```yaml
+target_transform:
+  strategy: "standard_scaler"
+```
+
+**Python API:**
+
+```python
+from polynet.config.schemas import TargetTransformConfig
+from polynet.config.enums import TargetTransformDescriptor
+
+target_cfg = TargetTransformConfig(strategy=TargetTransformDescriptor.Log10)
+gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(..., target_cfg=target_cfg)
+```
+
+**Streamlit GUI:** on Page 3 (Train Models), a *Target Variable Scaling* section appears automatically for regression experiments. Select a strategy from the dropdown; a tooltip explains domain constraints for the log transforms.
+
+### Saved files
+
+Target scalers are serialised alongside the model files in `ml_results/models/`:
+
+- **GNN**: `target_scaler_{iteration}.pkl` (e.g. `target_scaler_1.pkl`)
+- **TML**: `target_{descriptor_name}_{iteration}.pkl` (e.g. `target_Morgan_1.pkl`)
+
+When `predict_external` is called (CLI, GUI, or Python API), these files are loaded automatically and applied to new predictions — no manual wiring is needed.
 
 ---
 
@@ -754,7 +869,9 @@ results/my_experiment/
 │   ├── models/                  # Saved model files
 │   │   ├── GCN_1.pt             # GNN model (iteration 1)
 │   │   ├── rf-Morgan_1.joblib   # TML model (iteration 1)
-│   │   └── Morgan.pkl           # Feature scaler for Morgan descriptor
+│   │   ├── Morgan.pkl           # Feature scaler for Morgan descriptor
+│   │   ├── target_scaler_1.pkl  # GNN target scaler (iteration 1; omitted when no_transformation)
+│   │   └── target_Morgan_1.pkl  # TML target scaler for Morgan, iteration 1
 │   └── plots/
 │       ├── GCN_1_learning_curve.png
 │       ├── GCN_1_parity_plot.png
@@ -786,7 +903,7 @@ The app is organised into six sequential pages:
 |---|---|
 | **1 — Create Experiment** | Name the experiment, upload data, configure target and SMILES columns |
 | **2 — Representation** | Select molecular descriptors (RDKit, Morgan, PolyBERT) and GNN featurisation options |
-| **3 — Train Models** | Configure GNN architectures and TML models, set splits, start training |
+| **3 — Train Models** | Configure GNN architectures and TML models, set data splits, optionally apply target variable scaling (regression), start training |
 | **4 — Predict** | Upload an unseen CSV and run prediction using a trained experiment |
 | **5 — Explain Models** | Run atom attribution and visualise fragment importance heatmaps |
 | **6 — Analyse Results** | Inspect training metrics, parity plots, ROC curves, and statistical comparisons |

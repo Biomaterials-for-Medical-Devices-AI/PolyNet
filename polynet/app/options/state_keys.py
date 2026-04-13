@@ -101,6 +101,7 @@ class TrainTMLStateKeys(StrEnum):
     SVMC = "SVMC"
 
     TrasformFeatures = "TrasformFeatures"
+    TargetTransformStrategy = "TargetTransformStrategy"
 
 
 class TrainGNNStateKeys(StrEnum):

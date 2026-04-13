@@ -29,11 +29,13 @@ from pathlib import Path
 
 import pandas as pd
 
+from polynet.config.enums import ProblemType, TargetTransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
     RepresentationConfig,
     SplitConfig,
+    TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
 )
@@ -261,7 +263,8 @@ def train_gnn(
     gnn_cfg: TrainGNNConfig,
     random_seed: int,
     out_dir: Path,
-) -> tuple[dict, dict]:
+    target_cfg: TargetTransformConfig | None = None,
+) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble, save ``.pt`` model files, and return
     ``(trained_models, loaders)``.
@@ -282,20 +285,39 @@ def train_gnn(
         Global random seed.
     out_dir:
         Experiment root directory.
+    target_cfg:
+        Optional target variable scaling configuration. Defaults to no
+        scaling when ``None``.
 
     Returns
     -------
-    tuple[dict, dict]
-        ``(trained_models, loaders)``
+    tuple[dict, dict, dict]
+        ``(trained_models, loaders, target_scalers)``
     """
+    import joblib
     from torch import save as torch_save
 
     from polynet.training.gnn import train_gnn_ensemble
 
+    if target_cfg is None:
+        target_cfg = TargetTransformConfig()
+
+    if (
+        data_cfg.problem_type != ProblemType.Regression
+        and target_cfg.strategy != TargetTransformDescriptor.NoTransformation
+    ):
+        logger.warning(
+            "Target variable scaling ('%s') is only supported for regression problems. "
+            "The scaling setting will be ignored for this %s experiment.",
+            target_cfg.strategy,
+            data_cfg.problem_type,
+        )
+        target_cfg = TargetTransformConfig()  # reset to NoTransformation
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    trained_models, loaders = train_gnn_ensemble(
+    trained_models, loaders, target_scalers = train_gnn_ensemble(
         experiment_path=out_dir,
         dataset=dataset,
         split_indexes=split_indexes,
@@ -303,17 +325,27 @@ def train_gnn(
         problem_type=data_cfg.problem_type,
         num_classes=data_cfg.num_classes,
         random_seed=random_seed,
+        target_transform=target_cfg.strategy,
+        epochs=gnn_cfg.epochs,
     )
 
     for model_name, model in trained_models.items():
         torch_save(model, models_dir / f"{model_name}.pt")
 
+    # TODO: create function to save this scaler
+    for iter_key, scaler in target_scalers.items():
+        joblib.dump(scaler, models_dir / f"target_scaler_{iter_key}.pkl")
+
     logger.info(f"Trained GNN models: {list(trained_models.keys())}")
-    return trained_models, loaders
+    return trained_models, loaders, target_scalers
 
 
 def run_gnn_inference(
-    trained_models: dict, loaders: dict, data_cfg: DataConfig, split_cfg: SplitConfig
+    trained_models: dict,
+    loaders: dict,
+    data_cfg: DataConfig,
+    split_cfg: SplitConfig,
+    target_scalers: dict | None = None,
 ) -> pd.DataFrame:
     """
     Run GNN inference on all splits and return a predictions DataFrame.
@@ -328,6 +360,9 @@ def run_gnn_inference(
         Data configuration (``problem_type``, ``target_variable_name``).
     split_cfg:
         Split configuration (``split_type``).
+    target_scalers:
+        Optional dict of target scalers returned by ``train_gnn``. When
+        provided, predictions are inverse-transformed to the original range.
 
     Returns
     -------
@@ -341,6 +376,7 @@ def run_gnn_inference(
         problem_type=data_cfg.problem_type,
         split_type=split_cfg.split_type,
         target_variable_name=data_cfg.target_variable_name,
+        target_scalers=target_scalers,
     )
     logger.info(f"GNN predictions shape: {predictions.shape}")
     return predictions
@@ -359,7 +395,8 @@ def train_tml(
     preprocessing_cfg: FeatureTransformConfig,
     random_seed: int,
     out_dir: Path,
-) -> tuple[dict, dict, dict]:
+    target_cfg: TargetTransformConfig | None = None,
+) -> tuple[dict, dict, dict, dict]:
     """
     Train a TML ensemble, save model files, and return
     ``(trained, training_data, scalers)``.
@@ -384,20 +421,38 @@ def train_tml(
         Global random seed.
     out_dir:
         Experiment root directory.
+    target_cfg:
+        Optional target variable scaling configuration. Defaults to no
+        scaling when ``None``.
 
     Returns
     -------
-    tuple[dict, dict, dict]
-        ``(trained, training_data, scalers)``
+    tuple[dict, dict, dict, dict]
+        ``(trained, training_data, scalers, target_scalers)``
     """
     import joblib
 
     from polynet.training.tml import train_tml_ensemble
 
+    if target_cfg is None:
+        target_cfg = TargetTransformConfig()
+
+    if (
+        data_cfg.problem_type != ProblemType.Regression
+        and target_cfg.strategy != TargetTransformDescriptor.NoTransformation
+    ):
+        logger.warning(
+            "Target variable scaling ('%s') is only supported for regression problems. "
+            "The scaling setting will be ignored for this %s experiment.",
+            target_cfg.strategy,
+            data_cfg.problem_type,
+        )
+        target_cfg = TargetTransformConfig()  # reset to NoTransformation
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
-    trained, training_data, scalers = train_tml_ensemble(
+    trained, training_data, scalers, target_scalers = train_tml_ensemble(
         tml_models=tml_cfg.selected_models,
         problem_type=data_cfg.problem_type,
         transform_type=preprocessing_cfg.scaler,
@@ -405,6 +460,7 @@ def train_tml(
         dataframes=desc_dfs,
         random_seed=random_seed,
         train_val_test_idxs=split_indexes,
+        target_transform=target_cfg.strategy,
     )
 
     for model_name, model in trained.items():
@@ -412,13 +468,19 @@ def train_tml(
     if scalers:
         for scaler_name, scaler in scalers.items():
             joblib.dump(scaler, models_dir / f"{scaler_name}.pkl")
+    for ts_name, ts in target_scalers.items():
+        joblib.dump(ts, models_dir / f"target_{ts_name}.pkl")
 
     logger.info(f"Trained TML models: {list(trained.keys())}")
-    return trained, training_data, scalers
+    return trained, training_data, scalers, target_scalers
 
 
 def run_tml_inference(
-    trained: dict, training_data: dict, data_cfg: DataConfig, split_cfg: SplitConfig
+    trained: dict,
+    training_data: dict,
+    data_cfg: DataConfig,
+    split_cfg: SplitConfig,
+    target_scalers: dict | None = None,
 ) -> pd.DataFrame:
     """
     Run TML inference on all splits and return a predictions DataFrame.
@@ -433,6 +495,9 @@ def run_tml_inference(
         Data configuration.
     split_cfg:
         Split configuration.
+    target_scalers:
+        Optional dict of target scalers returned by ``train_tml``. When
+        provided, predictions are inverse-transformed to the original range.
 
     Returns
     -------
@@ -447,6 +512,7 @@ def run_tml_inference(
         target_variable_col=data_cfg.target_variable_col,
         problem_type=data_cfg.problem_type,
         target_variable_name=data_cfg.target_variable_name,
+        target_scalers=target_scalers,
     )
     logger.info(f"TML predictions shape: {predictions.shape}")
     return predictions
@@ -594,7 +660,6 @@ def predict_external(
         get_true_label_column_name,
     )
     from polynet.config.constants import ResultColumn
-    from polynet.config.enums import ProblemType
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
@@ -642,8 +707,8 @@ def predict_external(
     }
     tml_models = {f.stem: joblib.load(f) for f in tml_model_files}
 
-    # Scalers: one .pkl per descriptor type, named by the last '-' segment of
-    # the model stem (e.g. "rf-Morgan_1" → "Morgan_1.pkl").
+    # Feature scalers: one .pkl per descriptor type, named by the last '-' segment
+    # of the model stem (e.g. "rf-Morgan_1" → "Morgan_1.pkl").
     scalers: dict = {}
     seen_scaler_names: set = set()
     for f in tml_model_files:
@@ -652,6 +717,19 @@ def predict_external(
         if scaler_name not in seen_scaler_names and scaler_path.exists():
             scalers[scaler_name] = joblib.load(scaler_path)
             seen_scaler_names.add(scaler_name)
+
+    # Target scalers (saved by train_gnn / train_tml).
+    # GNN:  target_scaler_{iteration}.pkl   → keyed by iteration string
+    # TML:  target_{df_name}_{iteration}.pkl → keyed by "{df_name}_{iteration}"
+    gnn_target_scalers: dict = {
+        f.stem.removeprefix("target_scaler_"): joblib.load(f)
+        for f in models_dir.glob("target_scaler_*.pkl")
+    }
+    tml_target_scalers: dict = {
+        f.stem.removeprefix("target_"): joblib.load(f)
+        for f in models_dir.glob("target_*.pkl")
+        if not f.stem.startswith("target_scaler_")
+    }
 
     logger.info(f"Loaded {len(gnn_models)} GNN model(s), {len(tml_models)} TML model(s)")
 
@@ -703,6 +781,14 @@ def predict_external(
                 desc_df = pd.DataFrame(desc_arr, columns=scaler.get_feature_names_out())
 
             preds = model.predict(desc_df)
+
+            # Inverse-transform predictions if a target scaler was saved for
+            # this descriptor set / iteration combination.
+            iteration = model_name.rsplit("_", 1)[1]
+            ts_key = f"{df_name}_{iteration}"
+            if ts_key in tml_target_scalers:
+                preds = tml_target_scalers[ts_key].inverse_transform(preds)
+
             preds_df = pd.DataFrame({predicted_col: preds})
 
             if data_cfg.problem_type == ProblemType.Classification:
@@ -752,7 +838,15 @@ def predict_external(
             )
             loader = DataLoader(dataset)
             preds = model.predict_loader(loader)
-            preds_df = pd.DataFrame({ResultColumn.INDEX: preds[0], predicted_col: preds[1]})
+
+            y_pred = preds[1]
+            # Inverse-transform predictions if a target scaler was saved for
+            # this bootstrap iteration.
+            gnn_iteration = model_name.rsplit("_", 1)[1]
+            if gnn_iteration in gnn_target_scalers:
+                y_pred = gnn_target_scalers[gnn_iteration].inverse_transform(y_pred)
+
+            preds_df = pd.DataFrame({ResultColumn.INDEX: preds[0], predicted_col: y_pred})
 
             if data_cfg.problem_type == ProblemType.Classification:
                 probs_df = prepare_probs_df(

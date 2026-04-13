@@ -1,0 +1,35 @@
+{
+  "1": {
+    "GCN": {
+      "Training": {
+        "accuracy": 0.47368421052631576,
+        "precision": 0.0,
+        "recall": 0.0,
+        "specificity": 1.0,
+        "auroc": 0.33333333333333337,
+        "mcc": 0.0,
+        "f1_score": 0.0,
+        "g_score": 0.0
+      },
+      "Validation": {
+        "accuracy": 0.0,
+        "precision": 0.0,
+        "recall": 0.0,
+        "specificity": 0.0,
+        "mcc": 0.0,
+        "f1_score": 0.0,
+        "g_score": 0.0
+      },
+      "Test": {
+        "accuracy": 0.5,
+        "precision": 0.0,
+        "recall": 0.0,
+        "specificity": 1.0,
+        "auroc": 0.22222222222222224,
+        "mcc": 0.0,
+        "f1_score": 0.0,
+        "g_score": 0.0
+      }
+    }
+  }
+}

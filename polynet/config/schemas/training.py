@@ -62,6 +62,7 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
     share_gnn_parameters: bool = Field(
         default=True, description="Share GNN weights across monomers in multi-SMILES polymers."
     )
+    epochs: int = Field(default=250, ge=1, description="Number of training epochs per GNN model.")
 
     @model_validator(mode="after")
     def layers_required_when_training(self) -> "TrainGNNConfig":

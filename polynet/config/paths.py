@@ -251,6 +251,15 @@ def preprocessing_tml_model_options_path(experiment_path: Path) -> Path:
     return experiment_path / "preprocessing_tml_options.json"
 
 
+def target_transform_options_path(experiment_path: Path) -> Path:
+    """Return the path to the target variable scaling options JSON file.
+
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    """
+    return experiment_path / "target_transform_options.json"
+
+
 def data_spliting_options_path(experiment_path: Path) -> Path:
     """Return the path to the data splitting options JSON file.
 

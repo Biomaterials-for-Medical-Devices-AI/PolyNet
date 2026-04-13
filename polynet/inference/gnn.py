@@ -40,6 +40,7 @@ def get_predictions_df_gnn(
     problem_type: ProblemType | str,
     split_type: SplitType | str,
     target_variable_name: str | None = None,
+    target_scalers: dict | None = None,
 ) -> pd.DataFrame:
     """
     Collect GNN predictions across all models and iterations into a DataFrame.
@@ -65,6 +66,13 @@ def get_predictions_df_gnn(
     target_variable_name:
         Name of the target property used for column naming. If ``None``,
         generic names are used.
+    target_scalers:
+        Optional dict of ``{"{iteration}": TargetScaler}`` as returned by
+        ``train_gnn_ensemble``. When provided, predicted values are
+        inverse-transformed before being written to the DataFrame so that
+        all reported values are in the original target range.  ``y_true``
+        is read from the original (unscaled) loaders and needs no
+        adjustment.
 
     Returns
     -------
@@ -101,6 +109,8 @@ def get_predictions_df_gnn(
 
         split_dfs: list[pd.DataFrame] = []
 
+        target_scaler = (target_scalers or {}).get(iteration)
+
         for loader, set_label in splits:
             preds = model.predict_loader(loader)
             # Regression: predict_loader returns (idx, y_pred)
@@ -108,6 +118,9 @@ def get_predictions_df_gnn(
             sample_ids = preds[0]
             y_pred = preds[1]
             y_true = np.concatenate([mol.y.cpu().detach().numpy() for mol in loader])
+
+            if target_scaler is not None and problem_type == ProblemType.Regression:
+                y_pred = target_scaler.inverse_transform(y_pred)
 
             split_df = pd.DataFrame(
                 {

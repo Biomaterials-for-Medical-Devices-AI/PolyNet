@@ -18,6 +18,7 @@ from __future__ import annotations
 from copy import deepcopy
 import logging
 
+import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
@@ -28,12 +29,13 @@ from xgboost import XGBClassifier, XGBRegressor
 from polynet.config.enums import (
     FeatureSelection,
     ProblemType,
+    TargetTransformDescriptor,
     TraditionalMLModel,
     TransformDescriptor,
 )
 from polynet.config.search_grid import get_tml_search_grid
 from polynet.data.feature_transformer import FeatureTransformer
-from polynet.data.preprocessing import transform_features
+from polynet.data.preprocessing import TargetScaler
 
 logger = logging.getLogger(__name__)
 
@@ -140,7 +142,8 @@ def train_tml_ensemble(
     dataframes: dict[str, pd.DataFrame],
     random_seed: int,
     train_val_test_idxs: tuple[list, list | None, list],
-) -> tuple[dict, dict, dict]:
+    target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
+) -> tuple[dict, dict, dict, dict]:
     """
     Train an ensemble of TML models across all bootstrap iterations.
 
@@ -171,24 +174,36 @@ def train_tml_ensemble(
     train_val_test_idxs:
         Triple of ``(train_indices, val_indices, test_indices)`` as
         returned by ``get_data_split_indices``.
+    target_transform:
+        Optional scaling strategy for the target variable. The scaler is
+        fitted on the training set only; ``training_data`` always stores
+        the original (unscaled) target values so that ``y_true`` in the
+        predictions DataFrame is always in the original range.
 
     Returns
     -------
-    tuple[dict, dict, dict]
-        ``(trained_models, training_data, scalers)`` where:
+    tuple[dict, dict, dict, dict]
+        ``(trained_models, training_data, scalers, target_scalers)`` where:
         - ``trained_models``: ``{model_log_name: fitted_model}``
         - ``training_data``: ``{log_name: (train_df, test_df)}``
-        - ``scalers``: ``{log_name: fitted_scaler}`` or empty dict
+        - ``scalers``: ``{log_name: fitted_feature_scaler}`` or empty dict
+        - ``target_scalers``: ``{log_name: TargetScaler}``
     """
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
     transform_type = (
         TransformDescriptor(transform_type) if isinstance(transform_type, str) else transform_type
+    )
+    target_transform = (
+        TargetTransformDescriptor(target_transform)
+        if isinstance(target_transform, str)
+        else target_transform
     )
 
     train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
     trained_models: dict = {}
     training_data: dict = {}
     scalers: dict = {}
+    target_scalers: dict = {}
 
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
         iteration = i + 1
@@ -223,10 +238,35 @@ def train_tml_ensemble(
             test_df = pd.concat([X_test, y_test], axis=1)
 
             scalers[log_name] = transformer
+            # training_data always stores original (unscaled) y so that y_true
+            # in the predictions DataFrame is always in the original target range.
             training_data[log_name] = (train_df, test_df)
+
+            # Fit target scaler on training y; models are trained on scaled y.
+            target_scaler = TargetScaler(strategy=target_transform)
+            if (
+                problem_type == ProblemType.Regression
+                and target_transform != TargetTransformDescriptor.NoTransformation
+            ):
+                target_scaler.fit(y_train.values)
+            target_scalers[log_name] = target_scaler
+
+            y_train_fit = (
+                np.array(target_scaler.transform(y_train.values))
+                if problem_type == ProblemType.Regression
+                and target_transform != TargetTransformDescriptor.NoTransformation
+                else y_train.values
+            )
 
             model_classes = generate_models(
                 models_to_train=list(tml_models.keys()), problem_type=problem_type
+            )
+
+            # Build a training DataFrame with scaled y for model fitting, while
+            # keeping training_data (returned to the caller) in original scale.
+            train_df_fit = pd.concat(
+                [X_train, pd.Series(y_train_fit, index=combined_train_idxs, name=y_train.name)],
+                axis=1,
             )
 
             for model_id, model_cls in model_classes.items():
@@ -239,18 +279,18 @@ def train_tml_ensemble(
                     model = _run_grid_search(
                         model=model,
                         model_id=model_id,
-                        train_df=train_df,
+                        train_df=train_df_fit,
                         problem_type=problem_type,
                         random_seed=seed,
                     )
                 else:
                     logger.info(f"Fitting {model_id.value} (iteration {iteration}, {df_name})...")
-                    model.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
+                    model.fit(train_df_fit.iloc[:, :-1], train_df_fit.iloc[:, -1])
 
                 model_log_name = f"{model_id.value.replace(' ', '')}-{log_name}"
                 trained_models[model_log_name] = model
 
-    return trained_models, training_data, scalers
+    return trained_models, training_data, scalers, target_scalers
 
 
 def _run_grid_search(
