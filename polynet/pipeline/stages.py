@@ -87,12 +87,15 @@ def build_graph_dataset(
     if data_cfg.id_col and df.index.name == data_cfg.id_col:
         df = df.reset_index()
 
+    polymer_descriptors = repr_cfg.polymer_descriptors or []
+
     keep = []
     if data_cfg.id_col and data_cfg.id_col in df.columns:
         keep.append(data_cfg.id_col)
     keep += data_cfg.smiles_cols + [data_cfg.target_variable_col]
     if repr_cfg.weights_col:
         keep += [c for c in repr_cfg.weights_col.values() if c in df.columns]
+    keep += [c for c in polymer_descriptors if c in df.columns]
 
     df[keep].to_csv(raw_dir / data_cfg.data_name, index=False)
 
@@ -105,6 +108,7 @@ def build_graph_dataset(
         id_col=data_cfg.id_col,
         node_feats=repr_cfg.node_features,
         edge_feats=repr_cfg.edge_features,
+        polymer_descriptors=polymer_descriptors or None,
     )
     logger.info(
         f"Graph dataset: {len(dataset)} graphs, "
