@@ -43,6 +43,7 @@ class DescriptorCalculationStateKeys(StrEnum):
     PMXDescriptors = "pmx_descriptors"
     PMXSideChainDescriptors = "pmx_side_chain_descriptors"
     PMXBackboneDescriptors = "pmx_backbone_descriptors"
+    PMXRepeatUnit = "pmx_repeat_unit"
     PMXAggMethod = "pmx_agg_method"
     polyBERTindependent = "polyBERTindependent"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"

@@ -204,6 +204,12 @@ def molecular_descriptor_representation(
         if pmx_descriptors:
             descriptors_dict[MolecularDescriptor.PolyMetriX] = {}
 
+            polymer_descriptors = st.multiselect(
+                "Select the descriptors to calculate for the monomer repeat unit.",
+                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
+                key=DescriptorCalculationStateKeys.PMXRepeatUnit,
+            )
+
             side_chain_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the side chain of the polymers",
                 options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
@@ -223,6 +229,7 @@ def molecular_descriptor_representation(
                 key=DescriptorCalculationStateKeys.PMXAggMethod,
             )
 
+            descriptors_dict[MolecularDescriptor.PolyMetriX]["polymer"] = polymer_descriptors
             descriptors_dict[MolecularDescriptor.PolyMetriX]["side_chain"] = side_chain_descriptors
             descriptors_dict[MolecularDescriptor.PolyMetriX]["backbone"] = backbone_descriptors
             descriptors_dict[MolecularDescriptor.PolyMetriX]["agg"] = agg_method

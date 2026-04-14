@@ -39,6 +39,7 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **Traditional ML** — Random Forest, XGBoost, SVM, Logistic Regression, Linear Regression
 - **Multi-monomer polymers** — handles copolymers with arbitrary numbers of monomers and weight fractions
 - **Cross-monomer attention** — optional attention mechanism that models interactions between monomer subgraphs
+- **PolyMetriX descriptors** — polymer-aware chemical descriptors (molecular weight, ring counts, TPSA, etc.) computed on the full repeat unit, side chain, or backbone, with configurable aggregation; three modes — `side_chain`, `backbone`, and `polymer` — can be used in any combination
 - **Automatic HPO** — Ray Tune with ASHA early stopping when no hyperparameters are provided
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
@@ -570,6 +571,11 @@ representations:
     RDKit: []                      # Include RDKit descriptors
     Morgan: []                     # Morgan fingerprints
     PolyBERT: []                   # PolyBERT fingerprints (requires psmiles)
+    PolyMetriX:                    # PolyMetriX polymer-aware descriptors (requires polymetrix)
+      polymer: []                  # Chemical features on the full repeat unit (no aggregation)
+      side_chain: []               # Chemical features on side chains (with aggregation)
+      backbone: []                 # Chemical features on the backbone
+      agg: [sum, mean]             # Aggregation methods for side-chain features
   smiles_merge_approach: "weighted_average"   # weighted_average | concatenate | no_merging
   polymer_descriptors:             # Optional: column names from your CSV to use as given features
     - "molecular_weight"
@@ -633,6 +639,139 @@ repr_cfg = RepresentationConfig(
 # build_graph_dataset picks up the columns automatically
 dataset = build_graph_dataset(data=df, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=out_dir)
 ```
+
+---
+
+## PolyMetriX Descriptors
+
+PolyNet integrates the [PolyMetriX](https://lamalab-org.github.io/PolyMetriX/) library to compute polymer-aware chemical descriptors directly from pSMILES strings. Unlike general-purpose RDKit descriptors, PolyMetriX is aware of the polymer repeat unit structure and can target three distinct structural regions: the side chains, the backbone, and the full repeat unit.
+
+> **Requires:** `polymetrix` must be installed in your environment.
+
+### Three computation modes
+
+| Mode | Config key | Wrapper | Aggregation |
+|---|---|---|---|
+| Side chain | `side_chain` | `SideChainFeaturizer` | Yes — specify via `agg` |
+| Backbone | `backbone` | `BackBoneFeaturizer` | No |
+| Full repeat unit | `polymer` | `FullPolymerFeaturizer` | No |
+
+All three modes accept the same set of **chemical features**. The `side_chain` mode additionally accepts topological features (e.g. `num_sidechains`). The `polymer` mode only supports chemical features — topological features have no whole-polymer equivalent and will raise a `ValueError`.
+
+### Available chemical features
+
+| Config value | Description |
+|---|---|
+| `num_hbond_donors` | Number of hydrogen-bond donor groups |
+| `num_hbond_acceptors` | Number of hydrogen-bond acceptor groups |
+| `num_rotatable_bonds` | Number of rotatable bonds |
+| `num_rings` | Total ring count |
+| `num_non_aromatic_rings` | Non-aromatic ring count |
+| `num_aromatic_rings` | Aromatic ring count |
+| `num_atoms` | Atom count |
+| `topological_surface_area` | Topological polar surface area (TPSA) |
+| `fraction_bicyclic_rings` | Fraction of rings that are bicyclic |
+| `num_aliphatic_heterocycles` | Aliphatic heterocycle count |
+| `slogpvsa1` | SlogP VSA descriptor 1 |
+| `balaban_j_index` | Balaban J connectivity index |
+| `molecular_weight` | Molecular weight |
+| `sp3_carbon_count` | Count of sp³ carbon atoms |
+| `sp2_carbon_count` | Count of sp² carbon atoms |
+| `max_estate_index` | Maximum electrotopological state index |
+| `smr_vsa5` | SMR VSA descriptor 5 |
+| `fp_density_morgan1` | Morgan fingerprint density (radius 1) |
+| `halogen_counts` | Halogen atom count |
+| `bond_counts` | Total bond count |
+| `bridging_rings_count` | Number of bridging rings |
+| `max_ring_size` | Size of the largest ring |
+| `heteroatom_count` | Count of non-C, non-H atoms |
+| `heteroatom_density` | Heteroatom density |
+
+### Available topological features (side chain only)
+
+| Config value | Description |
+|---|---|
+| `num_sidechains` | Number of side chains |
+| `num_backbone` | Number of backbone atoms |
+| `sidechain_length_to_star_attachment_distance_ratio` | Sidechain length / star attachment distance |
+| `star_to_sidechain_min_distance` | Minimum distance from star atom to side chain |
+| `sidechain_diversity` | Diversity score of side-chain structures |
+
+### Available aggregation methods (`agg`)
+
+| Config value | Description |
+|---|---|
+| `sum` | Sum over all side chains |
+| `mean` | Mean over all side chains |
+| `max` | Maximum over all side chains |
+| `min` | Minimum over all side chains |
+
+### Configuration
+
+The three modes can be used in any combination. Only keys that are present and non-empty are computed:
+
+```yaml
+representations:
+  molecular_descriptors:
+    PolyMetriX:
+      # Chemical descriptors on the full repeat unit (no aggregation)
+      polymer:
+        - molecular_weight
+        - topological_surface_area
+        - num_rotatable_bonds
+        - num_hbond_donors
+        - num_atoms
+        - num_rings
+      # Chemical descriptors on side chains, aggregated across all side chains
+      side_chain:
+        - num_rings
+        - molecular_weight
+        - num_sidechains          # topological feature — side_chain only
+      agg: [sum, mean]
+
+      # Chemical descriptors on the polymer backbone
+      backbone:
+        - num_atoms
+        - topological_surface_area
+```
+
+### Python API
+
+```python
+from polynet.featurizer.pmx import create_pmx_featurizer
+from polynet.config.enums import PMXChemFeature, PMXTopoFeature, PMXAggMethod
+
+featurizer = create_pmx_featurizer(
+    side_chain_features=[
+        PMXChemFeature.NumRings,
+        PMXChemFeature.MolecularWeight,
+        PMXTopoFeature.NumSideChainFeaturizer,
+    ],
+    backbone_features=[
+        PMXChemFeature.NumAtoms,
+        PMXChemFeature.TopologicalSurfaceArea,
+    ],
+    agg_method=[PMXAggMethod.Sum, PMXAggMethod.Mean],
+    polymer_features=[
+        PMXChemFeature.MolecularWeight,
+        PMXChemFeature.TopologicalSurfaceArea,
+        PMXChemFeature.NumRotatableBonds,
+    ],
+)
+
+# featurize a single polymer
+from polymetrix.featurizers.polymer import Polymer
+polymer = Polymer.from_psmiles("c1ccccc1[*]CCO[*]")
+features = featurizer.featurize(polymer)
+labels   = featurizer.feature_labels()
+```
+
+### Design notes
+
+- All three modes are combined into a single `MultipleFeaturizer` and featurized in one pass per polymer — no redundant SMILES parsing.
+- Feature column ordering in the output is: side-chain features → backbone features → topological features → polymer (full repeat unit) features.
+- Omitting a key (or leaving it as an empty list) is safe — that mode is simply skipped with no error.
+- The `polymer` mode raises a `ValueError` at featurizer construction time if any topological feature is passed, giving a clear message before any computation begins.
 
 ---
 
