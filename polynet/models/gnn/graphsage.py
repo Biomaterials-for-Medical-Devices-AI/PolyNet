@@ -43,6 +43,7 @@ class GraphSAGEBase(BaseNetwork):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -57,6 +58,7 @@ class GraphSAGEBase(BaseNetwork):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -132,6 +134,7 @@ class GraphSAGEClassifier(GraphSAGEBase, BaseNetworkClassifier):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -147,6 +150,7 @@ class GraphSAGEClassifier(GraphSAGEBase, BaseNetworkClassifier):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -167,6 +171,7 @@ class GraphSAGERegressor(GraphSAGEBase):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -182,5 +187,6 @@ class GraphSAGERegressor(GraphSAGEBase):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )

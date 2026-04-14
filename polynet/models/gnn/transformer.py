@@ -43,6 +43,7 @@ class TransformerGNNBase(BaseNetwork):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -57,6 +58,7 @@ class TransformerGNNBase(BaseNetwork):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -112,6 +114,7 @@ class TransformerGNNClassifier(TransformerGNNBase, BaseNetworkClassifier):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -127,6 +130,7 @@ class TransformerGNNClassifier(TransformerGNNBase, BaseNetworkClassifier):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -147,6 +151,7 @@ class TransformerGNNRegressor(TransformerGNNBase):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -162,5 +167,6 @@ class TransformerGNNRegressor(TransformerGNNBase):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )

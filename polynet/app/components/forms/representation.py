@@ -32,6 +32,9 @@ def select_weight_factor(
     mol_weights_col = {}
 
     if requires_weights:
+
+        st.markdown("### Set weighting factors for polymer representation")
+
         smiles_cols = data_options.smiles_cols
         target_col = data_options.target_variable_col
         id_col = data_options.id_col
@@ -67,12 +70,50 @@ def select_weight_factor(
     return mol_weights_col
 
 
+def select_polymer_descriptors(
+    data_options: DataConfig, df: pd.DataFrame, weight_cols: List[str]
+) -> List[str]:
+
+    st.markdown("### Add polymer variables as descriptors")
+
+    smiles_cols = data_options.smiles_cols
+    target_col = data_options.target_variable_col
+    id_col = data_options.id_col
+    descriptors_df = st.session_state.get(DescriptorCalculationStateKeys.DescriptorsDF, [])
+
+    potential_polymer_descriptors = df.drop(
+        columns=[target_col] + smiles_cols + [id_col] + descriptors_df + weight_cols,
+        errors="ignore",
+    )
+    potential_polymer_descriptors = keep_only_numerical_columns(
+        df=potential_polymer_descriptors
+    ).columns.tolist()
+
+    if len(potential_polymer_descriptors) >= 1:
+
+        polymer_descriptors = st.selectbox(
+            label=f"Select the columns containing polymer variables that you want to use as part of the polymer computational representation",
+            options=potential_polymer_descriptors,
+            key=f"{DescriptorCalculationStateKeys.PolymerDescriptors}",
+            index=None,
+            help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
+        )
+
+    else:
+        st.error(
+            "Not numerical columns found in the DataFrame to use as polymer descriptors. Please ensure that the DataFrame contains numeric columns that you'd like to use as descriptors."
+        )
+
+    return polymer_descriptors
+
+
 def molecular_descriptor_representation(
     df: pd.DataFrame, data_options: DataConfig
 ) -> Dict[MolecularDescriptor, List[str]]:
 
     descriptors_dict = {}
 
+    st.markdown("### Configure Molecular Descriptor Representation")
     with st.expander("Molecular Descriptors", expanded=False):
 
         all_descriptors = sorted([name for name, _ in Descriptors.descList])
@@ -224,40 +265,7 @@ def molecular_descriptor_representation(
             )
             descriptors_df = []
 
-        st.markdown("### Representation Options")
-
-        if selected_descriptors:
-            st.checkbox(
-                "Use RDkit Descriptors as Independent representations",
-                value=True,
-                key=DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
-                help="If checked, the RDKit descriptors will be used as independent representations of the molecules.",
-            )
-
-        if descriptors_df:
-            st.checkbox(
-                "Use selected DF descriptors as independent representations",
-                value=True,
-                key=DescriptorCalculationStateKeys.IndependentDFDescriptors,
-                help="If checked, the selected descriptors will be used as independent representations of the molecules.",
-            )
-
-        if selected_descriptors and descriptors_df:
-            st.checkbox(
-                "Merge selected descriptors with RDKit descriptors",
-                value=True,
-                key=DescriptorCalculationStateKeys.MergeDescriptors,
-                help="If checked, the selected descriptors will be merged with the RDKit molecular descriptors for a comprehensive representation of the molecules.",
-            )
-
         if polybert_fps:
-            st.checkbox(
-                "Use polyBERT fps as an independent representation",
-                value=True,
-                key=DescriptorCalculationStateKeys.polyBERTindependent,
-                disabled=True,
-                help="Currently, polyBERT fingerprints cannot be combined with any other representation.",
-            )
             descriptors_dict[MolecularDescriptor.PolyBERT] = []
 
         if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
@@ -311,6 +319,7 @@ def graph_representation(
     node_feats_config = {}
     edge_feats_config = {}
 
+    st.markdown("### Configure Graph Representation")
     with st.expander("Graph Representation", expanded=False):
 
         st.markdown("### Node and Edge Features Selection")

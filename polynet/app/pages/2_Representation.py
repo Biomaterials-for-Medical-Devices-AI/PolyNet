@@ -8,6 +8,7 @@ from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
     graph_representation,
     molecular_descriptor_representation,
+    select_polymer_descriptors,
     select_weight_factor,
 )
 from polynet.app.options.file_paths import (
@@ -34,6 +35,7 @@ def parse_representation_options(
     molecular_descriptors: Dict[MolecularDescriptor, List[str]],
     data: pd.DataFrame,
     data_options: DataConfig,
+    polymer_descriptors: List[str],
     weights_col: Dict[str, str],
 ):
     """
@@ -50,16 +52,7 @@ def parse_representation_options(
         node_features=node_feats,
         edge_features=edge_feats,
         molecular_descriptors=molecular_descriptors,
-        rdkit_independent=st.session_state.get(
-            DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
-            bool(molecular_descriptors[MolecularDescriptor.RDKit]),
-        ),
-        df_descriptors_independent=st.session_state.get(
-            DescriptorCalculationStateKeys.IndependentDFDescriptors, False
-        ),
-        mix_rdkit_df_descriptors=st.session_state.get(
-            DescriptorCalculationStateKeys.MergeDescriptors, False
-        ),
+        polymer_descriptors=polymer_descriptors,
         weights_col=weights_col,
     )
 
@@ -172,6 +165,10 @@ if experiment_name:
         requires_weights=requires_weights, data_options=data_opts, df=data
     )
 
+    polymer_descriptors = select_polymer_descriptors(
+        data_options=data_opts, df=data, weight_cols=list(weights.values())
+    )
+
     if requires_weights and not weights:
         disabled = True
         st.error(
@@ -188,5 +185,6 @@ if experiment_name:
             molecular_descriptors=molecular_descriptors,
             data=data,
             data_options=data_opts,
+            polymer_descriptors=polymer_descriptors,
             weights_col=weights,
         )
