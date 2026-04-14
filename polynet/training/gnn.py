@@ -235,12 +235,16 @@ def train_gnn_ensemble(
                 lr = arch_lr[gnn_arch]
                 batch_size = arch_batch_size[gnn_arch]
 
+            _poly_desc = getattr(dataset[0], "polymer_descriptors", None)
+            n_polymer_descriptors = _poly_desc.shape[1] if _poly_desc is not None else 0
+
             model = create_network(
                 network=gnn_arch,
                 problem_type=problem_type,
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=int(num_classes),
+                n_polymer_descriptors=n_polymer_descriptors,
                 seed=seed,
                 **arch_params,
             ).to(device)
@@ -405,6 +409,7 @@ def train_network(
             batch_index=batch.batch,
             edge_attr=batch.edge_attr,
             monomer_weight=getattr(batch, "weight_monomer", None),
+            polymer_descriptors=getattr(batch, "polymer_descriptors", None),
         )
 
         loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
@@ -449,6 +454,7 @@ def eval_network(
                 batch_index=batch.batch,
                 edge_attr=batch.edge_attr,
                 monomer_weight=getattr(batch, "weight_monomer", None),
+                polymer_descriptors=getattr(batch, "polymer_descriptors", None),
             )
             loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
             total_loss += loss.item() * batch.num_graphs
