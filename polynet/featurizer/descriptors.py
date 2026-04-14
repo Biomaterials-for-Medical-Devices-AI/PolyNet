@@ -72,10 +72,8 @@ def build_vector_representation(
     id_col: str | None,
     target_col: str,
     merging_approach: DescriptorMergingMethod | str,
+    polymer_descriptors: list | None = None,
     weights_col: dict[str, str] | None = None,
-    rdkit_independent: bool = True,
-    df_descriptors_independent: bool = False,
-    mix_rdkit_df_descriptors: bool = False,
 ) -> dict[MolecularDescriptor, pd.DataFrame | None]:
     """
     Build fixed-length vector representations for a polymer dataset.
@@ -143,31 +141,21 @@ def build_vector_representation(
     rdkit_descriptors_df: pd.DataFrame | None = None
     rdkit_desc_list = molecular_descriptors.get(MolecularDescriptor.RDKit, [])
 
-    if rdkit_desc_list and (rdkit_independent or mix_rdkit_df_descriptors):
+    if rdkit_desc_list:
         rdkit_df_dict = _calculate_rdkit_df_dict(unique_smiles, data, smiles_cols, rdkit_desc_list)
         rdkit_descriptors_df = _merge(
             rdkit_df_dict, data, weights_col, data_index, merging_approach
         )
         descriptors[MolecularDescriptor.RDKit] = rdkit_descriptors_df
 
-    if not rdkit_independent:
-        descriptors[MolecularDescriptor.RDKit] = None
-
     # --- DataFrame descriptors ---
     df_desc_cols = molecular_descriptors.get(MolecularDescriptor.DataFrame, [])
     df_descriptors_df: pd.DataFrame | None = None
 
-    if df_desc_cols and df_descriptors_independent:
+    if df_desc_cols:
         descriptors_df = data[df_desc_cols].copy()
         df_descriptors_df = pd.concat([data_index, descriptors_df], axis=1)
         descriptors[MolecularDescriptor.DataFrame] = df_descriptors_df
-
-    # --- Mixed RDKit + DataFrame ---
-    if mix_rdkit_df_descriptors and rdkit_descriptors_df is not None and df_desc_cols:
-        descriptors_df = data[df_desc_cols].copy()
-        descriptors[MolecularDescriptor.RDKit_DataFrame] = pd.concat(
-            [rdkit_descriptors_df, descriptors_df], axis=1
-        )
 
     # --- PolyBERT ---
     if MolecularDescriptor.PolyBERT in molecular_descriptors:
@@ -217,6 +205,11 @@ def build_vector_representation(
                 data_index,
                 merging_approach,
             )
+
+    if isinstance(polymer_descriptors, list) and len(polymer_descriptors) > 0:
+        descriptors = _concat_polymer_descriptors(
+            data=data, polymer_descriptors=polymer_descriptors, representation_dict=descriptors
+        )
 
     return descriptors
 
@@ -534,6 +527,32 @@ def compute_rdkit_descriptors(
     df_dict = _calculate_rdkit_df_dict(unique, data, smiles_cols, descriptor_names)
     empty_index = data[[]]  # preserves index, carries no columns
     return _merge(df_dict, data, weights_col, empty_index, merging_approach)
+
+
+# ---------------------------------------------------------------------------
+# Concat given polymer descriptors
+# ---------------------------------------------------------------------------
+
+
+def _concat_polymer_descriptors(
+    data: pd.DataFrame, polymer_descriptors: list, representation_dict: dict
+):
+    descriptors = data[polymer_descriptors]
+
+    new_representation_dict = {}
+
+    for representation_name, representation_df in representation_dict.items():
+
+        new_representation_dict[representation_name] = pd.concat(
+            [representation_df, descriptors], axis=1
+        )
+
+    return new_representation_dict
+
+
+# ---------------------------------------------------------------------------
+# Merge
+# ---------------------------------------------------------------------------
 
 
 def _merge(
