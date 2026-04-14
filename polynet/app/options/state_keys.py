@@ -33,8 +33,8 @@ class DescriptorCalculationStateKeys(StrEnum):
 
     MergeDescriptorsApproach = "MergeDescriptorsApproach"
     WeightingFactor = "WeightingFactor"
+    PolymerDescriptors = "PolymerDescriptors"
     DescriptorsDF = "DescriptorsDF"
-    MergeDescriptors = "MergeDescriptors"
     GraphWeightingFactor = "GraphWeightingFactor"
     DescriptorsRDKit = "DescriptorsRDKit"
     polyBERTfp = "polyBERTfp"
@@ -46,8 +46,6 @@ class DescriptorCalculationStateKeys(StrEnum):
     PMXAggMethod = "pmx_agg_method"
     polyBERTindependent = "polyBERTindependent"
     SelectAllRDKitDescriptors = "SelectAllRDKitDescriptors"
-    IndependentDFDescriptors = "IndependentDFDescriptors"
-    IndependentRDKitDescriptors = "IndependentRDKitDescriptors"
     AtomProperties = "AtomProperties"
     BondProperties = "BondProperties"
     ShowFrequency = "ShowFrequency"
