@@ -70,6 +70,43 @@ def select_weight_factor(
     return mol_weights_col
 
 
+def select_polymer_descriptors(
+    data_options: DataConfig, df: pd.DataFrame, weight_cols: List[str]
+) -> List[str]:
+
+    st.markdown("### Add polymer variables as descriptors")
+
+    smiles_cols = data_options.smiles_cols
+    target_col = data_options.target_variable_col
+    id_col = data_options.id_col
+    descriptors_df = st.session_state.get(DescriptorCalculationStateKeys.DescriptorsDF, [])
+
+    potential_polymer_descriptors = df.drop(
+        columns=[target_col] + smiles_cols + [id_col] + descriptors_df + weight_cols,
+        errors="ignore",
+    )
+    potential_polymer_descriptors = keep_only_numerical_columns(
+        df=potential_polymer_descriptors
+    ).columns.tolist()
+
+    if len(potential_polymer_descriptors) >= 1:
+
+        polymer_descriptors = st.selectbox(
+            label=f"Select the columns containing polymer variables that you want to use as part of the polymer computational representation",
+            options=potential_polymer_descriptors,
+            key=f"{DescriptorCalculationStateKeys.PolymerDescriptors}",
+            index=None,
+            help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
+        )
+
+    else:
+        st.error(
+            "Not numerical columns found in the DataFrame to use as polymer descriptors. Please ensure that the DataFrame contains numeric columns that you'd like to use as descriptors."
+        )
+
+    return polymer_descriptors
+
+
 def molecular_descriptor_representation(
     df: pd.DataFrame, data_options: DataConfig
 ) -> Dict[MolecularDescriptor, List[str]]:
