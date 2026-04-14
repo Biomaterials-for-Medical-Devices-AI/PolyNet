@@ -63,6 +63,7 @@ if experiment_name:
         path=path_to_representation_opts, options_class=RepresentationConfig
     )
     weights_col = representation_options.weights_col
+    polymer_descriptors = representation_options.polymer_descriptors
 
     # load general options
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
@@ -126,13 +127,24 @@ if experiment_name:
             if col not in df.columns:
                 st.error(f"Column '{col}' not found in the uploaded data.")
                 st.stop()
-            elif weights_col:
+            elif weights_col is not None:
                 weight_col_name = weights_col.get(col)
                 if weight_col_name is not None and weight_col_name not in df.columns:
                     st.error(
                         f"Column '{weight_col_name}' for weights not found in the uploaded data."
                     )
                     st.stop()
+
+        if weights_col is not None:
+            st.success("Weight factor columns columns found in the dataset.")
+        if polymer_descriptors is not None:
+            for descriptor in polymer_descriptors:
+                if descriptor not in df.columns:
+                    st.error(
+                        f"Column '{descriptor}' for polymer descriptor not found in the uploaded data."
+                    )
+                    st.stop()
+            st.success("Polymer descriptors columns found in the dataset.")
 
         invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
         if invalid_smiles:
