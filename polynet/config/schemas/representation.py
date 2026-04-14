@@ -72,14 +72,9 @@ class RepresentationConfig(PolynetBaseModel):
     molecular_descriptors: dict[MolecularDescriptor, list[str] | dict | bool | str] = Field(
         default_factory=dict, description="Descriptor types and their selected descriptor names."
     )
-    rdkit_independent: bool = Field(
-        default=True, description="Treat RDKit descriptors as an independent representation."
-    )
-    df_descriptors_independent: bool | None = Field(
-        default=None, description="Treat DataFrame descriptors as an independent representation."
-    )
-    mix_rdkit_df_descriptors: bool = Field(
-        default=False, description="Concatenate RDKit and DataFrame descriptors into one vector."
+    polymer_descriptors: list[str] | None = Field(
+        default=None,
+        description="List of provided polymer descriptors that are to be concatenated with the computational representation.",
     )
     weights_col: dict[str, str] | None = Field(
         default=None, description="Mapping from SMILES column to weight-fraction column."
