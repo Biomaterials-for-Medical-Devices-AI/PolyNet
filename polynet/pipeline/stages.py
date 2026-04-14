@@ -696,6 +696,7 @@ def predict_external(
     id_df = id_df.rename(
         columns={data_cfg.id_col: ResultColumn.INDEX, data_cfg.target_variable_col: true_label_name}
     )
+    polymer_descriptors = repr_cfg.polymer_descriptors or []
 
     # ------------------------------------------------------------------
     # Load models
@@ -750,10 +751,8 @@ def predict_external(
             id_col=data_cfg.id_col,
             target_col=data_cfg.target_variable_col,
             merging_approach=repr_cfg.smiles_merge_approach,
+            polymer_descriptors=polymer_descriptors or None,
             weights_col=repr_cfg.weights_col,
-            rdkit_independent=repr_cfg.rdkit_independent,
-            df_descriptors_independent=repr_cfg.df_descriptors_independent,
-            mix_rdkit_df_descriptors=repr_cfg.mix_rdkit_df_descriptors,
         )
         descriptor_dfs = {
             name: sanitise_df(
@@ -819,6 +818,7 @@ def predict_external(
         keep += data_cfg.smiles_cols + [data_cfg.target_variable_col]
         if repr_cfg.weights_col:
             keep += [c for c in repr_cfg.weights_col.values() if c in df.columns]
+        keep += [c for c in polymer_descriptors if c in df.columns]
         df[keep].to_csv(raw_gnn_dir / dataset_name, index=False)
 
         dataset = CustomPolymerGraph(
@@ -830,6 +830,7 @@ def predict_external(
             weights_col=repr_cfg.weights_col,
             node_feats=repr_cfg.node_features,
             edge_feats=repr_cfg.edge_features,
+            polymer_descriptors=polymer_descriptors or None,
         )
 
         preds_all = None
