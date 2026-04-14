@@ -102,6 +102,7 @@ class BaseNetwork(nn.Module):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__()
@@ -124,6 +125,7 @@ class BaseNetwork(nn.Module):
             if isinstance(apply_weighting_to_graph, str)
             else apply_weighting_to_graph
         )
+        self.n_polymer_descriptors = n_polymer_descriptors
         self.seed = seed
         self.losses = None
 
@@ -148,7 +150,7 @@ class BaseNetwork(nn.Module):
         ``conv_layers`` and ``norm_layers`` have been defined.
         """
         self.readout = nn.ModuleList()
-        dim = self.graph_embedding
+        dim = self.graph_embedding + self.n_polymer_descriptors
 
         for _ in range(self.readout_layers - 1):
             reduced = dim // 2
@@ -168,6 +170,7 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        polymer_descriptors: Tensor | None = None,
     ) -> Tensor:
         """
         Full forward pass: message passing → pooling → readout.
@@ -184,6 +187,10 @@ class BaseNetwork(nn.Module):
             Edge feature matrix of shape ``(n_edges, n_edge_features)``.
         monomer_weight:
             Per-node monomer weight fractions of shape ``(n_nodes, 1)``.
+        polymer_descriptors:
+            Graph-level polymer descriptor tensor of shape
+            ``(batch_size, n_polymer_descriptors)``. Concatenated to the
+            pooled graph embedding before the FFN readout.
 
         Returns
         -------
@@ -197,6 +204,8 @@ class BaseNetwork(nn.Module):
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
         )
+        if polymer_descriptors is not None and self.n_polymer_descriptors > 0:
+            embedding = torch.cat([embedding, polymer_descriptors], dim=1)
         preds = self.readout_function(embedding)
 
         if self.n_classes == 1:
@@ -259,13 +268,14 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """
         Run a forward pass and return numpy predictions.
 
         Parameters
         ----------
-        x, edge_index, batch_index, edge_attr, monomer_weight:
+        x, edge_index, batch_index, edge_attr, monomer_weight, polymer_descriptors:
             Same as ``forward()``.
 
         Returns
@@ -280,6 +290,7 @@ class BaseNetwork(nn.Module):
                 batch_index=batch_index,
                 edge_attr=edge_attr,
                 monomer_weight=monomer_weight,
+                polymer_descriptors=polymer_descriptors,
             )
             .detach()
             .numpy()
@@ -315,6 +326,7 @@ class BaseNetwork(nn.Module):
                     batch_index=batch.batch,
                     edge_attr=batch.edge_attr,
                     monomer_weight=getattr(batch, "weight_monomer", None),
+                    polymer_descriptors=getattr(batch, "polymer_descriptors", None),
                 )
                 y_pred.append(out.cpu().detach().numpy().flatten())
                 idx.append(batch.idx)
@@ -395,6 +407,7 @@ class BaseNetworkClassifier(BaseNetwork):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """Return hard class predictions (argmax of softmax)."""
         probs = self.predict_probs(
@@ -403,6 +416,7 @@ class BaseNetworkClassifier(BaseNetwork):
             batch_index=batch_index,
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
+            polymer_descriptors=polymer_descriptors,
         )
         return np.argmax(probs, axis=1)
 
@@ -413,6 +427,7 @@ class BaseNetworkClassifier(BaseNetwork):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """Return softmax class probabilities."""
         out = self.forward(
@@ -421,6 +436,7 @@ class BaseNetworkClassifier(BaseNetwork):
             batch_index=batch_index,
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
+            polymer_descriptors=polymer_descriptors,
         )
         return torch.softmax(out, dim=1).detach().numpy()
 
@@ -449,6 +465,7 @@ class BaseNetworkClassifier(BaseNetwork):
                         batch_index=batch.batch,
                         edge_attr=batch.edge_attr,
                         monomer_weight=getattr(batch, "weight_monomer", None),
+                        polymer_descriptors=getattr(batch, "polymer_descriptors", None),
                     )
                     .cpu()
                     .detach()
