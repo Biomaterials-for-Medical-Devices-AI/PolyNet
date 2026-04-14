@@ -207,6 +207,7 @@ def train_models(
             weights_col=representation_options.weights_col,
             node_feats=representation_options.node_features,
             edge_feats=representation_options.edge_features,
+            polymer_descriptors=representation_options.polymer_descriptors,
         )
 
         # train via shared stage (also saves .pt model files)

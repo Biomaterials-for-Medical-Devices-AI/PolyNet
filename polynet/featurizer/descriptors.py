@@ -30,10 +30,8 @@ Public API
         id_col="polymer_id",
         target_col="Tg",
         merging_approach=DescriptorMergingMethod.WeightedAverage,
+        polymer_descriptors=["Tg", "Molar Mass"],
         weights_col={"smiles_monomer_1": "ratio_1", "smiles_monomer_2": "ratio_2"},
-        rdkit_independent=True,
-        df_descriptors_independent=False,
-        mix_rdkit_df_descriptors=False,
     )
 """
 

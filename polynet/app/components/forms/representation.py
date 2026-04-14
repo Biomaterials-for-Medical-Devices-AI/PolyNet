@@ -91,11 +91,10 @@ def select_polymer_descriptors(
 
     if len(potential_polymer_descriptors) >= 1:
 
-        polymer_descriptors = st.selectbox(
+        polymer_descriptors = st.multiselect(
             label=f"Select the columns containing polymer variables that you want to use as part of the polymer computational representation",
             options=potential_polymer_descriptors,
             key=f"{DescriptorCalculationStateKeys.PolymerDescriptors}",
-            index=None,
             help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
         )
 
