@@ -393,7 +393,11 @@ def calculate_polybert_df_dict(
 
 
 def get_PMX_descriptors(
-    unique_psmiles: list[str], side_chain_desc_list, backbone_desclist, agg_method
+    unique_psmiles: list[str],
+    side_chain_desc_list: list[str],
+    backbone_desclist: list[str],
+    agg_method: list[str],
+    polymer_desc_list: list[str],
 ):
 
     feat_dict = {}
@@ -402,6 +406,7 @@ def get_PMX_descriptors(
         side_chain_features=side_chain_desc_list,
         backbone_features=backbone_desclist,
         agg_method=agg_method,
+        polymer_features=polymer_desc_list,
     )
 
     for psmiles in unique_psmiles:
@@ -420,6 +425,7 @@ def calculate_PMX_df_dict(
         side_chain_desc_list=pmx_descriptors["side_chain"],
         backbone_desclist=pmx_descriptors["backbone"],
         agg_method=pmx_descriptors["agg"],
+        polymer_desc_list=pmx_descriptors["polymer"],
     )
 
     pmx_df = pd.DataFrame.from_dict(pmx_dict, orient="index", columns=cols)
