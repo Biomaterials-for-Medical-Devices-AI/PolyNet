@@ -754,6 +754,13 @@ def predict_external(
             polymer_descriptors=polymer_descriptors or None,
             weights_col=repr_cfg.weights_col,
         )
+
+        representation_dir = out_dir / "representation" / "Descriptors"
+        representation_dir.mkdir(parents=True, exist_ok=True)
+        for name, desc_df in raw_desc_dfs.items():
+            if desc_df is not None:
+                desc_df.to_csv(representation_dir / f"{name}.csv", index=False)
+
         descriptor_dfs = {
             name: sanitise_df(
                 df=desc_df,
