@@ -42,6 +42,7 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **Automatic HPO** — Ray Tune with ASHA early stopping when no hyperparameters are provided
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
+- **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features
 - **Fragment-level explainability** — node attribution via Captum (IntegratedGradients, Saliency, GuidedBackprop, etc.) and GNNExplainer, aggregated to functional group level using BRICS or RECAP fragmentation
 - **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
@@ -570,7 +571,70 @@ representations:
     Morgan: []                     # Morgan fingerprints
     PolyBERT: []                   # PolyBERT fingerprints (requires psmiles)
   smiles_merge_approach: "weighted_average"   # weighted_average | concatenate | no_merging
+  polymer_descriptors:             # Optional: column names from your CSV to use as given features
+    - "molecular_weight"
+    - "degree_of_polymerisation"
 ```
+
+---
+
+## Polymer Descriptors
+
+`polymer_descriptors` lets you inject experimental or pre-computed polymer-level features — things like measured molecular weight, degree of polymerisation, or any other numeric column in your CSV — directly into the modelling pipeline alongside the computed molecular representations.
+
+### How it works
+
+**Vectorial representations (TML)**
+
+After all per-monomer molecular descriptors are computed and merged (weighted average, concatenation, or no-merging), the selected polymer descriptor columns are horizontally concatenated to every representation DataFrame. The final feature matrix seen by the TML model therefore contains both the structurally derived features and the given polymer-level features.
+
+**Graph representations (GNN)**
+
+Polymer descriptors cannot be part of node or edge features because they characterise the whole polymer, not individual atoms or bonds. Instead they are stored as a **graph-level tensor** on each PyG `Data` object during featurisation (`CustomPolymerGraph`). During the forward pass they are concatenated to the pooled graph embedding — **after pooling and after any monomer weight multiplication** — so the FFN readout receives both the learned graph representation and the experimental polymer context. The first readout layer is automatically widened to accommodate the extra dimensions.
+
+```
+GNN forward pass with polymer descriptors:
+
+  node features → message passing → [optional weighting] → pooling
+                                                               ↓
+                                              [embedding, dim = embedding_dim]
+                                                               ↓
+                                     cat([embedding, polymer_descriptors], dim=1)
+                                                               ↓
+                                              FFN readout → prediction
+```
+
+### Configuration
+
+Specify the column names to use in the `representations` section of your config:
+
+```yaml
+representations:
+  polymer_descriptors:
+    - "molecular_weight"
+    - "degree_of_polymerisation"
+```
+
+The listed columns must be present as numeric columns in your input CSV. They are used by both the TML pipeline (if `molecular_descriptors` are configured) and the GNN pipeline (if `node_features` are configured) automatically — no other changes are required.
+
+Omitting `polymer_descriptors` (or setting it to `null`) disables the feature entirely with no impact on existing experiments.
+
+### Python API
+
+```python
+from polynet.config.schemas import RepresentationConfig
+
+repr_cfg = RepresentationConfig(
+    node_features={...},
+    edge_features={...},
+    polymer_descriptors=["molecular_weight", "degree_of_polymerisation"],
+)
+
+# build_graph_dataset picks up the columns automatically
+dataset = build_graph_dataset(data=df, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=out_dir)
+```
+
+---
 
 ### `splitting`
 
