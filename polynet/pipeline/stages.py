@@ -159,10 +159,8 @@ def compute_descriptors(
         id_col=data_cfg.id_col,
         target_col=data_cfg.target_variable_col,
         merging_approach=repr_cfg.smiles_merge_approach,
+        polymer_descriptors=repr_cfg.polymer_descriptors,
         weights_col=repr_cfg.weights_col,
-        rdkit_independent=repr_cfg.rdkit_independent,
-        df_descriptors_independent=repr_cfg.df_descriptors_independent,
-        mix_rdkit_df_descriptors=repr_cfg.mix_rdkit_df_descriptors,
     )
 
     sanitised = {}
