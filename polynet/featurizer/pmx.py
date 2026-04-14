@@ -6,7 +6,7 @@ Factory utilities for constructing PolyMetriX featurizers used in PolyNet.
 
 This module provides a high-level helper to build a
 :class:`polymetrix.featurizers.multiple_featurizer.MultipleFeaturizer`
-from user-specified side-chain and backbone feature definitions.
+from user-specified side-chain, backbone, and whole-polymer feature definitions.
 
 Design
 ------
@@ -31,6 +31,10 @@ Construction rules
 
       BackBoneFeaturizer(<chemical_feature>())
 
+- Polymer features are wrapped as::
+
+      FullPolymerFeaturizer(<chemical_feature>())
+
 - Topological features are instantiated directly and are not wrapped.
 
 Public API
@@ -43,6 +47,7 @@ Public API
         side_chain_features=[PMXChemFeature.NumRings, PMXTopoFeature.NumSideChainFeaturizer],
         backbone_features=[PMXChemFeature.NumRings],
         agg_method=[PMXAggMethod.Sum, PMXAggMethod.Mean],
+        polymer_features=[PMXChemFeature.MolecularWeight, PMXChemFeature.TopologicalSurfaceArea],
     )
 """
 
@@ -80,6 +85,7 @@ from polymetrix.featurizers.chemical_featurizer import (
 from polymetrix.featurizers.multiple_featurizer import MultipleFeaturizer
 from polymetrix.featurizers.sidechain_backbone_featurizer import (
     BackBoneFeaturizer,
+    FullPolymerFeaturizer,
     NumBackBoneFeaturizer,
     NumSideChainFeaturizer,
     SidechainDiversityFeaturizer,
@@ -185,7 +191,9 @@ def _is_topological_feature(feature: PMXFeature) -> bool:
 
 
 def _validate_features(
-    side_chain_features: Sequence[PMXFeature], backbone_features: Sequence[PMXFeature]
+    side_chain_features: Sequence[PMXFeature],
+    backbone_features: Sequence[PMXFeature],
+    polymer_features: Sequence[PMXFeature] = (),
 ) -> None:
     """
     Validate that all requested features are known.
@@ -197,7 +205,7 @@ def _validate_features(
     """
     unknown: list[str] = []
 
-    for feature in list(side_chain_features) + list(backbone_features):
+    for feature in list(side_chain_features) + list(backbone_features) + list(polymer_features):
         if not (_is_chemical_feature(feature) or _is_topological_feature(feature)):
             unknown.append(str(feature))
 
@@ -206,6 +214,28 @@ def _validate_features(
             f"Unsupported PMX feature(s): {sorted(unknown)}. "
             f"Supported chemical features: {[f.value for f in PMXChemFeature]}. "
             f"Supported topological features: {[f.value for f in PMXTopoFeature]}."
+        )
+
+
+def _validate_polymer_features(polymer_features: Sequence[PMXFeature]) -> None:
+    """
+    Validate that polymer features are all chemical features.
+
+    :class:`FullPolymerFeaturizer` only supports chemical features — topological
+    features do not have a whole-polymer equivalent.
+
+    Raises
+    ------
+    ValueError
+        If any polymer feature is not a valid PMX chemical feature.
+    """
+    non_chemical = [f for f in polymer_features if not _is_chemical_feature(f)]
+    if non_chemical:
+        raise ValueError(
+            f"FullPolymerFeaturizer only supports chemical features. "
+            f"The following features are not supported for 'polymer': "
+            f"{[str(f) for f in non_chemical]}. "
+            f"Supported chemical features: {[f.value for f in PMXChemFeature]}."
         )
 
 
@@ -266,13 +296,38 @@ def _build_topological_features(features: Sequence[PMXFeature]) -> list[object]:
     return built
 
 
+def _build_polymer_chemical_features(features: Sequence[PMXFeature]) -> list[object]:
+    """
+    Build whole-polymer chemical featurizers.
+
+    Each chemical feature is instantiated without aggregation and wrapped in
+    :class:`FullPolymerFeaturizer`, which computes the descriptor on the full
+    polymer repeat unit rather than on isolated backbone or side-chain fragments.
+
+    Only chemical features are accepted here — topological features have no
+    whole-polymer equivalent. Callers should run :func:`_validate_polymer_features`
+    before calling this function.
+    """
+    built: list[object] = []
+
+    for feature in features:
+        if _is_chemical_feature(feature):
+            parsed = _parse_chem_feature(feature)
+            feature_cls = CHEMICAL_FEATURIZER_REGISTRY[parsed]
+            built.append(FullPolymerFeaturizer(feature_cls()))
+
+    return built
+
+
 def create_pmx_featurizer(
     side_chain_features: Sequence[PMXFeature],
     backbone_features: Sequence[PMXFeature],
     agg_method: Sequence[PMXAgg],
+    polymer_features: Sequence[PMXFeature] = (),
 ) -> MultipleFeaturizer:
     """
-    Create a PolyMetriX multiple featurizer from side-chain and backbone feature definitions.
+    Create a PolyMetriX multiple featurizer from side-chain, backbone, and
+    repeat-unit feature definitions.
 
     Parameters
     ----------
@@ -286,6 +341,11 @@ def create_pmx_featurizer(
     agg_method:
         Aggregation methods passed to side-chain chemical featurizers, e.g.
         ``["sum", "mean"]`` or ``[PMXAggMethod.Sum, PMXAggMethod.Mean]``.
+    polymer_features:
+        Chemical features to compute on the full polymer repeat unit. Each is
+        wrapped with :class:`FullPolymerFeaturizer`. Topological features are
+        **not** supported here and will raise a :exc:`ValueError`.
+        Defaults to an empty sequence (no whole-polymer features).
 
     Returns
     -------
@@ -295,7 +355,8 @@ def create_pmx_featurizer(
     Raises
     ------
     ValueError
-        If any requested feature is not supported.
+        If any requested feature is not supported, or if a topological feature
+        is requested under ``polymer_features``.
 
     Examples
     --------
@@ -306,17 +367,25 @@ def create_pmx_featurizer(
     ...     ],
     ...     backbone_features=[PMXChemFeature.NumRings],
     ...     agg_method=[PMXAggMethod.Sum, PMXAggMethod.Mean],
+    ...     polymer_features=[PMXChemFeature.MolecularWeight, PMXChemFeature.TopologicalSurfaceArea],
     ... )
     """
-    _validate_features(side_chain_features=side_chain_features, backbone_features=backbone_features)
+    _validate_features(
+        side_chain_features=side_chain_features,
+        backbone_features=backbone_features,
+        polymer_features=polymer_features,
+    )
+    _validate_polymer_features(polymer_features)
 
     side_chain_chemical = _build_side_chain_chemical_features(
         features=side_chain_features, agg_method=agg_method
     )
     backbone_chemical = _build_backbone_chemical_features(backbone_features)
     topological = _build_topological_features(list(side_chain_features) + list(backbone_features))
+    polymer_chemical = _build_polymer_chemical_features(polymer_features)
 
-    all_features = side_chain_chemical + backbone_chemical + topological
+    all_features = side_chain_chemical + backbone_chemical + topological + polymer_chemical
+
     return MultipleFeaturizer(all_features)
 
 
