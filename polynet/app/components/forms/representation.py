@@ -32,6 +32,9 @@ def select_weight_factor(
     mol_weights_col = {}
 
     if requires_weights:
+
+        st.markdown("### Set weighting factors for polymer representation")
+
         smiles_cols = data_options.smiles_cols
         target_col = data_options.target_variable_col
         id_col = data_options.id_col
@@ -73,6 +76,7 @@ def molecular_descriptor_representation(
 
     descriptors_dict = {}
 
+    st.markdown("### Configure Molecular Descriptor Representation")
     with st.expander("Molecular Descriptors", expanded=False):
 
         all_descriptors = sorted([name for name, _ in Descriptors.descList])
@@ -224,40 +228,7 @@ def molecular_descriptor_representation(
             )
             descriptors_df = []
 
-        st.markdown("### Representation Options")
-
-        if selected_descriptors:
-            st.checkbox(
-                "Use RDkit Descriptors as Independent representations",
-                value=True,
-                key=DescriptorCalculationStateKeys.IndependentRDKitDescriptors,
-                help="If checked, the RDKit descriptors will be used as independent representations of the molecules.",
-            )
-
-        if descriptors_df:
-            st.checkbox(
-                "Use selected DF descriptors as independent representations",
-                value=True,
-                key=DescriptorCalculationStateKeys.IndependentDFDescriptors,
-                help="If checked, the selected descriptors will be used as independent representations of the molecules.",
-            )
-
-        if selected_descriptors and descriptors_df:
-            st.checkbox(
-                "Merge selected descriptors with RDKit descriptors",
-                value=True,
-                key=DescriptorCalculationStateKeys.MergeDescriptors,
-                help="If checked, the selected descriptors will be merged with the RDKit molecular descriptors for a comprehensive representation of the molecules.",
-            )
-
         if polybert_fps:
-            st.checkbox(
-                "Use polyBERT fps as an independent representation",
-                value=True,
-                key=DescriptorCalculationStateKeys.polyBERTindependent,
-                disabled=True,
-                help="Currently, polyBERT fingerprints cannot be combined with any other representation.",
-            )
             descriptors_dict[MolecularDescriptor.PolyBERT] = []
 
         if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
@@ -311,6 +282,7 @@ def graph_representation(
     node_feats_config = {}
     edge_feats_config = {}
 
+    st.markdown("### Configure Graph Representation")
     with st.expander("Graph Representation", expanded=False):
 
         st.markdown("### Node and Edge Features Selection")
