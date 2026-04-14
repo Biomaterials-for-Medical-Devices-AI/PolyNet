@@ -44,6 +44,7 @@ class GCNBase(BaseNetwork):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -58,6 +59,7 @@ class GCNBase(BaseNetwork):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -133,6 +135,7 @@ class GCNClassifier(GCNBase, BaseNetworkClassifier):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -148,6 +151,7 @@ class GCNClassifier(GCNBase, BaseNetworkClassifier):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
 
@@ -168,6 +172,7 @@ class GCNRegressor(GCNBase):
         dropout: float = 0.5,
         cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
         seed: int = 42,
     ) -> None:
         super().__init__(
@@ -183,5 +188,6 @@ class GCNRegressor(GCNBase):
             dropout=dropout,
             cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
         )
