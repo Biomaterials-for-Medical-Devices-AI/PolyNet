@@ -8,8 +8,8 @@ from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
     graph_representation,
     molecular_descriptor_representation,
-    select_weight_factor,
     select_polymer_descriptors,
+    select_weight_factor,
 )
 from polynet.app.options.file_paths import (
     data_options_path,
