@@ -115,10 +115,12 @@ class CustomPolymerGraph(PolymerGraphDataset):
         weights_col: dict[str, str] | None = None,
         node_feats: dict[AtomFeature, dict] | None = node_feat_def,
         edge_feats: dict[BondFeature, dict] | None = edge_feat_def,
+        polymer_descriptors: list[str] | None = None,
     ) -> None:
         self.weights_col = weights_col
         self.node_feats = node_feats or {}
         self.edge_feats = edge_feats or {}
+        self.polymer_descriptors = polymer_descriptors or []
 
         super().__init__(
             filename=filename,
@@ -215,12 +217,18 @@ class CustomPolymerGraph(PolymerGraphDataset):
 
         sample_id = row[self.id_col] if self.id_col is not None else index
 
+        poly_desc_tensor = None
+        if self.polymer_descriptors:
+            desc_vals = [row[col] for col in self.polymer_descriptors]
+            poly_desc_tensor = torch.tensor([desc_vals], dtype=torch.float32)
+
         return Data(
             x=accumulated_node_feats,
             edge_attr=accumulated_edge_feats,
             edge_index=accumulated_edge_index,
             y=y,
             weight_monomer=accumulated_weights,
+            polymer_descriptors=poly_desc_tensor,
             mols=monomers,
             idx=sample_id,
         )
