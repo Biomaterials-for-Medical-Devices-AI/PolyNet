@@ -123,49 +123,76 @@ def fragment_and_match(
         case FragmentationMethod.BRICS:
             frags = _fragments_brics(mol)
 
+        # TODO: fix these fragment approaches to follow the new behaviour.
         # case "functional_groups":
         #     frags = _fragments_functional_groups(mol)
 
-        case FragmentationMethod.MurckoScaffold:
-            frags = _fragments_murcko(mol)
+        # case FragmentationMethod.MurckoScaffold:
+        #     frags = _fragments_murcko(mol)
 
         case _:
             raise ValueError(f"Unknown fragmentation mode: {fragmentation_approach}")
 
     # ----- match fragments back to original -----
-    matches = {}
 
-    for frag in frags:
-        try:
-            Chem.SanitizeMol(frag)
-        except (ValueError, RuntimeError) as e:
-            frag_smi = Chem.MolToSmiles(frag, sanitize=False) or "<unknown>"
-            logger.warning("Skipping fragment '%s': sanitization failed — %s", frag_smi, e)
-            continue
-
-        m = mol.GetSubstructMatches(frag, uniquify=True)
-        if m:
-            smi = Chem.MolToSmiles(frag)
-            matches[smi] = [list(x) for x in m]
-
-    return matches
+    return frags
 
 
-def _fragments_brics(mol):
-    raw = list(BRICS.BRICSDecompose(mol, returnMols=True))
-    out = []
+def _fragments_brics(mol) -> dict:
+    """
+    Fragment a molecule using BRICS rules and return a direct atom-index mapping.
 
-    for frag in raw:
-        frag = Chem.Mol(frag)  # clone
-        # remove dummy atoms *after* sanitization
-        for a in reversed([a.GetIdx() for a in frag.GetAtoms() if a.GetAtomicNum() == 0]):
-            frag = Chem.RWMol(frag)
-            frag.RemoveAtom(a)
-            frag = frag.GetMol()
-        Chem.SanitizeMol(frag)
-        out.append(frag)
+    Bonds are broken with ``FragmentOnBonds``, and the resulting atom-to-fragment
+    mapping is read from ``GetMolFrags(..., fragsMolAtomMapping=...)``.  This
+    avoids substructure matching entirely: atom indices come straight from the
+    bond-breaking operation and are guaranteed to correspond to the original
+    molecule's atom numbering.
 
-    return out
+    ``FragmentOnBonds`` appends dummy atoms (attachment-point markers) with
+    indices ``>= mol.GetNumAtoms()``.  These are stripped from the mapping and
+    from each fragment SMILES via ``_eliminate_dummy`` before canonicalisation.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.Mol
+        A sanitized RDKit molecule.
+
+    Returns
+    -------
+    dict
+        ``{canonical_fragment_smiles: [[atom_indices], ...]}``.
+        Atom indices are 0-based positions in *mol*.  Fragments that appear
+        more than once (e.g. repeated ring systems) accumulate as separate
+        lists under the same SMILES key.
+    """
+    bond_indices = [
+        mol.GetBondBetweenAtoms(a1, a2).GetIdx()
+        for (a1, a2), _ in BRICS.FindBRICSBonds(mol)
+    ]
+
+    # No breakable bonds — the whole molecule is a single fragment
+    if not bond_indices:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
+
+    frag_mol = Chem.FragmentOnBonds(mol, bond_indices)
+
+    frags_map: list = []
+    frags = Chem.GetMolFrags(
+        frag_mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=frags_map
+    )
+
+    # Strip dummy-atom indices (>= original atom count) introduced by FragmentOnBonds
+    n_atoms = mol.GetNumAtoms()
+    frags_map = [[i for i in mapping if i < n_atoms] for mapping in frags_map]
+
+    frag_smiles = [Chem.MolToSmiles(_eliminate_dummy(f), canonical=True) for f in frags]
+
+    frag_dict: dict = defaultdict(list)
+    for smi, idxs in zip(frag_smiles, frags_map):
+        frag_dict[smi].append(idxs)
+
+    return dict(frag_dict)
 
 
 # def _fragments_functional_groups(mol):
@@ -198,6 +225,14 @@ def _fragments_murcko(mol):
         frags.append(ring)
 
     return frags
+
+
+def _eliminate_dummy(mol):
+    for a in reversed([a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 0]):
+        mol = Chem.RWMol(mol)
+        mol.RemoveAtom(a)
+        mol = mol.GetMol()
+    return mol
 
 
 def count_atom_property_frequency(
