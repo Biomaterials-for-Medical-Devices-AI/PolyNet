@@ -355,6 +355,7 @@ class ExplainAlgorithm(StrEnum):
     Deconvolution = "deconvolution"
     ShapleyValueSampling = "shapley_value_sampling"
     GuidedBackprop = "guided_backprop"
+    ChemistryMasking = "chemistry_masking"
 
 
 class ImportanceNormalisationMethod(StrEnum):
