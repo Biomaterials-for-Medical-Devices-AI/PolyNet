@@ -145,16 +145,18 @@ def merge_fragment_attributions(node_masks: dict, model_log_names: list[str]) ->
     ----------
     node_masks:
         Structure:
-        ``{model_name: {model_number: {mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag: score}}}}}}}``.
+        ``{model_name: {model_number: {mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag: [scores]}}}}}}}``.
     model_log_names:
         List of model log names (``"{model_name}_{number}"``).
 
     Returns
     -------
     dict
-        ``{mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag_smiles: avg_score}}}}}``.
+        ``{mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag_smiles: [avg_score_per_occurrence]}}}}}``.
+        Lists are averaged element-wise across models — occurrence order is
+        preserved since fragmentation is deterministic for the same SMILES.
     """
-    # accumulator[mol_id][class_key][monomer_smiles][frag_smiles] = running sum
+    # accumulator[mol_id][class_key][monomer_smiles][frag_smiles] = running element-wise sum
     accumulator: dict = {}
     counts: dict = {}
 
@@ -163,7 +165,7 @@ def merge_fragment_attributions(node_masks: dict, model_log_names: list[str]) ->
         model_dict = node_masks.get(model_name, {}).get(number, {})
 
         for mol_id, algos in model_dict.items():
-            class_dict = algos.get(_ALGORITHM_KEY, {})  # {class_key: {monomer_smiles: {frag: score}}}
+            class_dict = algos.get(_ALGORITHM_KEY, {})
 
             for ck, monomer_dict in class_dict.items():
                 for monomer_smiles, frag_dict in monomer_dict.items():
@@ -177,8 +179,12 @@ def merge_fragment_attributions(node_masks: dict, model_log_names: list[str]) ->
                         .setdefault(ck, {})
                         .setdefault(monomer_smiles, {})
                     )
-                    for frag_smiles, score in frag_dict.items():
-                        mon_acc[frag_smiles] = mon_acc.get(frag_smiles, 0.0) + score
+                    for frag_smiles, scores in frag_dict.items():
+                        existing = mon_acc.get(frag_smiles)
+                        if existing is None:
+                            mon_acc[frag_smiles] = list(scores)
+                        else:
+                            mon_acc[frag_smiles] = [a + b for a, b in zip(existing, scores)]
                         mon_cnt[frag_smiles] = mon_cnt.get(frag_smiles, 0) + 1
 
     return {
@@ -186,8 +192,10 @@ def merge_fragment_attributions(node_masks: dict, model_log_names: list[str]) ->
             _ALGORITHM_KEY: {
                 ck: {
                     monomer_smiles: {
-                        frag: accumulator[mol_id][ck][monomer_smiles][frag]
-                        / counts[mol_id][ck][monomer_smiles][frag]
+                        frag: [
+                            s / counts[mol_id][ck][monomer_smiles][frag]
+                            for s in accumulator[mol_id][ck][monomer_smiles][frag]
+                        ]
                         for frag in accumulator[mol_id][ck][monomer_smiles]
                     }
                     for monomer_smiles in accumulator[mol_id][ck]
@@ -213,15 +221,16 @@ def fragment_attributions_to_distribution(
     ----------
     merged:
         Output of ``merge_fragment_attributions``:
-        ``{mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag_smiles: score}}}}}``.
+        ``{mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag_smiles: [scores]}}}}}``.
     target_class:
         The class whose attributions to extract. Pass ``None`` for regression.
 
     Returns
     -------
     dict[str, list[float]]
-        ``{frag_smiles: [score_monomer1_mol1, score_monomer1_mol2, ...]}``.
-        Each entry in the list corresponds to one (molecule, monomer) observation.
+        ``{frag_smiles: [score_occ1_mol1, score_occ2_mol1, score_occ1_mol2, ...]}``.
+        Each entry corresponds to one structural occurrence across all molecules
+        and monomers — suitable for a distribution/violin plot.
     """
     ck = _class_key(target_class)
     distribution: dict[str, list[float]] = {}
@@ -229,8 +238,8 @@ def fragment_attributions_to_distribution(
     for mol_id, algos in merged.items():
         monomer_dict = algos.get(_ALGORITHM_KEY, {}).get(ck, {})
         for monomer_smiles, frag_dict in monomer_dict.items():
-            for frag_smiles, score in frag_dict.items():
-                distribution.setdefault(frag_smiles, []).append(score)
+            for frag_smiles, scores in frag_dict.items():
+                distribution.setdefault(frag_smiles, []).extend(scores)
 
     return distribution
 
@@ -290,8 +299,9 @@ def _compute_masking_attributions(
         # batch_index required by PyG pooling functions; single graph → all zeros
         batch_idx = torch.zeros(h.shape[0], dtype=torch.long)
 
-        # Result keyed by monomer SMILES, then by fragment SMILES
-        frag_attributions: dict[str, dict[str, float]] = {}
+        # Result keyed by monomer SMILES, then by fragment SMILES → list of
+        # per-occurrence attributions (one entry per structural match)
+        frag_attributions: dict[str, dict[str, list[float]]] = {}
         atom_offset = 0
         old_smiles = ""
         for smiles in mol.mols:
@@ -304,34 +314,34 @@ def _compute_masking_attributions(
                 continue
 
             frags = fragment_and_match(smiles, fragmentation_method)
-            monomer_frags: dict[str, float] = {}
+            monomer_frags: dict[str, list[float]] = {}
 
             for frag_smiles, atom_indices_list in frags.items():
-                if len(frag_smiles) < 3:
-                    continue
+                occurrence_scores: list[float] = []
 
-                # Collect global indices for ALL occurrences of this fragment
-                all_global_indices = [
-                    atom_offset + i for indices in atom_indices_list for i in indices
-                ]
+                for atom_indices in atom_indices_list:
+                    # Mask this single occurrence only
+                    global_indices = [atom_offset + i for i in atom_indices]
 
-                h_masked = h.clone()
-                h_masked[all_global_indices] = 0.0
+                    h_masked = h.clone()
+                    h_masked[global_indices] = 0.0
 
-                pooled = model.pooling_fn(h_masked, batch_idx)
+                    pooled = model.pooling_fn(h_masked, batch_idx)
 
-                # Polymer descriptors are concatenated to the pooled embedding
-                # before the readout MLP (mirrors BaseNetwork.forward)
-                if polymer_descriptors is not None and model.n_polymer_descriptors > 0:
-                    pooled = torch.cat([pooled, polymer_descriptors], dim=1)
+                    # Polymer descriptors are concatenated to the pooled embedding
+                    # before the readout MLP (mirrors BaseNetwork.forward)
+                    if polymer_descriptors is not None and model.n_polymer_descriptors > 0:
+                        pooled = torch.cat([pooled, polymer_descriptors], dim=1)
 
-                y_masked = _get_scalar_prediction(
-                    model.readout_function(pooled),
-                    problem_type=problem_type,
-                    target_class=target_class,
-                )
+                    y_masked = _get_scalar_prediction(
+                        model.readout_function(pooled),
+                        problem_type=problem_type,
+                        target_class=target_class,
+                    )
 
-                monomer_frags[frag_smiles] = float(y_full - y_masked)
+                    occurrence_scores.append(float(y_full - y_masked))
+
+                monomer_frags[frag_smiles] = occurrence_scores
 
             if monomer_frags:
                 frag_attributions[smiles] = monomer_frags
