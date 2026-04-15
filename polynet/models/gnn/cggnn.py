@@ -119,6 +119,41 @@ class CGGNNBase(BaseNetwork):
 
         return self.pooling_fn(x, batch_index)
 
+    def get_node_embeddings(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor | None = None,
+        monomer_weight: Tensor | None = None,
+    ) -> Tensor:
+        """CGGNN-specific pre-pooling node embeddings — includes node projection."""
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x = x * monomer_weight
+
+        x = F.leaky_relu(self.project_nodes(x))
+
+        for conv, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
+            x = x * monomer_weight
+
+        if self.cross_att:
+            x = self._cross_attention(x, batch_index, monomer_weight)
+
+        return x
+
     def return_graph_embedding(
         self,
         x: Tensor,
