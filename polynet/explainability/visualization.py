@@ -282,37 +282,9 @@ def plot_attribution_distribution(
         ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
         return fig
 
-    # Build long-form DataFrame sorted by mean attribution (descending)
-    rows = []
-    for frag, scores in attribution_dict.items():
-        for s in scores:
-            rows.append({"fragment": frag, "attribution": float(s)})
-    df = pd.DataFrame(rows)
-
-    means = df.groupby("fragment")["attribution"].mean()
-    ordered_frags = means.sort_values(ascending=False).index.tolist()
-
-    # Keep only the top-N and bottom-N fragments when requested
-    if top_n is not None and len(ordered_frags) > top_n * 2:
-        kept = ordered_frags[:top_n] + ordered_frags[-top_n:]
-        ordered_frags = kept
-        df = df[df["fragment"].isin(ordered_frags)]
-        means = means[ordered_frags]
-
-    df["fragment"] = pd.Categorical(df["fragment"], categories=ordered_frags, ordered=True)
-    df = df.sort_values("fragment")
-
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
     n = len(ordered_frags)
-
-    # Build palette: interpolate neg_color → pos_color by mean attribution rank
-    neg_rgb = np.array(mcolors.to_rgb(neg_color))
-    pos_rgb = np.array(mcolors.to_rgb(pos_color))
-    min_mean, max_mean = means.min(), means.max()
-    denom = max_mean - min_mean if max_mean != min_mean else 1.0
-    palette = {
-        frag: tuple((neg_rgb + (pos_rgb - neg_rgb) * (means[frag] - min_mean) / denom).tolist())
-        for frag in ordered_frags
-    }
+    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
 
     row_height = max(0.4, figsize[1] / n)
     aspect = figsize[0] / row_height
@@ -377,6 +349,181 @@ def plot_attribution_distribution(
     g.figure.subplots_adjust(hspace=-0.3)
 
     return g.figure
+
+
+def _prepare_attribution_df(
+    attribution_dict: dict[str, list[float]],
+    top_n: int | None,
+) -> tuple[pd.DataFrame, list[str], pd.Series]:
+    """
+    Shared data-preparation step for all global attribution plots.
+
+    Returns
+    -------
+    df : long-form DataFrame with columns ``fragment`` and ``attribution``
+    ordered_frags : fragment names sorted by mean (descending, already filtered)
+    means : per-fragment mean Series (filtered)
+    """
+    rows = []
+    for frag, scores in attribution_dict.items():
+        for s in scores:
+            rows.append({"fragment": frag, "attribution": float(s)})
+    df = pd.DataFrame(rows)
+
+    means = df.groupby("fragment")["attribution"].mean()
+    ordered_frags = means.sort_values(ascending=False).index.tolist()
+
+    if top_n is not None and len(ordered_frags) > top_n * 2:
+        ordered_frags = ordered_frags[:top_n] + ordered_frags[-top_n:]
+        df = df[df["fragment"].isin(ordered_frags)]
+        means = means[ordered_frags]
+
+    df["fragment"] = pd.Categorical(df["fragment"], categories=ordered_frags, ordered=True)
+    df = df.sort_values("fragment")
+    return df, ordered_frags, means
+
+
+def _build_fragment_palette(
+    ordered_frags: list[str],
+    means: pd.Series,
+    neg_color: str,
+    pos_color: str,
+) -> dict:
+    neg_rgb = np.array(mcolors.to_rgb(neg_color))
+    pos_rgb = np.array(mcolors.to_rgb(pos_color))
+    min_mean, max_mean = means.min(), means.max()
+    denom = max_mean - min_mean if max_mean != min_mean else 1.0
+    return {
+        frag: tuple((neg_rgb + (pos_rgb - neg_rgb) * (means[frag] - min_mean) / denom).tolist())
+        for frag in ordered_frags
+    }
+
+
+def plot_attribution_bar(
+    attribution_dict: dict[str, list[float]],
+    figsize: tuple[int, int] = (10, 6),
+    neg_color: str = "#1f77b4",
+    pos_color: str = "#ff7f0e",
+    top_n: int | None = None,
+) -> plt.Figure:
+    """
+    Horizontal bar chart of mean fragment attributions with 95 % CI error bars.
+
+    Bars are coloured by the same neg→pos interpolation used in the ridge plot,
+    sorted from most positive (top) to most negative (bottom).  Error bars show
+    the 95 % bootstrap confidence interval across all scores for that fragment.
+
+    Parameters
+    ----------
+    attribution_dict:
+        ``{frag_smiles: [score1, score2, ...]}``.
+    figsize:
+        Figure size ``(width, height)``.
+    neg_color, pos_color:
+        Hex colours for negative / positive attribution ends of the palette.
+    top_n:
+        Show only the ``top_n`` highest and ``top_n`` lowest mean-attribution
+        fragments. Pass ``None`` to show all.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
+    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
+
+    # 95 % CI via 1.96 × SEM
+    stats = df.groupby("fragment", observed=True)["attribution"].agg(["mean", "sem", "count"])
+    stats["ci95"] = 1.96 * stats["sem"].fillna(0)
+
+    # Plot in descending mean order (top of chart = most positive)
+    plot_frags = list(reversed(ordered_frags))
+    y_pos = np.arange(len(plot_frags))
+    bar_means = stats.loc[plot_frags, "mean"].values
+    bar_ci = stats.loc[plot_frags, "ci95"].values
+    colors = [palette[f] for f in plot_frags]
+
+    fig, ax = plt.subplots(figsize=figsize)
+    bars = ax.barh(y_pos, bar_means, xerr=bar_ci, color=colors, height=0.6,
+                   error_kw={"ecolor": "0.3", "capsize": 3, "linewidth": 1.2})
+
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(plot_frags, fontsize=9)
+    ax.set_xlabel("Mean Attribution (Y − Y_masked)", fontsize=11)
+    ax.set_title("Fragment Mean Attribution", fontsize=13, pad=10)
+    sns.despine(ax=ax, left=True)
+    ax.grid(axis="x", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    return fig
+
+
+def plot_attribution_strip(
+    attribution_dict: dict[str, list[float]],
+    figsize: tuple[int, int] = (10, 6),
+    neg_color: str = "#1f77b4",
+    pos_color: str = "#ff7f0e",
+    top_n: int | None = None,
+) -> plt.Figure:
+    """
+    Horizontal strip / swarm-style plot showing every individual attribution score.
+
+    Each fragment gets one row; individual scores are jittered vertically so
+    overlapping points are visible.  The mean is overlaid as a larger diamond
+    marker.  This combines the transparency of the ridge plot (shows spread and
+    outliers) with the compactness of the bar chart.
+
+    Parameters
+    ----------
+    attribution_dict:
+        ``{frag_smiles: [score1, score2, ...]}``.
+    figsize:
+        Figure size ``(width, height)``.
+    neg_color, pos_color:
+        Hex colours for the palette endpoints.
+    top_n:
+        Limit to top-N and bottom-N fragments by mean. Pass ``None`` for all.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
+    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
+
+    n = len(ordered_frags)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    rng = np.random.default_rng(seed=0)
+    for i, frag in enumerate(reversed(ordered_frags)):
+        scores = df.loc[df["fragment"] == frag, "attribution"].values
+        jitter = rng.uniform(-0.25, 0.25, size=len(scores))
+        color = palette[frag]
+        ax.scatter(scores, np.full_like(scores, i) + jitter, color=color,
+                   alpha=0.55, s=18, linewidths=0, zorder=2)
+        # Mean marker
+        ax.scatter([means[frag]], [i], color=color, s=80, marker="D",
+                   edgecolors="0.2", linewidths=0.8, zorder=3)
+
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
+    ax.set_yticks(np.arange(n))
+    ax.set_yticklabels(list(reversed(ordered_frags)), fontsize=9)
+    ax.set_xlabel("Attribution (Y − Y_masked)", fontsize=11)
+    ax.set_title("Fragment Attribution — Individual Scores + Mean (◆)", fontsize=13, pad=10)
+    sns.despine(ax=ax, left=True)
+    ax.grid(axis="x", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    return fig
 
 
 # ---------------------------------------------------------------------------
