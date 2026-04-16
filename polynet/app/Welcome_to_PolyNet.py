@@ -8,7 +8,7 @@ st.set_page_config(page_title="PolyNet", page_icon="🧪")
 st.title("Welcome to PolyNet!")
 
 # Load and display the logo
-st.image("static/logo.png", width=500)
+st.image("static/polynet.png", width=500)
 
 # Description of the app
 st.markdown(
