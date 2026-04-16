@@ -499,21 +499,30 @@ def plot_attribution_strip(
         return fig
 
     df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
-    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
 
     n = len(ordered_frags)
     fig, ax = plt.subplots(figsize=figsize)
+
+    # Build a diverging colormap and a normaliser anchored at 0, spanning the
+    # full range of all scores in the plot so every point's colour reflects its
+    # actual attribution value regardless of which fragment row it sits in.
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "strip_cmap", [neg_color, "white", pos_color]
+    )
+    all_scores = df["attribution"].values
+    abs_max = max(abs(all_scores.min()), abs(all_scores.max())) or 1.0
+    norm = plt.Normalize(vmin=-abs_max, vmax=abs_max)
 
     rng = np.random.default_rng(seed=0)
     for i, frag in enumerate(reversed(ordered_frags)):
         scores = df.loc[df["fragment"] == frag, "attribution"].values
         jitter = rng.uniform(-0.25, 0.25, size=len(scores))
-        color = palette[frag]
-        ax.scatter(scores, np.full_like(scores, i) + jitter, color=color,
-                   alpha=0.55, s=18, linewidths=0, zorder=2)
-        # Mean marker
-        ax.scatter([means[frag]], [i], color=color, s=80, marker="D",
-                   edgecolors="0.2", linewidths=0.8, zorder=3)
+        point_colors = cmap(norm(scores))
+        ax.scatter(scores, np.full_like(scores, i) + jitter, c=point_colors,
+                   alpha=0.75, s=22, linewidths=0, zorder=2)
+        # Mean marker — coloured by its own value, outlined for visibility
+        ax.scatter([means[frag]], [i], c=[cmap(norm(means[frag]))], s=90,
+                   marker="D", edgecolors="0.25", linewidths=0.9, zorder=3)
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(np.arange(n))
@@ -522,6 +531,13 @@ def plot_attribution_strip(
     ax.set_title("Fragment Attribution — Individual Scores + Mean (◆)", fontsize=13, pad=10)
     sns.despine(ax=ax, left=True)
     ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+    # Colourbar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cb = fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.03)
+    cb.set_label("Attribution", fontsize=9)
+    cb.ax.tick_params(labelsize=8)
     plt.tight_layout()
     return fig
 
