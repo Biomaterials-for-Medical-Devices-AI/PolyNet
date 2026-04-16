@@ -178,6 +178,7 @@ class ExplainModelStateKeys(StrEnum):
     TopNFragments = "TopNFragments"
     FragmentationApproach = "FragmentationApproach"
     SelectAllModels = "SelectAllModels"
+    TargetClassSelector = "TargetClassSelector"
 
     # Global explanation tab
     GlobalExplainSet = "GlobalExplainSet"
