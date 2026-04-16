@@ -33,7 +33,9 @@ from polynet.explainability.masking import (
 from polynet.explainability.pipeline import ExplanationResult, MoleculeExplanation, run_explanation
 from polynet.explainability.visualization import (
     get_cmap,
+    plot_attribution_bar,
     plot_attribution_distribution,
+    plot_attribution_strip,
     plot_mols_with_numeric_weights,
     plot_mols_with_weights,
     plot_projection_embeddings,
@@ -66,5 +68,7 @@ __all__ = [
     "plot_mols_with_weights",
     "plot_mols_with_numeric_weights",
     "plot_attribution_distribution",
+    "plot_attribution_bar",
+    "plot_attribution_strip",
     "plot_projection_embeddings",
 ]
