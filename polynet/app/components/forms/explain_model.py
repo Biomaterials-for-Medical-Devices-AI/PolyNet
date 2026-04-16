@@ -16,6 +16,7 @@ from polynet.app.utils import extract_number
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import DataSet, ResultColumn
 from polynet.config.enums import (
+    AttributionPlotType,
     DescriptorMergingMethod,
     DimensionalityReduction,
     ExplainAlgorithm,
@@ -374,15 +375,33 @@ def _global_tab_section(
         MolsStateKey=ExplainModelStateKeys.GlobalExplainIDSelector,
     )
 
-    top_n = st.number_input(
-        "Fragments to show (top N highest + bottom N lowest by mean attribution)",
-        min_value=1,
-        max_value=50,
-        value=10,
-        step=1,
-        key=ExplainModelStateKeys.TopNFragments,
-        help="Controls how many fragments appear in the ridge plot. Increase to see more.",
-    )
+    cols = st.columns(2)
+    with cols[0]:
+        plot_type = st.radio(
+            "Plot type",
+            options=[
+                AttributionPlotType.Ridge,
+                AttributionPlotType.Bar,
+                AttributionPlotType.Strip,
+            ],
+            format_func=lambda x: {
+                AttributionPlotType.Ridge: "Ridge (full distribution)",
+                AttributionPlotType.Bar: "Bar (mean ± 95 % CI)",
+                AttributionPlotType.Strip: "Strip (individual scores + mean)",
+            }[x],
+            key=ExplainModelStateKeys.GlobalPlotType,
+            horizontal=False,
+        )
+    with cols[1]:
+        top_n = st.number_input(
+            "Fragments to show (top N + bottom N)",
+            min_value=1,
+            max_value=50,
+            value=10,
+            step=1,
+            key=ExplainModelStateKeys.TopNFragments,
+            help="Show the N fragments with the highest and N with the lowest mean attribution.",
+        )
 
     if st.button("Run Global Explanation") or st.toggle(
         "Keep running automatically", key=ExplainModelStateKeys.GlobalKeepRunning
@@ -399,6 +418,7 @@ def _global_tab_section(
             fragmentation_approach=shared["fragmentation_approach"],
             target_class=shared["target_class"],
             top_n=int(top_n),
+            plot_type=plot_type,
         )
 
 
