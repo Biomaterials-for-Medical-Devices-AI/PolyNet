@@ -290,7 +290,10 @@ def fragment_attributions_to_distribution(
                 unit.setdefault(frag_smiles, []).extend(scores)
         return unit
 
-    # --- Pass 1 (Global only): find the largest absolute score across everything ---
+    # --- Pass 1 (Global / PerModel): pre-compute divisors that require a full scan ---
+    global_divisor: float = 1.0
+    per_model_divisors: dict[str, float] = {}  # key: "{model_name}_{number}"
+
     if normalisation_type == ImportanceNormalisationMethod.Global:
         global_max = 0.0
         for log_name in model_log_names:
@@ -300,9 +303,18 @@ def fragment_attributions_to_distribution(
                     for s in scores:
                         if abs(s) > global_max:
                             global_max = abs(s)
-        global_divisor: float = global_max or 1.0
-    else:
-        global_divisor = 1.0  # unused in other modes, set for type consistency
+        global_divisor = global_max or 1.0
+
+    elif normalisation_type == ImportanceNormalisationMethod.PerModel:
+        for log_name in model_log_names:
+            model_name, number = log_name.split("_", 1)
+            model_max = 0.0
+            for mol_data in node_masks.get(model_name, {}).get(number, {}).values():
+                for scores in _unit_scores(mol_data).values():
+                    for s in scores:
+                        if abs(s) > model_max:
+                            model_max = abs(s)
+            per_model_divisors[log_name] = model_max or 1.0
 
     # --- Pass 2: collect scores, normalising per unit ---
     distribution: dict[str, list[float]] = {}
@@ -315,12 +327,13 @@ def fragment_attributions_to_distribution(
                 continue
 
             if normalisation_type == ImportanceNormalisationMethod.Local:
-                local_max = max(
+                divisor = max(
                     (abs(s) for scores in unit.values() for s in scores), default=0.0
                 ) or 1.0
-                divisor = local_max
             elif normalisation_type == ImportanceNormalisationMethod.Global:
                 divisor = global_divisor
+            elif normalisation_type == ImportanceNormalisationMethod.PerModel:
+                divisor = per_model_divisors[log_name]
             else:
                 divisor = 1.0
 
