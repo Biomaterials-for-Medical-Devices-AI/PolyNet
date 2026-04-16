@@ -308,39 +308,9 @@ def explain_predictions_form(
 
         explain_algorithm = st.selectbox(
             "Select Explainability Algorithm",
-            options=[
-                # ExplainAlgorithms.GNNExplainer,
-                ExplainAlgorithm.IntegratedGradients,
-                ExplainAlgorithm.Saliency,
-                ExplainAlgorithm.InputXGradients,
-                ExplainAlgorithm.Deconvolution,
-                ExplainAlgorithm.ShapleyValueSampling,
-                ExplainAlgorithm.GuidedBackprop,
-            ],
+            options=[ExplainAlgorithm.ChemistryMasking],
             key=ExplainModelStateKeys.ExplainAlgorithm,
         )
-
-        explain_feat = st.selectbox(
-            "Select Node Features to Explain",
-            options=["All Features"] + list(node_feats.keys()),
-            index=0,
-            key=ExplainModelStateKeys.ExplainNodeFeats,
-        )
-
-        cols = st.columns(2)
-        with cols[0]:
-            neg_color = st.color_picker(
-                "Select Negative Color",
-                key=ExplainModelStateKeys.NegColorPlots,
-                value="#40bcde",  # Default blue color
-            )
-
-        with cols[1]:
-            pos_color = st.color_picker(
-                "Select Positive Color",
-                key=ExplainModelStateKeys.PosColorPlots,
-                value="#e64747",  # Default red color
-            )
 
         cutoff = st.select_slider(
             "Select the cutoff for explanations",
@@ -368,10 +338,49 @@ def explain_predictions_form(
             horizontal=True,
         )
 
+        target_class = None
+        if (
+            explain_algorithm == ExplainAlgorithm.ChemistryMasking
+            and data_options.problem_type == ProblemType.Classification
+        ):
+            if data_options.class_names:
+                options = data_options.class_names.values()
+            else:
+                options = [i for i in range(data_options.num_classes)]
+
+            target_class = st.selectbox(
+                "Target class index to explain",
+                options=options,
+                index=0,
+                help="Index of the class whose predicted probability is used as the attribution signal (Y_pred − Y_pred_masked).",
+            )
+            if data_options.class_names:
+                class_num = next(
+                    (k for k, v in data_options.class_names.items() if v == target_class), None
+                )
+                st.info(
+                    f"The {target_class} to analyse corresponds to the output of the model number {class_num}"
+                )
+                target_class = int(class_num)
+
+        cols = st.columns(2)
+        with cols[0]:
+            neg_color = st.color_picker(
+                "Select Negative Color",
+                key=ExplainModelStateKeys.NegColorPlots,
+                value="#40bcde",  # Default blue color
+            )
+
+        with cols[1]:
+            pos_color = st.color_picker(
+                "Select Positive Color",
+                key=ExplainModelStateKeys.PosColorPlots,
+                value="#e64747",  # Default red color
+            )
+
         if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
             explain_model(
                 models=models_dict,
-                model_number=number,
                 experiment_path=experiment_path,
                 dataset=dataset,
                 explain_mols=explain_mol,
@@ -384,7 +393,6 @@ def explain_predictions_form(
                 mol_names=mol_names,
                 normalisation_type=normalisation_type,
                 predictions=preds_dict,
-                node_features=node_feats,
-                explain_feature=explain_feat,
                 fragmentation_approach=fragmentation_approach,
+                target_class=target_class,
             )
