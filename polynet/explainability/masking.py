@@ -33,7 +33,12 @@ import torch
 import torch.nn.functional as F
 from rdkit import Chem
 
-from polynet.config.enums import ExplainAlgorithm, FragmentationMethod, ProblemType
+from polynet.config.enums import (
+    ExplainAlgorithm,
+    FragmentationMethod,
+    ImportanceNormalisationMethod,
+    ProblemType,
+)
 from polynet.utils.chem_utils import fragment_and_match
 
 logger = logging.getLogger(__name__)
@@ -230,46 +235,99 @@ def merge_fragment_attributions(node_masks: dict, model_log_names: list[str]) ->
 
 
 def fragment_attributions_to_distribution(
-    merged: dict,
+    node_masks: dict,
+    model_log_names: list[str],
     target_class: int | None,
     fragmentation_method: FragmentationMethod | str,
+    normalisation_type: ImportanceNormalisationMethod,
 ) -> dict[str, list[float]]:
     """
-    Flatten per-molecule, per-monomer attribution dicts to a per-fragment list
-    for a specific target class and fragmentation method.
+    Collect all fragment attribution scores across every model and molecule
+    into a per-fragment distribution ready for plotting.
 
-    Suitable for passing directly to ``plot_attribution_distribution``.
-    Monomers that do not contain a fragment are automatically excluded.
+    Unlike ``merge_fragment_attributions`` (which averages across models),
+    every individual score is preserved so the resulting distribution reflects
+    both model uncertainty and molecule variability.
+
+    Normalisation is applied at the **(model × mol_id)** grain for Local, or
+    once across all scores for Global, before flattening.
 
     Parameters
     ----------
-    merged:
-        Output of ``merge_fragment_attributions``:
-        ``{mol_id: {"chemistry_masking": {class_key: {monomer_smiles: {frag_key: {frag_smiles: [scores]}}}}}}``.
+    node_masks:
+        Raw output of ``calculate_masking_attributions``:
+        ``{model_name: {model_number: {mol_id: {alg_key: {ck: {monomer: {fk: {frag: [scores]}}}}}}}}``
+    model_log_names:
+        Ordered list of ``"{model_name}_{number}"`` strings — defines iteration order.
     target_class:
-        The class whose attributions to extract. Pass ``None`` for regression.
+        The class to extract. Pass ``None`` for regression.
     fragmentation_method:
         The fragmentation strategy whose results to extract.
+    normalisation_type:
+        ``Local``          — each (model × mol_id) unit is independently scaled to [-1, 1].
+        ``Global``         — all scores divided by the single largest absolute value found.
+        ``NoNormalisation``— raw scores collected unchanged.
 
     Returns
     -------
     dict[str, list[float]]
-        ``{frag_smiles: [score_occ1_mol1, score_occ2_mol1, score_occ1_mol2, ...]}``.
-        Each entry corresponds to one structural occurrence across all molecules
-        and monomers — suitable for a distribution/violin plot.
+        ``{frag_smiles: [s_model1_mol1_occ1, s_model1_mol1_occ2, ..., s_modelN_molM_occK, ...]}``.
+        Every (model × mol_id × occurrence) triple contributes one data point,
+        giving the full distribution for the ridge / violin plot.
     """
-    ck = _class_key(target_class)
     fk = (
         fragmentation_method.value
         if isinstance(fragmentation_method, FragmentationMethod)
         else str(fragmentation_method)
     )
+    ck = _class_key(target_class)
+
+    def _unit_scores(mol_data: dict) -> dict[str, list[float]]:
+        """Flatten all fragment scores for one (model × mol_id) unit into {frag: [scores]}."""
+        unit: dict[str, list[float]] = {}
+        for mon_data in mol_data.get(_ALGORITHM_KEY, {}).get(ck, {}).values():
+            for frag_smiles, scores in mon_data.get(fk, {}).items():
+                unit.setdefault(frag_smiles, []).extend(scores)
+        return unit
+
+    # --- Pass 1 (Global only): find the largest absolute score across everything ---
+    if normalisation_type == ImportanceNormalisationMethod.Global:
+        global_max = 0.0
+        for log_name in model_log_names:
+            model_name, number = log_name.split("_", 1)
+            for mol_data in node_masks.get(model_name, {}).get(number, {}).values():
+                for scores in _unit_scores(mol_data).values():
+                    for s in scores:
+                        if abs(s) > global_max:
+                            global_max = abs(s)
+        global_divisor: float = global_max or 1.0
+    else:
+        global_divisor = 1.0  # unused in other modes, set for type consistency
+
+    # --- Pass 2: collect scores, normalising per unit ---
     distribution: dict[str, list[float]] = {}
 
-    for mol_id, algos in merged.items():
-        for monomer_smiles, fk_dict in algos.get(_ALGORITHM_KEY, {}).get(ck, {}).items():
-            for frag_smiles, scores in fk_dict.get(fk, {}).items():
-                distribution.setdefault(frag_smiles, []).extend(scores)
+    for log_name in model_log_names:
+        model_name, number = log_name.split("_", 1)
+        for mol_data in node_masks.get(model_name, {}).get(number, {}).values():
+            unit = _unit_scores(mol_data)
+            if not unit:
+                continue
+
+            if normalisation_type == ImportanceNormalisationMethod.Local:
+                local_max = max(
+                    (abs(s) for scores in unit.values() for s in scores), default=0.0
+                ) or 1.0
+                divisor = local_max
+            elif normalisation_type == ImportanceNormalisationMethod.Global:
+                divisor = global_divisor
+            else:
+                divisor = 1.0
+
+            for frag_smiles, scores in unit.items():
+                distribution.setdefault(frag_smiles, []).extend(
+                    s / divisor for s in scores
+                )
 
     return distribution
 
