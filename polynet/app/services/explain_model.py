@@ -146,179 +146,6 @@ def explain_model(
         )
         return
 
-    # Set the problem type passed to the model config
-    if problem_type == ProblemType.Classification:
-        task = "multiclass_classification"
-    elif problem_type == ProblemType.Regression:
-        task = "regression"
-    # Create the model configuration for explainer
-    model_config = ModelConfig(mode=task, task_level="graph", return_type="raw")
-
-    # Initialize the explainer based on the selected algorithm
-    if explain_algorithm == ExplainAlgorithm.GNNExplainer:
-        algorithm = GNNExplainer(model=model, epochs=100, return_type="raw", explain_graph=True)
-    elif explain_algorithm == ExplainAlgorithm.ShapleyValueSampling:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.ShapleyValueSampling)
-    elif explain_algorithm == ExplainAlgorithm.InputXGradients:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.InputXGradient)
-    elif explain_algorithm == ExplainAlgorithm.Saliency:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.Saliency)
-    elif explain_algorithm == ExplainAlgorithm.IntegratedGradients:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.IntegratedGradients)
-    elif explain_algorithm == ExplainAlgorithm.Deconvolution:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.Deconvolution)
-    elif explain_algorithm == ExplainAlgorithm.GuidedBackprop:
-        algorithm = CaptumExplainer(attribution_method=captum.attr.GuidedBackprop)
-    else:
-        st.error(f"Unknown explain algorithm: {explain_algorithm}")
-        return
-
-    # Initialize the explainer with the model and algorithm
-    explainers = {}
-
-    for model_name, model in models.items():
-        explainer = Explainer(
-            model=model,
-            algorithm=algorithm,
-            explanation_type="model",
-            node_mask_type="attributes",
-            edge_mask_type=None,
-            model_config=model_config,
-        )
-        explainers[model_name] = explainer
-
-    # Create the directory for explanations if it does not exist
-    explain_path = explanation_parent_directory(experiment_path)
-    if not explain_path.exists():
-        explain_path.mkdir(parents=True, exist_ok=True)
-
-    # Load existing explanations if available
-    explanation_file = explanation_json_file_path(experiment_path=experiment_path)
-    if explanation_file.exists():
-        with open(explanation_file) as f:
-            existing_explanations = json.load(f)
-    else:
-        existing_explanations = {}
-
-    if isinstance(explain_mols, str):
-        explain_mols = [explain_mols]
-
-    # Filter the dataset to only include the molecules we want to explain
-    mols = filter_dataset_by_ids(dataset, explain_mols)
-
-    # Calculate the node masks for the selected molecules
-    node_masks = calculate_attributions(
-        mols=mols,
-        existing_explanations=existing_explanations,
-        explain_algorithm=explain_algorithm,
-        explainers=explainers,
-    )
-
-    combined_explanations = deep_update(existing_explanations, node_masks)
-
-    # --- Save merged explanations ---
-    with open(explanation_file, "w") as f:
-        json.dump(combined_explanations, f, indent=4)
-
-    node_masks = merge_mask_dicts(node_masks, models.keys())
-
-    # Check the selected feature for explanation
-    if explain_feature != "All Features":
-        feature_lengths = get_node_feat_vector_size(node_features)
-
-        slicer_initial = 0
-        slicer_final = 0
-
-        for feat, length in feature_lengths.items():
-            slicer_final += length
-            if feat == explain_feature:
-                break
-            slicer_initial += slicer_final
-    else:
-        slicer_initial = 0
-        slicer_final = None
-
-    for mol in mols:
-        mask = np.array(node_masks[mol.idx][explain_algorithm])
-        if slicer_final is not None:
-            mask = mask[:, slicer_initial:slicer_final]
-        node_masks[mol.idx][explain_algorithm] = mask
-
-    if normalisation_type == ImportanceNormalisationMethod.Global:
-
-        max_val = None
-
-        for mol in mols:
-            maks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
-            local_max_val = np.max(np.abs(maks))
-            if max_val is None or local_max_val > max_val:
-                max_val = local_max_val
-                st.write(
-                    f"New global max value found: {max_val:.3f} for molecule {mol.idx} with algorithm {explain_algorithm}"
-                )
-
-    frags_importances = get_fragment_importance(
-        mols=mols,
-        node_masks=node_masks,
-        algorithm=explain_algorithm,
-        fragmentation_method=fragmentation_approach,
-    )
-
-    fig = plot_attribution_distribution(
-        attribution_dict=frags_importances, neg_color=neg_color, pos_color=pos_color
-    )
-    st.pyplot(fig, use_container_width=True)
-
-    plot_mols = filter_dataset_by_ids(dataset, plot_mols)
-
-    for mol in plot_mols:
-
-        container = st.container(border=True, key=f"mol_{mol.idx}_container")
-        names = mol_names.get(mol.idx, None)
-        masks = node_masks[mol.idx][explain_algorithm].sum(axis=1)
-
-        if normalisation_type == ImportanceNormalisationMethod.Local:
-            masks = masks / np.max(np.abs(masks))
-        elif normalisation_type == ImportanceNormalisationMethod.Global:
-            masks = masks / max_val
-        else:
-            pass
-
-        masks = np.where(np.abs(masks) > cutoff_explain, masks, 0.0)
-        masks = masks.tolist()
-
-        masks_mol = []
-        ia = 0
-        for smiles in mol.mols:
-            molecule = Chem.MolFromSmiles(smiles)
-            n_atoms = molecule.GetNumAtoms()
-            masks_mol.append(masks[ia : ia + n_atoms])
-            ia += n_atoms
-
-        container.info(f"Plotting molecule `{mol.idx}` with algorithm `{explain_algorithm}`")
-
-        container.write(
-            f"True label: `{predictions.get(mol.idx, {}).get(ResultColumn.Label, 'N/A')}`"
-        )
-        container.write(
-            f"Predicted label: `{predictions.get(mol.idx, {}).get(ResultColumn.Predicted, 'N/A')}`"
-        )
-
-        fig = plot_mols_with_weights(
-            smiles_list=mol.mols,
-            weights_list=masks_mol,
-            colormap=cmap,
-            legend=names,
-            min_weight=-1.0,
-            max_weight=1.0,
-        )
-        container.pyplot(fig, use_container_width=True)
-
-        fig = plot_mols_with_numeric_weights(
-            smiles_list=mol.mols, weights_list=masks_mol, legend=names
-        )
-        container.pyplot(fig, use_container_width=True)
-
 
 def calculate_attributions(
     mols: list,
@@ -363,20 +190,6 @@ def calculate_attributions(
             )[explain_algorithm] = node_mask
 
     return node_masks
-
-
-def get_node_feat_vector_size(node_features: dict) -> dict:
-
-    lengths_dict = {}
-
-    for key, value in node_features.items():
-        if value == {}:
-            lengths_dict[key] = 1
-            continue
-        allowed_features_size = len(value[AtomBondDescriptorDictKey.AllowableVals])
-        wildcard_feat_size = int(value[AtomBondDescriptorDictKey.Wildcard])
-        lengths_dict[key] = allowed_features_size + wildcard_feat_size
-    return lengths_dict
 
 
 def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> np.ndarray:
@@ -472,10 +285,7 @@ def deep_update(original: dict, new: dict):
 
 
 def _fragment_attributions_to_atom_weights(
-    mol,
-    monomer_dict: dict,
-    frag_key: str,
-    fragmentation_approach,
+    mol, monomer_dict: dict, frag_key: str, fragmentation_approach
 ) -> list[list[float]]:
     """
     Map per-fragment masking attributions back to per-atom weights.
@@ -588,6 +398,7 @@ def _explain_model_masking(
     # Stable string keys (mirror masking._class_key and FragmentationMethod.value)
     class_key = "regression" if target_class is None else str(target_class)
     from polynet.config.enums import FragmentationMethod as _FM
+
     frag_key = (
         fragmentation_approach.value
         if isinstance(fragmentation_approach, _FM)
@@ -611,8 +422,7 @@ def _explain_model_masking(
         container = st.container(border=True, key=f"mol_{mol.idx}_masking_container")
         container.info(
             f"Fragment attributions for `{mol.idx}` — Chemistry Masking "
-            f"({frag_key})"
-            + (f", class `{target_class}`" if target_class is not None else "")
+            f"({frag_key})" + (f", class `{target_class}`" if target_class is not None else "")
         )
         container.write(
             f"True label: `{predictions.get(mol.idx, {}).get(ResultColumn.LABEL, 'N/A')}`"
@@ -669,82 +479,3 @@ def _explain_model_masking(
             container.pyplot(fig, use_container_width=True)
         else:
             container.warning("No fragments matched for this molecule.")
-
-
-def merge_mask_dicts(node_masks, model_names_numbers):
-    """
-    Merge attribution masks from multiple models while normalizing each model/algorithm
-    by the maximum absolute attribution observed across ALL molecules for that model+algorithm.
-
-    Parameters
-    ----------
-    node_masks : dict
-        Structure: node_masks[model_name][model_number][mol_id][algorithm] = list_of_feature_lists
-    model_names_numbers : list[str]
-        e.g. ["GNN_0", "GNN_1", "RF_0"]
-
-    Returns
-    -------
-    dict
-        merged result with same structure: {mol_id: {algorithm: averaged_mask_list}}
-    """
-
-    # Step 1: compute global max absolute per (model_name_number, algorithm)
-    global_max = defaultdict(lambda: 0.0)
-    for model_name_number in model_names_numbers:
-        model_name, number = model_name_number.split("_")
-        # defensive: skip if model or number missing
-        if model_name not in node_masks or number not in node_masks[model_name]:
-            continue
-        model_dict = node_masks[model_name][number]
-        for mol_id, algos in model_dict.items():
-            for algo_name, masks in algos.items():
-                arr = np.array(masks, dtype=float)
-                if arr.size == 0:
-                    continue
-                curr_max = np.max(np.abs(arr))
-                key = (model_name_number, algo_name)
-                if curr_max > global_max[key]:
-                    global_max[key] = curr_max
-
-    # Step 2: accumulate normalized masks and counts
-    accumulator = defaultdict(lambda: defaultdict(lambda: None))
-    counts = defaultdict(lambda: defaultdict(int))
-
-    for model_name_number in model_names_numbers:
-        model_name, number = model_name_number.split("_")
-        if model_name not in node_masks or number not in node_masks[model_name]:
-            continue
-        model_dict = node_masks[model_name][number]
-
-        for mol_id, algos in model_dict.items():
-            for algo_name, masks in algos.items():
-                arr = np.array(masks, dtype=float)
-
-                # normalize by global max for this model+algo (if non-zero)
-                key = (model_name_number, algo_name)
-                max_abs = global_max.get(key, 0.0)
-                if max_abs > 0:
-                    arr = arr / max_abs
-                # else leave arr as-is (all zeros or no signal)
-
-                # accumulate
-                if accumulator[mol_id][algo_name] is None:
-                    accumulator[mol_id][algo_name] = arr.copy()
-                else:
-                    accumulator[mol_id][algo_name] += arr
-
-                counts[mol_id][algo_name] += 1
-
-    # Step 3: compute mean and convert back to lists
-    result = {}
-    for mol_id, algos in accumulator.items():
-        result[mol_id] = {}
-        for algo_name, summed in algos.items():
-            c = counts[mol_id][algo_name]
-            if c == 0:
-                continue
-            averaged = (summed / c).tolist()
-            result[mol_id][algo_name] = averaged
-
-    return result
