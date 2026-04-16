@@ -175,6 +175,7 @@ class ExplainModelStateKeys(StrEnum):
     PosColorPlots = "PosColorPlots"
     CutoffSelector = "CutoffSelector"
     NormalisationMethodSelector = "NormalisationMethodSelector"
+    TopNFragments = "TopNFragments"
 
 
 class PredictPageStateKeys(StrEnum):
