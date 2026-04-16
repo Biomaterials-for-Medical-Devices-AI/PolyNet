@@ -323,6 +323,7 @@ def explain_predictions_form(
             "Select Normalisation Type",
             options=[
                 ImportanceNormalisationMethod.Local,
+                ImportanceNormalisationMethod.PerModel,
                 ImportanceNormalisationMethod.Global,
                 ImportanceNormalisationMethod.NoNormalisation,
             ],
@@ -378,6 +379,16 @@ def explain_predictions_form(
                 value="#e64747",  # Default red color
             )
 
+        top_n = st.number_input(
+            "Fragments to show in distribution (top N highest + bottom N lowest)",
+            min_value=1,
+            max_value=50,
+            value=10,
+            step=1,
+            help="Only the N fragments with the highest mean attribution and the N with the lowest are shown in the ridge plot. Increase to see more fragments.",
+            key=ExplainModelStateKeys.TopNFragments,
+        )
+
         if st.button("Run Explanations") or st.toggle("Keep Running Explanations Automatically"):
             explain_model(
                 models=models_dict,
@@ -395,4 +406,5 @@ def explain_predictions_form(
                 predictions=preds_dict,
                 fragmentation_approach=fragmentation_approach,
                 target_class=target_class,
+                top_n=int(top_n),
             )
