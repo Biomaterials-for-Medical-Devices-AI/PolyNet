@@ -387,6 +387,14 @@ class Plot(StrEnum):
     MetricsBoxPlot = "metrics_box_plot"
 
 
+class AttributionPlotType(StrEnum):
+    """Plot types available for the global fragment attribution view."""
+
+    Ridge = "ridge"
+    Bar = "bar"
+    Strip = "strip"
+
+
 class DimensionalityReduction(StrEnum):
     """Dimensionality reduction methods for embedding visualisation."""
 
