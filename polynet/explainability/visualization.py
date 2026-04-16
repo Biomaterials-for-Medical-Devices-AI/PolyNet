@@ -22,7 +22,6 @@ import math
 
 from PIL import Image
 from matplotlib import rcParams
-from matplotlib.collections import PolyCollection
 import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
@@ -31,7 +30,6 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
-from scipy.stats import gaussian_kde
 import seaborn as sns
 
 # ---------------------------------------------------------------------------
@@ -246,14 +244,17 @@ def plot_attribution_distribution(
     figsize: tuple[int, int] = (8, 10),
     neg_color: str = "#1f77b4",
     pos_color: str = "#ff7f0e",
-    kde_bandwidth: float = 0.2,
-    show_averages: bool = True,
+    kde_bandwidth: float = 0.5,
+    top_n: int | None = None,
 ) -> plt.Figure:
     """
-    Plot per-fragment attribution distributions as violin-style KDE curves.
+    Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
 
-    Positive and negative attributions are plotted on opposing sides of
-    zero, coloured distinctly, with mean markers overlaid.
+    Each fragment occupies one row of a seaborn ``FacetGrid``; rows overlap
+    vertically so the overall chart is compact.  Fragments are sorted by their
+    mean attribution (descending), and each row is coloured by interpolating
+    between ``neg_color`` (most negative mean) and ``pos_color`` (most positive
+    mean).
 
     Parameters
     ----------
@@ -261,128 +262,121 @@ def plot_attribution_distribution(
         Mapping from fragment SMILES (or feature name) to list of
         attribution scores across all molecules and occurrences.
     figsize:
-        Figure size ``(width, height)`` in inches.
+        Approximate figure size ``(width, height)`` in inches.  The height is
+        used to derive the ``FacetGrid`` row height (``height / n_fragments``).
     neg_color, pos_color:
-        Matplotlib colour strings for negative and positive sides.
+        Matplotlib colour strings for the tails of the fragment palette.
     kde_bandwidth:
-        Bandwidth parameter for ``scipy.stats.gaussian_kde``.
-    show_averages:
-        Whether to overlay mean markers with value annotations.
+        ``bw_adjust`` parameter forwarded to ``sns.kdeplot``.
+    top_n:
+        If set, only the ``top_n`` fragments with the highest mean attribution
+        and the ``top_n`` with the lowest mean attribution are shown.
+        Pass ``None`` to show all fragments.
 
     Returns
     -------
     plt.Figure
     """
-    rcParams.update(
-        {
-            "font.size": 12,
-            "font.family": "sans-serif",
-            "axes.linewidth": 1.2,
-            "axes.labelsize": 14,
-            "axes.titleweight": "bold",
-            "axes.titlepad": 15,
-            "xtick.major.size": 4,
-            "ytick.major.size": 4,
-        }
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    # Build long-form DataFrame sorted by mean attribution (descending)
+    rows = []
+    for frag, scores in attribution_dict.items():
+        for s in scores:
+            rows.append({"fragment": frag, "attribution": float(s)})
+    df = pd.DataFrame(rows)
+
+    means = df.groupby("fragment")["attribution"].mean()
+    ordered_frags = means.sort_values(ascending=False).index.tolist()
+
+    # Keep only the top-N and bottom-N fragments when requested
+    if top_n is not None and len(ordered_frags) > top_n * 2:
+        kept = ordered_frags[:top_n] + ordered_frags[-top_n:]
+        ordered_frags = kept
+        df = df[df["fragment"].isin(ordered_frags)]
+        means = means[ordered_frags]
+
+    df["fragment"] = pd.Categorical(df["fragment"], categories=ordered_frags, ordered=True)
+    df = df.sort_values("fragment")
+
+    n = len(ordered_frags)
+
+    # Build palette: interpolate neg_color → pos_color by mean attribution rank
+    neg_rgb = np.array(mcolors.to_rgb(neg_color))
+    pos_rgb = np.array(mcolors.to_rgb(pos_color))
+    min_mean, max_mean = means.min(), means.max()
+    denom = max_mean - min_mean if max_mean != min_mean else 1.0
+    palette = {
+        frag: tuple((neg_rgb + (pos_rgb - neg_rgb) * (means[frag] - min_mean) / denom).tolist())
+        for frag in ordered_frags
+    }
+
+    row_height = max(0.4, figsize[1] / n)
+    aspect = figsize[0] / row_height
+
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+
+    g = sns.FacetGrid(
+        df,
+        row="fragment",
+        hue="fragment",
+        aspect=aspect,
+        height=row_height,
+        palette=palette,
     )
 
-    labels = list(attribution_dict.keys())
-    values = list(attribution_dict.values())
+    # Filled KDE
+    g.map(
+        sns.kdeplot,
+        "attribution",
+        bw_adjust=kde_bandwidth,
+        clip_on=False,
+        fill=True,
+        alpha=0.8,
+        linewidth=1.5,
+    )
 
-    fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.32, right=0.95)
+    # White outline for separation between overlapping rows
+    g.map(
+        sns.kdeplot,
+        "attribution",
+        bw_adjust=kde_bandwidth,
+        clip_on=False,
+        color="w",
+        lw=2,
+    )
 
-    y_pos = np.arange(len(labels))
-    ax.axvline(0, color="black", linewidth=1.2, linestyle="-", alpha=0.8, zorder=1)
+    # Zero baseline
+    g.refline(y=0, linewidth=1, linestyle="-", color="black", clip_on=False)
 
-    verts_pos: list = []
-    verts_neg: list = []
-
-    for i, vals in enumerate(values):
-        vals = np.array(vals, dtype=float)
-        if len(vals) == 0:
-            continue
-        if len(vals) > 1 and np.allclose(vals, vals[0]):
-            vals = vals + np.random.normal(0, 1e-6, size=len(vals))
-
-        pos_vals = vals[vals > 0]
-        if len(pos_vals) > 1:
-            try:
-                kde = gaussian_kde(pos_vals, bw_method=kde_bandwidth)
-                x = np.linspace(0, max(3, vals.max() * 1.4), 120)
-                d = kde(x)
-                d = d / (d.max() + 1e-8) * 0.45
-                verts_pos.append(list(zip(x, i + d)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass
-
-        neg_vals = vals[vals < 0]
-        if len(neg_vals) > 1:
-            try:
-                kde = gaussian_kde(neg_vals, bw_method=kde_bandwidth)
-                x = np.linspace(min(-3, vals.min() * 1.4), 0, 120)
-                d = kde(x)
-                d = d / (d.max() + 1e-8) * 0.45
-                verts_neg.append(list(zip(x, i - d)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass
-
-    if verts_pos:
-        ax.add_collection(
-            PolyCollection(
-                verts_pos,
-                facecolors=pos_color,
-                edgecolors=pos_color,
-                linewidths=1,
-                alpha=0.6,
-                zorder=3,
-            )
+    # Fragment label on the left of each row
+    def _label(x, color, label):
+        ax = plt.gca()
+        ax.text(
+            0,
+            0.2,
+            label,
+            fontweight="bold",
+            color=color,
+            ha="left",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=9,
         )
 
-    if verts_neg:
-        ax.add_collection(
-            PolyCollection(
-                verts_neg,
-                facecolors=neg_color,
-                edgecolors=neg_color,
-                linewidths=1,
-                alpha=0.6,
-                zorder=3,
-            )
-        )
+    g.map(_label, "attribution")
+    g.set_titles("")
+    g.set(yticks=[], ylabel="")
+    g.set_xlabels("Attribution")
+    g.despine(bottom=True, left=True)
 
-    if show_averages:
-        for i, vals in enumerate(values):
-            if not len(vals):
-                continue
-            avg = float(np.mean(vals))
-            colour = pos_color if avg > 0 else neg_color
-            ax.scatter(avg, i, s=70, color=colour, edgecolors="black", linewidths=0.8, zorder=5)
-            ax.text(
-                avg + 0.12 * np.sign(avg),
-                i,
-                f"{avg:.2f}",
-                fontsize=11,
-                va="center",
-                ha="left" if avg > 0 else "right",
-                weight="bold",
-            )
+    # Overlap rows
+    g.figure.subplots_adjust(hspace=-0.3)
 
-    ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=12)
-    ax.set_xlabel("Attribution", fontsize=14)
-    ax.set_title("Attribution Distributions by Functional Group")
-
-    limit = max(3, float(np.abs(ax.get_xlim()).max()))
-    ax.set_xlim(-limit, limit)
-
-    ax.grid(True, axis="x", linestyle="--", alpha=0.3, linewidth=0.8, zorder=0)
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-    ax.spines["bottom"].set_linewidth(1.2)
-    ax.spines["left"].set_linewidth(1.2)
-
-    return fig
+    return g.figure
 
 
 # ---------------------------------------------------------------------------
