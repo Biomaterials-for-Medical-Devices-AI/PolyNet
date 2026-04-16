@@ -185,6 +185,7 @@ class ExplainModelStateKeys(StrEnum):
     GlobalExplainManuallySelector = "GlobalExplainManuallySelector"
     GlobalExplainIDSelector = "GlobalExplainIDSelector"
     GlobalKeepRunning = "GlobalKeepRunning"
+    GlobalPlotType = "GlobalPlotType"
 
     # Local explanation tab
     LocalExplainIDSelector = "LocalExplainIDSelector"
