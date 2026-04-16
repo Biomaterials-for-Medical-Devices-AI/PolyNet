@@ -20,6 +20,7 @@ from polynet.app.utils import filter_dataset_by_ids
 from polynet.config.constants import ResultColumn
 from polynet.utils.chem_utils import fragment_and_match
 from polynet.config.enums import (
+    AttributionPlotType,
     DimensionalityReduction,
     ExplainAlgorithm,
     FragmentationMethod,
@@ -30,7 +31,9 @@ from polynet.explainability import (
     calculate_masking_attributions,
     fragment_attributions_to_distribution,
     merge_fragment_attributions,
+    plot_attribution_bar,
     plot_attribution_distribution,
+    plot_attribution_strip,
     plot_mols_with_weights,
 )
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
@@ -293,13 +296,19 @@ def explain_model_global(
     fragmentation_approach=FragmentationMethod.BRICS,
     target_class: int | None = None,
     top_n: int | None = None,
+    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
 ) -> None:
     """
-    Render the population-level fragment attribution ridge plot.
+    Render the population-level fragment attribution plot.
 
     Shows which fragments drive model predictions across the selected set of
     molecules.  Every individual model score is preserved so the distribution
     reflects both model uncertainty and molecule variability.
+
+    ``plot_type`` controls the visualisation style:
+    - Ridge  — overlapping KDE rows (full distribution per fragment)
+    - Bar    — mean ± 95 % CI horizontal bars
+    - Strip  — individual scores jittered per row, mean overlaid as ◆
     """
     combined_explanations = _compute_and_cache_masking(
         models=models,
@@ -352,12 +361,20 @@ def explain_model_global(
         st.warning("No fragment attributions found for the selected molecules and models.")
         return
 
-    fig = plot_attribution_distribution(
+    shared_kwargs = dict(
         attribution_dict=frags_importances_display,
         neg_color=neg_color,
         pos_color=pos_color,
         top_n=top_n,
     )
+
+    if plot_type == AttributionPlotType.Bar:
+        fig = plot_attribution_bar(**shared_kwargs)
+    elif plot_type == AttributionPlotType.Strip:
+        fig = plot_attribution_strip(**shared_kwargs)
+    else:  # Ridge (default)
+        fig = plot_attribution_distribution(**shared_kwargs)
+
     st.pyplot(fig, use_container_width=True)
 
 
