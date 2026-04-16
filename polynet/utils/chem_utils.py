@@ -123,12 +123,12 @@ def fragment_and_match(
         case FragmentationMethod.BRICS:
             frags = _fragments_brics(mol)
 
+        case FragmentationMethod.MurckoScaffold:
+            frags = _fragments_murcko(mol)
+
         # TODO: fix these fragment approaches to follow the new behaviour.
         # case "functional_groups":
         #     frags = _fragments_functional_groups(mol)
-
-        # case FragmentationMethod.MurckoScaffold:
-        #     frags = _fragments_murcko(mol)
 
         case _:
             raise ValueError(f"Unknown fragmentation mode: {fragmentation_approach}")
@@ -211,20 +211,86 @@ def _fragments_brics(mol) -> dict:
 #     return frags
 
 
-def _fragments_murcko(mol):
+def _fragments_murcko(mol) -> dict:
+    """
+    Fragment a molecule by cutting scaffold–sidechain bonds and return a direct
+    atom-index mapping.
+
+    The Murcko scaffold (ring systems joined by linker chains) is identified with
+    ``MurckoScaffold.GetScaffoldForMol``.  The scaffold atoms are mapped back to
+    the original molecule via a single substructure match; every bond that crosses
+    the scaffold–sidechain boundary is then cut with ``FragmentOnBonds`` and the
+    resulting atom-to-fragment mapping is read from ``fragsMolAtomMapping`` — no
+    further substructure matching is needed.
+
+    This mirrors the implementation of ``_fragments_brics`` so the two methods
+    produce the same dict contract and can be used interchangeably in the
+    masking explainability pipeline.
+
+    Edge cases
+    ----------
+    * **Acyclic molecule** (empty scaffold): returned as a single fragment.
+    * **Scaffold match failure**: returned as a single fragment.
+    * **No boundary bonds** (entire molecule is the scaffold): returned as a
+      single fragment.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.Mol
+        A sanitized RDKit molecule.
+
+    Returns
+    -------
+    dict
+        ``{canonical_fragment_smiles: [[atom_indices], ...]}``.
+        Atom indices are 0-based positions in *mol*.  Sidechain fragments that
+        appear more than once accumulate as separate lists under the same key.
+    """
     scaffold = MurckoScaffold.GetScaffoldForMol(mol)
 
-    if scaffold is None:
-        return []
+    # Acyclic molecule — scaffold is empty
+    if scaffold is None or scaffold.GetNumAtoms() == 0:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
 
-    frags = [scaffold]
+    # Map scaffold atoms back to original molecule indices
+    match = mol.GetSubstructMatch(scaffold)
+    if not match:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
 
-    # optionally include sidechains and ring systems
-    ring = MurckoScaffold.MakeScaffoldGeneric(scaffold)
-    if ring:
-        frags.append(ring)
+    scaffold_atoms = set(match)
 
-    return frags
+    # Bonds that straddle the scaffold–sidechain boundary
+    cut_bond_indices = [
+        bond.GetIdx()
+        for bond in mol.GetBonds()
+        if (bond.GetBeginAtomIdx() in scaffold_atoms) != (bond.GetEndAtomIdx() in scaffold_atoms)
+    ]
+
+    # Entire molecule is the scaffold — nothing to cut
+    if not cut_bond_indices:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
+
+    frag_mol = Chem.FragmentOnBonds(mol, cut_bond_indices)
+
+    frags_map: list = []
+    frags = Chem.GetMolFrags(
+        frag_mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=frags_map
+    )
+
+    # Strip dummy-atom indices (>= original atom count) introduced by FragmentOnBonds
+    n_atoms = mol.GetNumAtoms()
+    frags_map = [[i for i in mapping if i < n_atoms] for mapping in frags_map]
+
+    frag_smiles = [Chem.MolToSmiles(_eliminate_dummy(f), canonical=True) for f in frags]
+
+    frag_dict: dict = defaultdict(list)
+    for smi, idxs in zip(frag_smiles, frags_map):
+        frag_dict[smi].append(idxs)
+
+    return dict(frag_dict)
 
 
 def _eliminate_dummy(mol):
