@@ -120,6 +120,7 @@ def explain_model(
     predictions: dict = {},
     fragmentation_approach: str = "brics",
     target_class: int | None = None,
+    top_n: int | None = None,
 ):
 
     # get colormap for visualization
@@ -141,6 +142,7 @@ def explain_model(
             fragmentation_approach=fragmentation_approach,
             normalisation_type=normalisation_type,
             target_class=target_class,
+            top_n=top_n,
         )
         return
 
@@ -351,6 +353,7 @@ def _explain_model_masking(
     fragmentation_approach: str,
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.Local,
     target_class: int | None = None,
+    top_n: int | None = None,
 ):
     """
     Captum-free explainability using chemistry-aware node masking.
@@ -430,7 +433,10 @@ def _explain_model_masking(
     )
 
     fig = plot_attribution_distribution(
-        attribution_dict=frags_importances_display, neg_color=neg_color, pos_color=pos_color
+        attribution_dict=frags_importances_display,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        top_n=top_n,
     )
     st.pyplot(fig, use_container_width=True)
 
@@ -489,7 +495,11 @@ def _explain_model_masking(
             for s in scores
         ]
 
-        if normalisation_type == ImportanceNormalisationMethod.Local:
+        if normalisation_type in (
+            ImportanceNormalisationMethod.Local,
+            ImportanceNormalisationMethod.PerModel,
+        ):
+            # PerModel collapses to per-molecule after ensemble merging
             mol_divisor = max((abs(s) for s in mol_raw_scores), default=1.0) or 1.0
         elif normalisation_type == ImportanceNormalisationMethod.Global:
             mol_divisor = global_divisor_mol
