@@ -363,6 +363,7 @@ class ImportanceNormalisationMethod(StrEnum):
 
     Local = "local"
     Global = "global"
+    PerModel = "per_model"
     NoNormalisation = "no_normalisation"
 
 
