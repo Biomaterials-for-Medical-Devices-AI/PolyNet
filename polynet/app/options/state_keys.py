@@ -176,6 +176,22 @@ class ExplainModelStateKeys(StrEnum):
     CutoffSelector = "CutoffSelector"
     NormalisationMethodSelector = "NormalisationMethodSelector"
     TopNFragments = "TopNFragments"
+    FragmentationApproach = "FragmentationApproach"
+    SelectAllModels = "SelectAllModels"
+
+    # Global explanation tab
+    GlobalExplainSet = "GlobalExplainSet"
+    GlobalExplainManuallySelector = "GlobalExplainManuallySelector"
+    GlobalExplainIDSelector = "GlobalExplainIDSelector"
+    GlobalKeepRunning = "GlobalKeepRunning"
+
+    # Local explanation tab
+    LocalExplainIDSelector = "LocalExplainIDSelector"
+    LocalSetMolName = "LocalSetMolName"
+    LocalKeepRunning = "LocalKeepRunning"
+
+    # Deprecated — kept for session-state compatibility
+    # ExplainSet, ExplainIDSelector, ExplainManuallySelector, PlotIDSelector, SetMolName
 
 
 class PredictPageStateKeys(StrEnum):
