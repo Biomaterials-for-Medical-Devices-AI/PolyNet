@@ -106,7 +106,6 @@ def analyse_graph_embeddings(
 
 def explain_model(
     models: dict[str, Module],
-    model_number: int,
     experiment_path: Path,
     dataset: CustomPolymerGraph,
     explain_mols: list,
@@ -119,8 +118,6 @@ def explain_model(
     cutoff_explain: float = 0.1,
     mol_names: dict = {},
     predictions: dict = {},
-    node_features: dict = {},
-    explain_feature: str = "All Features",
     fragmentation_approach: str = "brics",
     target_class: int | None = None,
 ):
@@ -142,6 +139,7 @@ def explain_model(
             mol_names=mol_names,
             predictions=predictions,
             fragmentation_approach=fragmentation_approach,
+            normalisation_type=normalisation_type,
             target_class=target_class,
         )
         return
@@ -351,16 +349,17 @@ def _explain_model_masking(
     mol_names: dict,
     predictions: dict,
     fragmentation_approach: str,
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.Local,
     target_class: int | None = None,
 ):
     """
     Captum-free explainability using chemistry-aware node masking.
 
     Computes fragment attributions as Y_pred_full − Y_pred_masked, where
-    fragment nodes are zeroed in the pre-pooling embedding space.
+    fragment nodes are removed from the pre-pooling embedding space.
+    Raw scores are always persisted to the JSON cache; normalisation is
+    applied at display time only according to ``normalisation_type``.
     """
-    import pandas as pd
-
     explain_path = explanation_parent_directory(experiment_path)
     if not explain_path.exists():
         explain_path.mkdir(parents=True, exist_ok=True)
@@ -387,13 +386,10 @@ def _explain_model_masking(
         target_class=target_class,
     )
 
-    # Persist to cache
+    # Persist RAW values to cache — normalisation is never saved
     combined_explanations = deep_update(existing_explanations, node_masks)
     with open(explanation_file, "w") as f:
         json.dump(combined_explanations, f, indent=4)
-
-    # Merge across ensemble models (average per fragment, skip missing)
-    merged = merge_fragment_attributions(node_masks, list(models.keys()))
 
     # Stable string keys (mirror masking._class_key and FragmentationMethod.value)
     class_key = "regression" if target_class is None else str(target_class)
@@ -405,24 +401,71 @@ def _explain_model_masking(
         else str(fragmentation_approach)
     )
 
-    # Collect per-fragment score distributions for the ridge plot
-    frags_importances = fragment_attributions_to_distribution(
-        merged, target_class, fragmentation_approach
+    _ALG_KEY = ExplainAlgorithm.ChemistryMasking.value
+
+    # Filter combined_explanations to only the requested models and molecules.
+    # This ensures the display always reflects exactly what the user selected,
+    # regardless of what other models or molecules are stored in the cache.
+    explain_mol_ids = set(explain_mols) if not isinstance(explain_mols, set) else explain_mols
+    display_data: dict = {}
+    for model_log_name in models.keys():
+        model_name, model_number = model_log_name.split("_", 1)
+        mol_cache = combined_explanations.get(model_name, {}).get(model_number, {})
+        for mol_id, mol_entry in mol_cache.items():
+            if mol_id in explain_mol_ids:
+                (display_data.setdefault(model_name, {}).setdefault(model_number, {}))[
+                    mol_id
+                ] = mol_entry
+
+    # --- Distribution plot: ALL model scores, normalised per (model × mol_id) unit ---
+    # display_data preserves every individual model score; fragment_attributions_to_distribution
+    # handles Local/Global/NoNormalisation internally so each data point in the ridge plot
+    # represents one real model prediction rather than an average.
+    frags_importances_display = fragment_attributions_to_distribution(
+        node_masks=display_data,
+        model_log_names=list(models.keys()),
+        target_class=target_class,
+        fragmentation_method=fragmentation_approach,
+        normalisation_type=normalisation_type,
     )
 
     fig = plot_attribution_distribution(
-        attribution_dict=frags_importances, neg_color=neg_color, pos_color=pos_color
+        attribution_dict=frags_importances_display, neg_color=neg_color, pos_color=pos_color
     )
     st.pyplot(fig, use_container_width=True)
 
-    # Per-molecule fragment score tables + atom colourmap
+    # --- Per-molecule display: averaged scores (merge across models first) ---
+    # The colourmap shows the ensemble consensus; distributions above show the spread.
+    merged = merge_fragment_attributions(display_data, list(models.keys()))
+
+    # Global divisor for per-molecule display is derived from the *averaged* merged data
+    # so that outlier individual-model scores don't wash out the colourmap.
+    if normalisation_type == ImportanceNormalisationMethod.Global:
+        global_divisor_mol = (
+            max(
+                (
+                    abs(s)
+                    for mol_data in merged.values()
+                    for mon_data in mol_data.get(_ALG_KEY, {}).get(class_key, {}).values()
+                    for scores in mon_data.get(frag_key, {}).values()
+                    for s in scores
+                ),
+                default=1.0,
+            )
+            or 1.0
+        )
+    else:
+        global_divisor_mol = None
+
     plot_mols_filtered = filter_dataset_by_ids(dataset, plot_mols)
+    cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
 
     for mol in plot_mols_filtered:
         container = st.container(border=True, key=f"mol_{mol.idx}_masking_container")
         container.info(
-            f"Fragment attributions for `{mol.idx}` — Chemistry Masking "
-            f"({frag_key})" + (f", class `{target_class}`" if target_class is not None else "")
+            f"Fragment attributions for `{mol.idx}` — Chemistry Masking ({frag_key})"
+            + (f", class `{target_class}`" if target_class is not None else "")
+            + f" | normalisation: `{normalisation_type}`"
         )
         container.write(
             f"True label: `{predictions.get(mol.idx, {}).get(ResultColumn.LABEL, 'N/A')}`"
@@ -432,50 +475,67 @@ def _explain_model_masking(
         )
 
         # {monomer_smiles: {frag_key: {frag_smiles: [scores]}}}
-        monomer_dict = (
-            merged.get(mol.idx, {})
-            .get(ExplainAlgorithm.ChemistryMasking.value, {})
-            .get(class_key, {})
+        monomer_dict = merged.get(mol.idx, {}).get(_ALG_KEY, {}).get(class_key, {})
+
+        if not monomer_dict:
+            container.warning("No fragments matched for this molecule.")
+            continue
+
+        # --- Compute per-molecule divisor for display ---
+        mol_raw_scores = [
+            s
+            for mon_data in monomer_dict.values()
+            for scores in mon_data.get(frag_key, {}).values()
+            for s in scores
+        ]
+
+        if normalisation_type == ImportanceNormalisationMethod.Local:
+            mol_divisor = max((abs(s) for s in mol_raw_scores), default=1.0) or 1.0
+        elif normalisation_type == ImportanceNormalisationMethod.Global:
+            mol_divisor = global_divisor_mol
+        else:
+            mol_divisor = None  # no normalisation
+
+        # --- Attribution table ---
+        attr_col = "Attribution (Y − Y_masked)"
+        norm_col = "Normalised Attribution" if mol_divisor is not None else attr_col
+        rows = [
+            {
+                "Monomer (SMILES)": monomer_smiles,
+                "Fragment (SMILES)": frag_smiles,
+                "Occurrence": occ + 1,
+                attr_col: score,
+            }
+            for monomer_smiles, fk_dict in monomer_dict.items()
+            for frag_smiles, scores in fk_dict.get(frag_key, {}).items()
+            for occ, score in enumerate(scores)
+        ]
+        df = pd.DataFrame(rows).sort_values(attr_col, ascending=False)
+        if mol_divisor is not None:
+            df[norm_col] = df[attr_col] / mol_divisor
+        container.dataframe(df, use_container_width=True)
+
+        # --- Atom colourmap ---
+        weights_list = _fragment_attributions_to_atom_weights(
+            mol=mol,
+            monomer_dict=monomer_dict,
+            frag_key=frag_key,
+            fragmentation_approach=fragmentation_approach,
         )
 
-        if monomer_dict:
-            rows = [
-                {
-                    "Monomer (SMILES)": monomer_smiles,
-                    "Fragment (SMILES)": frag_smiles,
-                    "Occurrence": occ + 1,
-                    "Attribution (Y − Y_masked)": score,
-                }
-                for monomer_smiles, fk_dict in monomer_dict.items()
-                for frag_smiles, scores in fk_dict.get(frag_key, {}).items()
-                for occ, score in enumerate(scores)
-            ]
-            df = pd.DataFrame(rows).sort_values("Attribution (Y − Y_masked)", ascending=False)
-            container.dataframe(df, use_container_width=True)
-
-            # Map fragment attributions back to atom-level weights
-            weights_list = _fragment_attributions_to_atom_weights(
-                mol=mol,
-                monomer_dict=monomer_dict,
-                frag_key=frag_key,
-                fragmentation_approach=fragmentation_approach,
-            )
-
-            # Normalise locally (divide by max absolute weight across all monomers)
-            all_weights = [w for wlist in weights_list for w in wlist]
-            max_abs = max((abs(w) for w in all_weights), default=1.0) or 1.0
-            weights_list = [[w / max_abs for w in wlist] for wlist in weights_list]
-
-            names = mol_names.get(mol.idx, None)
-            cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
-            fig = plot_mols_with_weights(
-                smiles_list=mol.mols,
-                weights_list=weights_list,
-                colormap=cmap,
-                legend=names,
-                min_weight=-1.0,
-                max_weight=1.0,
-            )
-            container.pyplot(fig, use_container_width=True)
+        if mol_divisor is not None:
+            weights_list = [[w / mol_divisor for w in wlist] for wlist in weights_list]
+            cmap_min, cmap_max = -1.0, 1.0
         else:
-            container.warning("No fragments matched for this molecule.")
+            cmap_min, cmap_max = None, None  # auto-scale from data range
+
+        names = mol_names.get(mol.idx, None)
+        fig = plot_mols_with_weights(
+            smiles_list=mol.mols,
+            weights_list=weights_list,
+            colormap=cmap,
+            legend=names,
+            min_weight=cmap_min,
+            max_weight=cmap_max,
+        )
+        container.pyplot(fig, use_container_width=True)
