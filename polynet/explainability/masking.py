@@ -29,9 +29,9 @@ from __future__ import annotations
 
 import logging
 
+from rdkit import Chem
 import torch
 import torch.nn.functional as F
-from rdkit import Chem
 
 from polynet.config.enums import (
     ExplainAlgorithm,
@@ -327,9 +327,9 @@ def fragment_attributions_to_distribution(
                 continue
 
             if normalisation_type == ImportanceNormalisationMethod.Local:
-                divisor = max(
-                    (abs(s) for scores in unit.values() for s in scores), default=0.0
-                ) or 1.0
+                divisor = (
+                    max((abs(s) for scores in unit.values() for s in scores), default=0.0) or 1.0
+                )
             elif normalisation_type == ImportanceNormalisationMethod.Global:
                 divisor = global_divisor
             elif normalisation_type == ImportanceNormalisationMethod.PerModel:
@@ -338,9 +338,7 @@ def fragment_attributions_to_distribution(
                 divisor = 1.0
 
             for frag_smiles, scores in unit.items():
-                distribution.setdefault(frag_smiles, []).extend(
-                    s / divisor for s in scores
-                )
+                distribution.setdefault(frag_smiles, []).extend(s / divisor for s in scores)
 
     return distribution
 

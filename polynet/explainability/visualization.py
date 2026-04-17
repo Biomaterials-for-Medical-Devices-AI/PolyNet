@@ -292,12 +292,7 @@ def plot_attribution_distribution(
     sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
 
     g = sns.FacetGrid(
-        df,
-        row="fragment",
-        hue="fragment",
-        aspect=aspect,
-        height=row_height,
-        palette=palette,
+        df, row="fragment", hue="fragment", aspect=aspect, height=row_height, palette=palette
     )
 
     # Filled KDE
@@ -312,14 +307,7 @@ def plot_attribution_distribution(
     )
 
     # White outline for separation between overlapping rows
-    g.map(
-        sns.kdeplot,
-        "attribution",
-        bw_adjust=kde_bandwidth,
-        clip_on=False,
-        color="w",
-        lw=2,
-    )
+    g.map(sns.kdeplot, "attribution", bw_adjust=kde_bandwidth, clip_on=False, color="w", lw=2)
 
     # Zero baseline
     g.refline(y=0, linewidth=1, linestyle="-", color="black", clip_on=False)
@@ -352,8 +340,7 @@ def plot_attribution_distribution(
 
 
 def _prepare_attribution_df(
-    attribution_dict: dict[str, list[float]],
-    top_n: int | None,
+    attribution_dict: dict[str, list[float]], top_n: int | None
 ) -> tuple[pd.DataFrame, list[str], pd.Series]:
     """
     Shared data-preparation step for all global attribution plots.
@@ -384,10 +371,7 @@ def _prepare_attribution_df(
 
 
 def _build_fragment_palette(
-    ordered_frags: list[str],
-    means: pd.Series,
-    neg_color: str,
-    pos_color: str,
+    ordered_frags: list[str], means: pd.Series, neg_color: str, pos_color: str
 ) -> dict:
     neg_rgb = np.array(mcolors.to_rgb(neg_color))
     pos_rgb = np.array(mcolors.to_rgb(pos_color))
@@ -449,8 +433,14 @@ def plot_attribution_bar(
     colors = [palette[f] for f in plot_frags]
 
     fig, ax = plt.subplots(figsize=figsize)
-    bars = ax.barh(y_pos, bar_means, xerr=bar_ci, color=colors, height=0.6,
-                   error_kw={"ecolor": "0.3", "capsize": 3, "linewidth": 1.2})
+    bars = ax.barh(
+        y_pos,
+        bar_means,
+        xerr=bar_ci,
+        color=colors,
+        height=0.6,
+        error_kw={"ecolor": "0.3", "capsize": 3, "linewidth": 1.2},
+    )
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(y_pos)
@@ -506,9 +496,7 @@ def plot_attribution_strip(
     # Build a diverging colormap and a normaliser anchored at 0, spanning the
     # full range of all scores in the plot so every point's colour reflects its
     # actual attribution value regardless of which fragment row it sits in.
-    cmap = mcolors.LinearSegmentedColormap.from_list(
-        "strip_cmap", [neg_color, "white", pos_color]
-    )
+    cmap = mcolors.LinearSegmentedColormap.from_list("strip_cmap", [neg_color, "white", pos_color])
     all_scores = df["attribution"].values
     abs_max = max(abs(all_scores.min()), abs(all_scores.max())) or 1.0
     norm = plt.Normalize(vmin=-abs_max, vmax=abs_max)
@@ -518,11 +506,26 @@ def plot_attribution_strip(
         scores = df.loc[df["fragment"] == frag, "attribution"].values
         jitter = rng.uniform(-0.25, 0.25, size=len(scores))
         point_colors = cmap(norm(scores))
-        ax.scatter(scores, np.full_like(scores, i) + jitter, c=point_colors,
-                   alpha=0.75, s=22, linewidths=0, zorder=2)
+        ax.scatter(
+            scores,
+            np.full_like(scores, i) + jitter,
+            c=point_colors,
+            alpha=0.75,
+            s=22,
+            linewidths=0,
+            zorder=2,
+        )
         # Mean marker — coloured by its own value, outlined for visibility
-        ax.scatter([means[frag]], [i], c=[cmap(norm(means[frag]))], s=90,
-                   marker="D", edgecolors="0.25", linewidths=0.9, zorder=3)
+        ax.scatter(
+            [means[frag]],
+            [i],
+            c=[cmap(norm(means[frag]))],
+            s=90,
+            marker="D",
+            edgecolors="0.25",
+            linewidths=0.9,
+            zorder=3,
+        )
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(np.arange(n))

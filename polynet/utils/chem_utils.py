@@ -166,8 +166,7 @@ def _fragments_brics(mol) -> dict:
         lists under the same SMILES key.
     """
     bond_indices = [
-        mol.GetBondBetweenAtoms(a1, a2).GetIdx()
-        for (a1, a2), _ in BRICS.FindBRICSBonds(mol)
+        mol.GetBondBetweenAtoms(a1, a2).GetIdx() for (a1, a2), _ in BRICS.FindBRICSBonds(mol)
     ]
 
     # No breakable bonds — the whole molecule is a single fragment

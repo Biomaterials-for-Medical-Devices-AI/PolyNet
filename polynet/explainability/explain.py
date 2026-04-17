@@ -41,9 +41,9 @@ Typical notebook usage::
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 import json
 import logging
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -451,10 +451,7 @@ def compute_global_attribution(
         )
 
     shared_kwargs = dict(
-        attribution_dict=attribution_dict,
-        neg_color=neg_color,
-        pos_color=pos_color,
-        top_n=top_n,
+        attribution_dict=attribution_dict, neg_color=neg_color, pos_color=pos_color, top_n=top_n
     )
 
     if plot_type == AttributionPlotType.Bar:

@@ -32,13 +32,13 @@ import pandas as pd
 from polynet.config.enums import ProblemType, TargetTransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
+    ExplainabilityConfig,
     FeatureTransformConfig,
     RepresentationConfig,
     SplitConfig,
     TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
-    ExplainabilityConfig,
 )
 
 logger = logging.getLogger(__name__)

@@ -1,7 +1,9 @@
-import numpy as np
-import pandas as pd
+from pathlib import Path
+
 from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import seaborn as sns
 import streamlit as st
 import torch
@@ -24,8 +26,6 @@ from polynet.explainability import (
 )
 from polynet.explainability.visualization import plot_projection_embeddings
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
-from pathlib import Path
-
 
 # ---------------------------------------------------------------------------
 # Graph embedding visualisation

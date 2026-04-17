@@ -27,7 +27,6 @@ from polynet.config.enums import (
 from polynet.config.schemas import DataConfig
 from polynet.featurizer import compute_rdkit_descriptors
 
-
 # ---------------------------------------------------------------------------
 # Shared molecule-set selector widget
 # ---------------------------------------------------------------------------
