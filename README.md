@@ -44,7 +44,7 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
 - **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features
-- **Fragment-level explainability** — node attribution via Captum (IntegratedGradients, Saliency, GuidedBackprop, etc.) and GNNExplainer, aggregated to functional group level using BRICS or RECAP fragmentation
+- **Fragment-level explainability** — chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023): each fragment's importance is measured as the change in prediction when that fragment is masked from the graph pooling step; results are aggregated to functional-group level using BRICS, RECAP, Murcko scaffold, or functional-group fragmentation
 - **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
 - **Single-command pipeline** — YAML config file drives the entire workflow; no code changes between experiments
@@ -289,8 +289,9 @@ polynet/
 │
 ├── explainability/            # Attribution-based model explanation
 │   ├── __init__.py
-│   ├── attributions.py        # build_explainer(), calculate_attributions(), merge_mask_dicts()
-│   ├── fragments.py           # Fragment-level importance aggregation (BRICS/RECAP)
+│   ├── attributions.py        # deep_update() — cache merging utility
+│   ├── masking.py             # calculate_masking_attributions(), fragment_attributions_to_distribution()
+│   ├── explain.py             # compute_global_attribution(), compute_local_attribution()
 │   ├── embeddings.py          # Graph embedding extraction (PCA, t-SNE)
 │   ├── visualization.py       # plot_mols_with_weights(), plot_attribution_distribution()
 │   └── pipeline.py            # run_explanation() — orchestrates full explainability run
@@ -880,14 +881,24 @@ target_transform:
 ```yaml
 explainability:
   enabled: false
-  algorithm: "IntegratedGradients"
-  fragmentation: "brics"           # brics | recap
-  normalisation: "Local"           # Local | Global
-  cutoff: 0.05
-  explain_mol_ids: null            # null = first 5 test-set samples
+  algorithm: "chemistry_masking"
+
+  # Which GNN architectures to explain (must match gnn_training keys).
+  models: "all"             # or: [GCN, GAT]
+
+  # Which bootstrap iterations to explain (0-based).
+  bootstraps: "all"         # or: [0, 1]
+
+  fragmentation: "brics"    # brics | murcko_scaffold
+  explain_set: "test"       # train | validation | test | all
+  normalisation: "per_model" # local | global | per_model | no_normalisation
+  target_class: null        # null for regression; integer for classification
+  plot_type: "ridge"        # ridge | bar | strip
+  top_n: 10                 # top-N and bottom-N fragments shown; null = all
+  explain_mol_ids: null     # explicit IDs override explain_set when provided
 ```
 
-**Available attribution algorithms:** `IntegratedGradients`, `Saliency`, `InputXGradient`, `GuidedBackprop`, `Deconvolution`, `ShapleyValueSampling`, `GNNExplainer`
+**Attribution method:** chemistry-masking only (`chemistry_masking`). Attribution is defined as `Y_pred_full − Y_pred_masked` for each fragment occurrence.
 
 ### `prediction`
 
@@ -1300,7 +1311,9 @@ compute_rdkit_descriptors(df, ["smiles_A"], DESCRIPTORS,
 ### Adding a new attribution algorithm
 
 1. Add the identifier to the `ExplainAlgorithm` enum in `polynet/config/enums.py`
-2. Add a `ExplainAlgorithm.MyAlgo: captum.attr.MyMethod` entry to `_CAPTUM_REGISTRY` in `polynet/explainability/attributions.py`
+2. Implement the computation in `polynet/explainability/` — returning results as plain Python data structures (no Streamlit dependency)
+3. Wire it up in `polynet/explainability/explain.py` and export from `polynet/explainability/__init__.py`
+4. Update the `ExplainabilityConfig` validator in `polynet/config/schemas/explainability.py` to accept the new value
 
 ---
 
