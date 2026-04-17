@@ -40,6 +40,12 @@ YAML layout::
 
       # Optional explicit molecule IDs.  When set, overrides explain_set.
       # explain_mol_ids: null
+
+      # Optional explicit molecule IDs for local (per-molecule) heatmaps only.
+      # When set, only these molecules get heatmap/table outputs; explain_mol_ids
+      # (or explain_set) still controls the global distribution plot.
+      # When not set, local explanation uses the same list as global.
+      # local_explain_mol_ids: null
 """
 
 from __future__ import annotations
@@ -96,6 +102,12 @@ class ExplainabilityConfig(PolynetBaseModel):
     explain_mol_ids:
         Explicit list of molecule IDs to explain.  When provided,
         ``explain_set`` is ignored.
+    local_explain_mol_ids:
+        Optional molecule IDs used exclusively for per-molecule heatmap and
+        attribution table outputs.  When set, only these molecules are passed
+        to ``compute_local_attribution``; the global distribution plot is
+        unaffected.  When ``None``, local explanation uses the same resolved
+        list as the global plot.
     """
 
     enabled: bool = False
@@ -109,6 +121,7 @@ class ExplainabilityConfig(PolynetBaseModel):
     plot_type: AttributionPlotType = AttributionPlotType.Ridge
     top_n: int | None = 10
     explain_mol_ids: list[str] | None = None
+    local_explain_mol_ids: list[str] | None = None
 
     @field_validator("algorithm")
     @classmethod
