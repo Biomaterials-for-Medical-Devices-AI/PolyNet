@@ -38,6 +38,7 @@ from polynet.config.schemas import (
     TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
+    ExplainabilityConfig,
 )
 
 logger = logging.getLogger(__name__)
@@ -972,74 +973,180 @@ def run_explainability(
     dataset,
     split_indexes: tuple,
     data_cfg: DataConfig,
-    exp_cfg: dict,
+    exp_cfg: ExplainabilityConfig,
     out_dir: Path,
 ) -> None:
     """
-    Run attribution-based explainability and save heatmaps to disk.
+    Run chemistry-masking explainability and save plots and CSVs to disk.
+
+    Implements the Wellawatte et al. (2023) fragment-masking approach:
+    for each fragment, atoms are removed from the pre-pooling embedding and
+    attribution is defined as ``Y_pred_full − Y_pred_masked``.
 
     Parameters
     ----------
     trained_models:
-        Trained GNN models from ``train_gnn``.
+        Trained GNN models from ``train_gnn``, keyed ``"{arch}_{iter}"``.
     dataset:
         ``CustomPolymerGraph`` dataset from ``build_graph_dataset``.
     split_indexes:
         ``(train_idxs, val_idxs, test_idxs)`` from ``compute_data_splits``.
+        Each element is a list of index arrays, one per bootstrap iteration.
     data_cfg:
         Data configuration.
     exp_cfg:
-        Raw explainability configuration dict with keys: ``algorithm``,
-        ``fragmentation``, ``normalisation``, ``cutoff``,
-        ``explain_mol_ids`` (optional).
+        ``ExplainabilityConfig`` instance with the fields described in
+        ``polynet.config.schemas.explainability``.
     out_dir:
-        Experiment root directory. Outputs written to
-        ``out_dir/explanations/``.
+        Experiment root directory.  All outputs go to ``out_dir/explanations/``.
+
+    Outputs
+    -------
+    ``fragment_attributions.png``
+        Global population-level attribution plot (Ridge / Bar / Strip).
+    ``{mol_id}_heatmap.png``
+        Per-molecule atom-level attribution heatmap.
+    ``{mol_id}_attribution.csv``
+        Per-fragment attribution table for each molecule.
     """
-    from polynet.config.enums import (
-        ExplainAlgorithm,
-        FragmentationMethod,
-        ImportanceNormalisationMethod,
-    )
-    from polynet.explainability.pipeline import run_explanation
-    from polynet.explainability.visualization import (
-        plot_attribution_distribution,
-        plot_mols_with_weights,
-    )
+    from polynet.explainability import compute_global_attribution, compute_local_attribution
     from polynet.visualization.utils import save_plot
 
     explain_dir = out_dir / "explanations"
     explain_dir.mkdir(parents=True, exist_ok=True)
 
-    explain_mol_ids = exp_cfg.get("explain_mol_ids")
-    if explain_mol_ids is None:
-        _, _, test_idxs = split_indexes
-        explain_mol_ids = [str(idx) for idx in test_idxs[0][:5]]
-        logger.info(f"explain_mol_ids not set — using first 5 test samples: {explain_mol_ids}")
+    train_idxs, val_idxs, test_idxs = split_indexes
+    n_iters = len(train_idxs)
 
-    result = run_explanation(
-        models=trained_models,
-        dataset=dataset,
-        explain_mol_ids=explain_mol_ids,
-        plot_mol_ids=explain_mol_ids,
-        algorithm=ExplainAlgorithm(exp_cfg["algorithm"]),
-        problem_type=data_cfg.problem_type,
-        experiment_path=out_dir,
-        node_features=dataset.node_feats,
-        normalisation=ImportanceNormalisationMethod(exp_cfg.get("normalisation", "Local")),
-        cutoff=exp_cfg.get("cutoff", 0.05),
-        fragmentation_method=FragmentationMethod(exp_cfg.get("fragmentation", "brics")),
+    # ------------------------------------------------------------------
+    # 1. Resolve which model instances to explain
+    # ------------------------------------------------------------------
+    if exp_cfg.bootstraps == "all":
+        selected_iters = set(range(n_iters))
+    else:
+        selected_iters = {i for i in exp_cfg.bootstraps if i < n_iters}
+        invalid = set(exp_cfg.bootstraps) - selected_iters
+        if invalid:
+            logger.warning(
+                f"Bootstrap indices {sorted(invalid)} are out of range "
+                f"(only {n_iters} iteration(s) trained). They will be skipped."
+            )
+
+    if exp_cfg.models == "all":
+        selected_archs = {key.split("_", 1)[0] for key in trained_models}
+    else:
+        available_archs = {key.split("_", 1)[0] for key in trained_models}
+        selected_archs = set(exp_cfg.models)
+        unknown = selected_archs - available_archs
+        if unknown:
+            logger.warning(
+                f"Architecture(s) {sorted(unknown)} not found in trained models "
+                f"(available: {sorted(available_archs)}). They will be skipped."
+            )
+        selected_archs &= available_archs
+
+    models_to_explain = {
+        key: model
+        for key, model in trained_models.items()
+        if key.split("_", 1)[0] in selected_archs and int(key.split("_", 1)[1]) in selected_iters
+    }
+
+    if not models_to_explain:
+        logger.warning(
+            "No model instances matched the explainability config. "
+            f"models={exp_cfg.models!r}, bootstraps={exp_cfg.bootstraps!r}. "
+            "Skipping explainability stage."
+        )
+        return
+
+    logger.info(
+        f"Explaining {len(models_to_explain)} model instance(s): "
+        f"{sorted(models_to_explain.keys())}"
     )
 
-    fig = plot_attribution_distribution(result.fragment_importances)
-    save_plot(fig, explain_dir / "fragment_attributions.png")
-    logger.info("Saved fragment_attributions.png")
+    # ------------------------------------------------------------------
+    # 2. Resolve which molecules to explain
+    # ------------------------------------------------------------------
+    if exp_cfg.explain_mol_ids is not None:
+        explain_mol_ids = [str(m) for m in exp_cfg.explain_mol_ids]
+        logger.info(f"Using {len(explain_mol_ids)} explicit molecule ID(s) from config.")
+    else:
+        mol_id_set: set[str] = set()
 
-    for mol_exp in result.mol_explanations:
-        fig = plot_mols_with_weights(
-            smiles_list=mol_exp.monomer_smiles,
-            weights_list=mol_exp.per_monomer_weights,
-            legend=mol_exp.monomer_smiles,
+        def _collect(idx_lists):
+            for i in sorted(selected_iters):
+                if i < len(idx_lists):
+                    mol_id_set.update(str(idx) for idx in idx_lists[i])
+
+        if exp_cfg.explain_set in ("test", "all"):
+            _collect(test_idxs)
+        if exp_cfg.explain_set in ("train", "all"):
+            _collect(train_idxs)
+        if exp_cfg.explain_set in ("validation", "all"):
+            _collect(val_idxs)
+
+        explain_mol_ids = sorted(mol_id_set)
+        logger.info(
+            f"Explaining {len(explain_mol_ids)} molecule(s) from " f"'{exp_cfg.explain_set}' set."
         )
-        save_plot(fig, explain_dir / f"{mol_exp.mol_id}_heatmap.png")
-        logger.info(f"Saved {mol_exp.mol_id}_heatmap.png")
+
+    if not explain_mol_ids:
+        logger.warning("No molecules to explain. Skipping explainability stage.")
+        return
+
+    # ------------------------------------------------------------------
+    # 3. Global attribution plot
+    # ------------------------------------------------------------------
+    logger.info("Computing global fragment attribution distribution…")
+    global_result = compute_global_attribution(
+        models=models_to_explain,
+        experiment_path=out_dir,
+        dataset=dataset,
+        explain_mols=explain_mol_ids,
+        problem_type=data_cfg.problem_type,
+        normalisation_type=exp_cfg.normalisation,
+        fragmentation_approach=exp_cfg.fragmentation,
+        target_class=exp_cfg.target_class,
+        top_n=exp_cfg.top_n,
+        plot_type=exp_cfg.plot_type,
+    )
+
+    if global_result.warning:
+        logger.warning(f"Global attribution skipped: {global_result.warning}")
+    else:
+        save_plot(global_result.figure, explain_dir / "fragment_attributions.png")
+        logger.info(
+            f"Saved fragment_attributions.png "
+            f"({global_result.n_mols} mol(s) × {global_result.n_models} model(s), "
+            f"{global_result.n_frags_total} unique fragment(s), "
+            f"top/bottom {global_result.n_shown // 2} shown)"
+        )
+
+    # ------------------------------------------------------------------
+    # 4. Per-molecule heatmaps and attribution tables
+    # ------------------------------------------------------------------
+    logger.info("Computing per-molecule attribution heatmaps…")
+    local_results = compute_local_attribution(
+        models=models_to_explain,
+        experiment_path=out_dir,
+        dataset=dataset,
+        explain_mols=explain_mol_ids,
+        problem_type=data_cfg.problem_type,
+        normalisation_type=exp_cfg.normalisation,
+        fragmentation_approach=exp_cfg.fragmentation,
+        target_class=exp_cfg.target_class,
+    )
+
+    saved_heatmaps = 0
+    for mol_result in local_results:
+        if mol_result.warning:
+            logger.warning(f"Mol '{mol_result.mol_idx}': {mol_result.warning}")
+            continue
+
+        save_plot(mol_result.mol_figure, explain_dir / f"{mol_result.mol_idx}_heatmap.png")
+        mol_result.attribution_df.to_csv(
+            explain_dir / f"{mol_result.mol_idx}_attribution.csv", index=False
+        )
+        saved_heatmaps += 1
+
+    logger.info(f"Saved {saved_heatmaps}/{len(local_results)} molecule heatmap(s) and CSV(s).")
