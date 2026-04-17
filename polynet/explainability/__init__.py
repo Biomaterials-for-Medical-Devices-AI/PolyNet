@@ -7,23 +7,47 @@ and visualisation for polymer property prediction models.
 All computation functions return plain data structures with no Streamlit
 dependency. The app layer is responsible for rendering.
 
-::
+High-level masking API (no Streamlit)::
 
-    from polynet.explainability import run_explanation, ExplanationResult
+    from polynet.explainability import (
+        compute_and_cache_masking,
+        build_display_data,
+        compute_global_attribution,
+        compute_local_attribution,
+        GlobalAttributionResult,
+        MolAttributionResult,
+    )
+
+Low-level building blocks::
+
+    from polynet.explainability import (
+        calculate_masking_attributions,
+        fragment_attributions_to_distribution,
+        merge_fragment_attributions,
+        fragment_attributions_to_atom_weights,
+    )
+
+Embeddings::
+
     from polynet.explainability import get_graph_embeddings, reduce_embeddings
-    from polynet.explainability import get_fragment_importance
 """
 
 from polynet.explainability.attributions import (
-    build_explainer,
-    build_explainers,
-    calculate_attributions,
     deep_update,
     get_node_feat_vector_sizes,
     merge_attribution_masks,
     slice_masks_to_feature,
 )
 from polynet.explainability.embeddings import get_graph_embeddings, reduce_embeddings
+from polynet.explainability.explain import (
+    GlobalAttributionResult,
+    MolAttributionResult,
+    build_display_data,
+    compute_and_cache_masking,
+    compute_global_attribution,
+    compute_local_attribution,
+    fragment_attributions_to_atom_weights,
+)
 from polynet.explainability.fragments import get_fragment_importance
 from polynet.explainability.masking import (
     calculate_masking_attributions,
@@ -42,19 +66,24 @@ from polynet.explainability.visualization import (
 )
 
 __all__ = [
-    # Pipeline
+    # High-level masking pipeline
+    "compute_and_cache_masking",
+    "build_display_data",
+    "compute_global_attribution",
+    "compute_local_attribution",
+    "GlobalAttributionResult",
+    "MolAttributionResult",
+    "fragment_attributions_to_atom_weights",
+    # Legacy pipeline (deprecated)
     "run_explanation",
     "ExplanationResult",
     "MoleculeExplanation",
-    # Attributions
-    "build_explainer",
-    "build_explainers",
-    "calculate_attributions",
+    # Attributions (low-level)
     "merge_attribution_masks",
     "slice_masks_to_feature",
     "get_node_feat_vector_sizes",
     "deep_update",
-    # Masking attributions
+    # Masking attributions (low-level)
     "calculate_masking_attributions",
     "merge_fragment_attributions",
     "fragment_attributions_to_distribution",
