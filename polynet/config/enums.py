@@ -348,13 +348,6 @@ class EvaluationMetric(StrEnum):
 class ExplainAlgorithm(StrEnum):
     """Supported attribution / explainability algorithms."""
 
-    GNNExplainer = "gnn_explainer"
-    IntegratedGradients = "integrated_gradients"
-    Saliency = "saliency"
-    InputXGradients = "input_x_gradients"
-    Deconvolution = "deconvolution"
-    ShapleyValueSampling = "shapley_value_sampling"
-    GuidedBackprop = "guided_backprop"
     ChemistryMasking = "chemistry_masking"
 
 
