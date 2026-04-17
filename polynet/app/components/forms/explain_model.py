@@ -379,11 +379,7 @@ def _global_tab_section(
     with cols[0]:
         plot_type = st.radio(
             "Plot type",
-            options=[
-                AttributionPlotType.Ridge,
-                AttributionPlotType.Bar,
-                AttributionPlotType.Strip,
-            ],
+            options=[AttributionPlotType.Ridge, AttributionPlotType.Bar, AttributionPlotType.Strip],
             format_func=lambda x: {
                 AttributionPlotType.Ridge: "Ridge (full distribution)",
                 AttributionPlotType.Bar: "Bar (mean ± 95 % CI)",
@@ -524,7 +520,7 @@ def explain_predictions_form(
         "Explain model predictions", value=True, key=ExplainModelStateKeys.ExplainModels
     ):
         return
-
+    # TODO: delete this and use explainability stage
     shared = _shared_params_section(
         gnn_models=gnn_models,
         gnn_models_dir=gnn_models_dir,
