@@ -1,25 +1,21 @@
 """
 polynet.explainability.attributions
 =====================================
-Node attribution calculation and ensemble mask merging for GNN explainability.
+Node attribution utilities for GNN explainability.
 
-Supports multiple attribution algorithms via PyTorch Geometric's ``Explainer``
-interface, with Captum-based methods (Saliency, IntegratedGradients, etc.)
-and GNNExplainer.
-
-Results are cached to disk as JSON so that expensive attribution computations
-are not repeated across app sessions or pipeline re-runs.
+Provides helpers for merging ensemble attribution masks, computing per-feature
+vector sizes, slicing masks to a single feature, and deep-merging attribution
+cache dicts.
 
 Public API
 ----------
 ::
 
     from polynet.explainability.attributions import (
-        build_explainer,
-        calculate_attributions,
         merge_attribution_masks,
         get_node_feat_vector_sizes,
         slice_masks_to_feature,
+        deep_update,
     )
 """
 
@@ -27,185 +23,13 @@ from __future__ import annotations
 
 from collections import defaultdict
 import logging
-from pathlib import Path
+from pathlib import Path  # noqa: F401 — kept for downstream imports
 
-import captum.attr
 import numpy as np
-from torch_geometric.explain import CaptumExplainer, Explainer, GNNExplainer, ModelConfig
 
-from polynet.config.enums import ExplainAlgorithm, ProblemType
+from polynet.config.enums import ExplainAlgorithm
 
 logger = logging.getLogger(__name__)
-
-
-# ---------------------------------------------------------------------------
-# Explainer construction
-# ---------------------------------------------------------------------------
-
-# Maps ExplainAlgorithm → Captum attribution class (or None for GNNExplainer)
-_CAPTUM_REGISTRY: dict[ExplainAlgorithm, type | None] = {
-    ExplainAlgorithm.GNNExplainer: None,
-    ExplainAlgorithm.ShapleyValueSampling: captum.attr.ShapleyValueSampling,
-    ExplainAlgorithm.InputXGradients: captum.attr.InputXGradient,
-    ExplainAlgorithm.Saliency: captum.attr.Saliency,
-    ExplainAlgorithm.IntegratedGradients: captum.attr.IntegratedGradients,
-    ExplainAlgorithm.Deconvolution: captum.attr.Deconvolution,
-    ExplainAlgorithm.GuidedBackprop: captum.attr.GuidedBackprop,
-}
-
-
-def build_explainer(
-    model, algorithm: ExplainAlgorithm | str, problem_type: ProblemType | str
-) -> Explainer:
-    """
-    Build a PyG ``Explainer`` for the given model and algorithm.
-
-    Parameters
-    ----------
-    model:
-        Trained GNN model.
-    algorithm:
-        Attribution algorithm to use.
-    problem_type:
-        Classification or regression — sets the ModelConfig task.
-
-    Returns
-    -------
-    Explainer
-        A configured PyG Explainer ready to call on graph inputs.
-
-    Raises
-    ------
-    ValueError
-        If the algorithm is not registered.
-    """
-    algorithm = ExplainAlgorithm(algorithm) if isinstance(algorithm, str) else algorithm
-    problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
-
-    if algorithm not in _CAPTUM_REGISTRY:
-        raise ValueError(
-            f"Explain algorithm '{algorithm}' is not registered. "
-            f"Available: {[a.value for a in _CAPTUM_REGISTRY]}."
-        )
-
-    task = (
-        "multiclass_classification" if problem_type == ProblemType.Classification else "regression"
-    )
-    model_config = ModelConfig(mode=task, task_level="graph", return_type="raw")
-
-    captum_cls = _CAPTUM_REGISTRY[algorithm]
-    if captum_cls is None:
-        pyg_algorithm = GNNExplainer(epochs=100)
-    else:
-        pyg_algorithm = CaptumExplainer(attribution_method=captum_cls)
-
-    return Explainer(
-        model=model,
-        algorithm=pyg_algorithm,
-        explanation_type="model",
-        node_mask_type="attributes",
-        edge_mask_type=None,
-        model_config=model_config,
-    )
-
-
-def build_explainers(
-    models: dict, algorithm: ExplainAlgorithm | str, problem_type: ProblemType | str
-) -> dict[str, Explainer]:
-    """
-    Build one ``Explainer`` per trained model.
-
-    Parameters
-    ----------
-    models:
-        Dict of ``{model_log_name: model}`` as returned by
-        ``train_gnn_ensemble``.
-    algorithm:
-        Attribution algorithm to use.
-    problem_type:
-        Classification or regression.
-
-    Returns
-    -------
-    dict[str, Explainer]
-        Mapping from model log name to its Explainer.
-    """
-    return {name: build_explainer(model, algorithm, problem_type) for name, model in models.items()}
-
-
-# ---------------------------------------------------------------------------
-# Attribution calculation
-# ---------------------------------------------------------------------------
-
-
-def calculate_attributions(
-    mols: list,
-    existing_explanations: dict,
-    algorithm: ExplainAlgorithm | str,
-    explainers: dict[str, Explainer],
-) -> dict:
-    """
-    Calculate node attribution masks for a set of molecules.
-
-    Skips molecules whose attributions are already cached in
-    ``existing_explanations`` to avoid redundant computation.
-
-    Parameters
-    ----------
-    mols:
-        List of PyG graph objects to explain.
-    existing_explanations:
-        Previously computed explanations loaded from the cache JSON.
-        Structure: ``{model_name: {model_number: {mol_id: {algorithm: mask}}}}``.
-    algorithm:
-        Attribution algorithm being computed.
-    explainers:
-        Dict of ``{"{model_name}_{number}": Explainer}`` as returned by
-        ``build_explainers``.
-
-    Returns
-    -------
-    dict
-        Node masks with structure:
-        ``{model_name: {model_number: {mol_id: {algorithm: mask}}}}``.
-        Mask values are nested lists of shape ``(n_atoms, n_node_features)``.
-    """
-    algorithm = ExplainAlgorithm(algorithm) if isinstance(algorithm, str) else algorithm
-    node_masks: dict = {}
-
-    for model_log_name, explainer in explainers.items():
-        model_name, model_number = model_log_name.split("_", 1)
-        cached = existing_explanations.get(model_name, {}).get(str(model_number), {})
-
-        for mol in mols:
-            mol_id = mol.idx
-
-            if cached and mol_id in cached and algorithm.value in cached[mol_id]:
-                mask = cached[mol_id][algorithm.value]
-                logger.debug(f"Using cached attribution for mol '{mol_id}', {model_log_name}.")
-            else:
-                logger.debug(f"Computing attribution for mol '{mol_id}', {model_log_name}.")
-                mask = (
-                    explainer(
-                        x=mol.x,
-                        edge_index=mol.edge_index,
-                        batch_index=None,
-                        edge_attr=mol.edge_attr,
-                        monomer_weight=getattr(mol, "weight_monomer", None),
-                        index=0,
-                    )
-                    .node_mask.detach()
-                    .numpy()
-                    .tolist()
-                )
-
-            (
-                node_masks.setdefault(model_name, {})
-                .setdefault(model_number, {})
-                .setdefault(mol_id, {})
-            )[algorithm.value] = mask
-
-    return node_masks
 
 
 # ---------------------------------------------------------------------------
