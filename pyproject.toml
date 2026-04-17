@@ -18,7 +18,7 @@ torch-geometric = "2.7"
 scikit-learn = "^1.6.1"
 matplotlib = "^3.10.3"
 seaborn = "^0.13.2"
-numpy = "^1.26.4"
+numpy = "^2.4.4"
 scipy = "^1.15.3"
 ipykernel = "^6.24.0"
 streamlit = "^1.45.1"
@@ -30,10 +30,10 @@ isort = "^6.0.1"
 statsmodels = "^0.14.5"
 ray = "^2.51.0"
 pydantic = "^2.12.3"
-captum = "^0.8.0"
 canonicalize-psmiles = {git = "https://github.com/kuennethgroup/canonicalize_psmiles.git"}
 sentence-transformers = "^5.2.3"
 polymetrix = "^0.2.0"
+shap = "^0.51.0"
 
 
 [tool.poetry.group.dev.dependencies]

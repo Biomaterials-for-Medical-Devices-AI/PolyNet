@@ -251,6 +251,48 @@ class BaseNetwork(nn.Module):
 
         return self.pooling_fn(x, batch_index)
 
+    def get_node_embeddings(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index: Tensor | None = None,
+        edge_attr: Tensor | None = None,
+        monomer_weight: Tensor | None = None,
+    ) -> Tensor:
+        """
+        Run message passing and return pre-pooling node embeddings.
+
+        Identical to ``get_graph_embedding`` except the pooling step is
+        omitted, returning the node-level tensor of shape
+        ``(n_nodes, embedding_dim)`` that would otherwise be pooled.
+
+        Subclasses that override ``get_graph_embedding`` must also override
+        this method to apply the same pre-pooling transformations.
+        """
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x = x * monomer_weight
+
+        for conv, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
+            x = x * monomer_weight
+
+        if self.cross_att:
+            x = self._cross_attention(x, batch_index, monomer_weight)
+
+        return x
+
     def readout_function(self, x: Tensor) -> Tensor:
         """Apply the MLP readout layers to a graph embedding."""
         for layer in self.readout:

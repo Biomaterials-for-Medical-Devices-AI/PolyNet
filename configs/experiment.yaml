@@ -194,18 +194,47 @@ tml_models:
 
 # -----------------------------------------------------------------------------
 # Explainability
-# Only applied to GNN models. Requires gnn_models.enabled: true
+# Only applied to GNN models. Requires gnn_training.train_gnn: true
+# Uses chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023):
+#   attribution(fragment) = Y_pred_full − Y_pred_masked
 # -----------------------------------------------------------------------------
 explainability:
   enabled: false
-  algorithm: "integrated_gradients"   # IntegratedGradients | Saliency | GNNExplainer
-                                     # InputXGradient | ShapleyValueSampling
-  fragmentation: "brics"             # brics | recap
-  normalisation: "local"             # Local | Global
-  cutoff: 0.05
+  algorithm: "chemistry_masking"
 
-  # Molecule IDs to compute and plot attributions for
-  # Leave null to explain the first 5 test-set molecules
+  # Which GNN architectures to explain.
+  # Must match keys in gnn_training.gnn_convolutional_layers (e.g. GCN, GAT).
+  # "all" explains every trained architecture.
+  models: "all"
+  # models: [GCN, GAT]
+
+  # Which bootstrap iteration indices to explain (0-based, matching training).
+  # "all" explains every trained iteration.
+  # Combined with models as a cross-product:
+  #   models: [GCN, GAT] + bootstraps: [0, 2]  →  GCN_0, GCN_2, GAT_0, GAT_2
+  bootstraps: "all"
+  # bootstraps: [0, 1]
+
+  # Molecular fragmentation strategy.
+  fragmentation: "brics"             # brics | recap | murcko_scaffold | functional_groups
+
+  # Data split to draw molecules from (ignored when explain_mol_ids is set).
+  explain_set: "test"                # train | validation | test | all
+
+  # Normalisation applied to attribution scores before plotting.
+  normalisation: "per_model"         # local | global | per_model | no_normalisation
+
+  # For classification: which class to attribute (null for regression).
+  target_class: null
+
+  # Attribution distribution plot style.
+  plot_type: "ridge"                 # ridge | bar | strip
+
+  # Show only the top-N and bottom-N fragments by mean attribution.
+  # null shows every fragment.
+  top_n: 10
+
+  # Optional explicit molecule IDs — overrides explain_set when provided.
   explain_mol_ids: null
   # explain_mol_ids:
   #   - "poly_0001"

@@ -51,6 +51,7 @@ import yaml
 from polynet.config.io import save_options
 from polynet.config.schemas import (
     DataConfig,
+    ExplainabilityConfig,
     FeatureTransformConfig,
     GeneralConfig,
     RepresentationConfig,
@@ -201,6 +202,15 @@ def _build_target_config(cfg: dict) -> TargetTransformConfig:
     so existing YAML configs remain fully compatible.
     """
     return TargetTransformConfig.model_validate(cfg.get("target_transform", {}))
+
+
+def _build_explainability_config(cfg: dict) -> ExplainabilityConfig:
+    """Build ExplainabilityConfig from the 'explainability' section.
+
+    Falls back to a disabled config when the section is absent so that
+    legacy YAML files without an explainability block stay compatible.
+    """
+    return ExplainabilityConfig.model_validate(cfg.get("explainability", {}))
 
 
 # ---------------------------------------------------------------------------
@@ -520,9 +530,8 @@ def main() -> None:
     if explain_enabled and dataset is not None and gnn_trained:
         t0 = announce("11. Explainability")
         try:
-            run_explainability(
-                gnn_trained, dataset, split_indexes, data_cfg, cfg["explainability"], out_dir
-            )
+            explain_cfg = _build_explainability_config(cfg)
+            run_explainability(gnn_trained, dataset, split_indexes, data_cfg, explain_cfg, out_dir)
             done(t0)
         except Exception as e:
             logger.error(f"Explainability failed: {e}", exc_info=True)

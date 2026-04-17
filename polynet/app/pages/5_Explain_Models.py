@@ -148,7 +148,15 @@ if experiment_name:
     st.subheader("Explain GNN Model Predictions")
     st.markdown(
         """
-    In this section, you can explain the predictions of the GNN models. You can select the model you want to explain, the set of data you want to explain, and the specific polymers you want to explain. You can also select the explainability algorithm you want to use, the node features you want to explain, and the colors for the positive and negative explanations. The explanations will be displayed as plots, and you can also plot the t-SNE of the graph embeddings if you wish.
+    Two complementary explanation views are available as separate tabs:
+
+    - **Global Explanation — Population Trends** answers *"which molecular fragments consistently drive predictions across a set of molecules?"*
+      Results are shown as a ridge plot of fragment attribution distributions, one row per fragment, preserving the full spread across ensemble models.
+
+    - **Local Explanation — Single Molecule** answers *"how does this specific polymer's structure influence its prediction?"*
+      Each selected molecule gets its own panel with a per-atom attribution heatmap and a fragment importance table.
+
+    Select your models and settings above the tabs, then run each pipeline independently.
     """
     )
     explain_predictions_form(
@@ -160,5 +168,4 @@ if experiment_name:
         data=data,
         preds=preds,
         dataset=dataset,
-        node_feats=representation_options.node_features,
     )

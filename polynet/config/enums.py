@@ -348,13 +348,7 @@ class EvaluationMetric(StrEnum):
 class ExplainAlgorithm(StrEnum):
     """Supported attribution / explainability algorithms."""
 
-    GNNExplainer = "gnn_explainer"
-    IntegratedGradients = "integrated_gradients"
-    Saliency = "saliency"
-    InputXGradients = "input_x_gradients"
-    Deconvolution = "deconvolution"
-    ShapleyValueSampling = "shapley_value_sampling"
-    GuidedBackprop = "guided_backprop"
+    ChemistryMasking = "chemistry_masking"
 
 
 class ImportanceNormalisationMethod(StrEnum):
@@ -362,6 +356,7 @@ class ImportanceNormalisationMethod(StrEnum):
 
     Local = "local"
     Global = "global"
+    PerModel = "per_model"
     NoNormalisation = "no_normalisation"
 
 
@@ -383,6 +378,14 @@ class Plot(StrEnum):
     GraphVisualization = "graph_visualization"
     MatrixPlot = "matrix_plot"
     MetricsBoxPlot = "metrics_box_plot"
+
+
+class AttributionPlotType(StrEnum):
+    """Plot types available for the global fragment attribution view."""
+
+    Ridge = "ridge"
+    Bar = "bar"
+    Strip = "strip"
 
 
 class DimensionalityReduction(StrEnum):

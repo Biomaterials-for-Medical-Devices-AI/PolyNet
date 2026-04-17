@@ -123,49 +123,75 @@ def fragment_and_match(
         case FragmentationMethod.BRICS:
             frags = _fragments_brics(mol)
 
-        # case "functional_groups":
-        #     frags = _fragments_functional_groups(mol)
-
         case FragmentationMethod.MurckoScaffold:
             frags = _fragments_murcko(mol)
+
+        # TODO: fix these fragment approaches to follow the new behaviour.
+        # case "functional_groups":
+        #     frags = _fragments_functional_groups(mol)
 
         case _:
             raise ValueError(f"Unknown fragmentation mode: {fragmentation_approach}")
 
     # ----- match fragments back to original -----
-    matches = {}
 
-    for frag in frags:
-        try:
-            Chem.SanitizeMol(frag)
-        except (ValueError, RuntimeError) as e:
-            frag_smi = Chem.MolToSmiles(frag, sanitize=False) or "<unknown>"
-            logger.warning("Skipping fragment '%s': sanitization failed — %s", frag_smi, e)
-            continue
-
-        m = mol.GetSubstructMatches(frag, uniquify=True)
-        if m:
-            smi = Chem.MolToSmiles(frag)
-            matches[smi] = [list(x) for x in m]
-
-    return matches
+    return frags
 
 
-def _fragments_brics(mol):
-    raw = list(BRICS.BRICSDecompose(mol, returnMols=True))
-    out = []
+def _fragments_brics(mol) -> dict:
+    """
+    Fragment a molecule using BRICS rules and return a direct atom-index mapping.
 
-    for frag in raw:
-        frag = Chem.Mol(frag)  # clone
-        # remove dummy atoms *after* sanitization
-        for a in reversed([a.GetIdx() for a in frag.GetAtoms() if a.GetAtomicNum() == 0]):
-            frag = Chem.RWMol(frag)
-            frag.RemoveAtom(a)
-            frag = frag.GetMol()
-        Chem.SanitizeMol(frag)
-        out.append(frag)
+    Bonds are broken with ``FragmentOnBonds``, and the resulting atom-to-fragment
+    mapping is read from ``GetMolFrags(..., fragsMolAtomMapping=...)``.  This
+    avoids substructure matching entirely: atom indices come straight from the
+    bond-breaking operation and are guaranteed to correspond to the original
+    molecule's atom numbering.
 
-    return out
+    ``FragmentOnBonds`` appends dummy atoms (attachment-point markers) with
+    indices ``>= mol.GetNumAtoms()``.  These are stripped from the mapping and
+    from each fragment SMILES via ``_eliminate_dummy`` before canonicalisation.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.Mol
+        A sanitized RDKit molecule.
+
+    Returns
+    -------
+    dict
+        ``{canonical_fragment_smiles: [[atom_indices], ...]}``.
+        Atom indices are 0-based positions in *mol*.  Fragments that appear
+        more than once (e.g. repeated ring systems) accumulate as separate
+        lists under the same SMILES key.
+    """
+    bond_indices = [
+        mol.GetBondBetweenAtoms(a1, a2).GetIdx() for (a1, a2), _ in BRICS.FindBRICSBonds(mol)
+    ]
+
+    # No breakable bonds — the whole molecule is a single fragment
+    if not bond_indices:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
+
+    frag_mol = Chem.FragmentOnBonds(mol, bond_indices)
+
+    frags_map: list = []
+    frags = Chem.GetMolFrags(
+        frag_mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=frags_map
+    )
+
+    # Strip dummy-atom indices (>= original atom count) introduced by FragmentOnBonds
+    n_atoms = mol.GetNumAtoms()
+    frags_map = [[i for i in mapping if i < n_atoms] for mapping in frags_map]
+
+    frag_smiles = [Chem.MolToSmiles(_eliminate_dummy(f), canonical=True) for f in frags]
+
+    frag_dict: dict = defaultdict(list)
+    for smi, idxs in zip(frag_smiles, frags_map):
+        frag_dict[smi].append(idxs)
+
+    return dict(frag_dict)
 
 
 # def _fragments_functional_groups(mol):
@@ -184,20 +210,94 @@ def _fragments_brics(mol):
 #     return frags
 
 
-def _fragments_murcko(mol):
+def _fragments_murcko(mol) -> dict:
+    """
+    Fragment a molecule by cutting scaffold–sidechain bonds and return a direct
+    atom-index mapping.
+
+    The Murcko scaffold (ring systems joined by linker chains) is identified with
+    ``MurckoScaffold.GetScaffoldForMol``.  The scaffold atoms are mapped back to
+    the original molecule via a single substructure match; every bond that crosses
+    the scaffold–sidechain boundary is then cut with ``FragmentOnBonds`` and the
+    resulting atom-to-fragment mapping is read from ``fragsMolAtomMapping`` — no
+    further substructure matching is needed.
+
+    This mirrors the implementation of ``_fragments_brics`` so the two methods
+    produce the same dict contract and can be used interchangeably in the
+    masking explainability pipeline.
+
+    Edge cases
+    ----------
+    * **Acyclic molecule** (empty scaffold): returned as a single fragment.
+    * **Scaffold match failure**: returned as a single fragment.
+    * **No boundary bonds** (entire molecule is the scaffold): returned as a
+      single fragment.
+
+    Parameters
+    ----------
+    mol : rdkit.Chem.Mol
+        A sanitized RDKit molecule.
+
+    Returns
+    -------
+    dict
+        ``{canonical_fragment_smiles: [[atom_indices], ...]}``.
+        Atom indices are 0-based positions in *mol*.  Sidechain fragments that
+        appear more than once accumulate as separate lists under the same key.
+    """
     scaffold = MurckoScaffold.GetScaffoldForMol(mol)
 
-    if scaffold is None:
-        return []
+    # Acyclic molecule — scaffold is empty
+    if scaffold is None or scaffold.GetNumAtoms() == 0:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
 
-    frags = [scaffold]
+    # Map scaffold atoms back to original molecule indices
+    match = mol.GetSubstructMatch(scaffold)
+    if not match:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
 
-    # optionally include sidechains and ring systems
-    ring = MurckoScaffold.MakeScaffoldGeneric(scaffold)
-    if ring:
-        frags.append(ring)
+    scaffold_atoms = set(match)
 
-    return frags
+    # Bonds that straddle the scaffold–sidechain boundary
+    cut_bond_indices = [
+        bond.GetIdx()
+        for bond in mol.GetBonds()
+        if (bond.GetBeginAtomIdx() in scaffold_atoms) != (bond.GetEndAtomIdx() in scaffold_atoms)
+    ]
+
+    # Entire molecule is the scaffold — nothing to cut
+    if not cut_bond_indices:
+        smi = Chem.MolToSmiles(mol, canonical=True)
+        return {smi: [list(range(mol.GetNumAtoms()))]}
+
+    frag_mol = Chem.FragmentOnBonds(mol, cut_bond_indices)
+
+    frags_map: list = []
+    frags = Chem.GetMolFrags(
+        frag_mol, asMols=True, sanitizeFrags=False, fragsMolAtomMapping=frags_map
+    )
+
+    # Strip dummy-atom indices (>= original atom count) introduced by FragmentOnBonds
+    n_atoms = mol.GetNumAtoms()
+    frags_map = [[i for i in mapping if i < n_atoms] for mapping in frags_map]
+
+    frag_smiles = [Chem.MolToSmiles(_eliminate_dummy(f), canonical=True) for f in frags]
+
+    frag_dict: dict = defaultdict(list)
+    for smi, idxs in zip(frag_smiles, frags_map):
+        frag_dict[smi].append(idxs)
+
+    return dict(frag_dict)
+
+
+def _eliminate_dummy(mol):
+    for a in reversed([a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 0]):
+        mol = Chem.RWMol(mol)
+        mol.RemoveAtom(a)
+        mol = mol.GetMol()
+    return mol
 
 
 def count_atom_property_frequency(

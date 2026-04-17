@@ -175,6 +175,25 @@ class ExplainModelStateKeys(StrEnum):
     PosColorPlots = "PosColorPlots"
     CutoffSelector = "CutoffSelector"
     NormalisationMethodSelector = "NormalisationMethodSelector"
+    TopNFragments = "TopNFragments"
+    FragmentationApproach = "FragmentationApproach"
+    SelectAllModels = "SelectAllModels"
+    TargetClassSelector = "TargetClassSelector"
+
+    # Global explanation tab
+    GlobalExplainSet = "GlobalExplainSet"
+    GlobalExplainManuallySelector = "GlobalExplainManuallySelector"
+    GlobalExplainIDSelector = "GlobalExplainIDSelector"
+    GlobalKeepRunning = "GlobalKeepRunning"
+    GlobalPlotType = "GlobalPlotType"
+
+    # Local explanation tab
+    LocalExplainIDSelector = "LocalExplainIDSelector"
+    LocalSetMolName = "LocalSetMolName"
+    LocalKeepRunning = "LocalKeepRunning"
+
+    # Deprecated — kept for session-state compatibility
+    # ExplainSet, ExplainIDSelector, ExplainManuallySelector, PlotIDSelector, SetMolName
 
 
 class PredictPageStateKeys(StrEnum):

@@ -22,7 +22,6 @@ import math
 
 from PIL import Image
 from matplotlib import rcParams
-from matplotlib.collections import PolyCollection
 import matplotlib.colors as mcolors
 from matplotlib.colors import Normalize
 import matplotlib.pyplot as plt
@@ -31,7 +30,6 @@ import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
-from scipy.stats import gaussian_kde
 import seaborn as sns
 
 # ---------------------------------------------------------------------------
@@ -246,14 +244,17 @@ def plot_attribution_distribution(
     figsize: tuple[int, int] = (8, 10),
     neg_color: str = "#1f77b4",
     pos_color: str = "#ff7f0e",
-    kde_bandwidth: float = 0.2,
-    show_averages: bool = True,
+    kde_bandwidth: float = 0.5,
+    top_n: int | None = None,
 ) -> plt.Figure:
     """
-    Plot per-fragment attribution distributions as violin-style KDE curves.
+    Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
 
-    Positive and negative attributions are plotted on opposing sides of
-    zero, coloured distinctly, with mean markers overlaid.
+    Each fragment occupies one row of a seaborn ``FacetGrid``; rows overlap
+    vertically so the overall chart is compact.  Fragments are sorted by their
+    mean attribution (descending), and each row is coloured by interpolating
+    between ``neg_color`` (most negative mean) and ``pos_color`` (most positive
+    mean).
 
     Parameters
     ----------
@@ -261,127 +262,286 @@ def plot_attribution_distribution(
         Mapping from fragment SMILES (or feature name) to list of
         attribution scores across all molecules and occurrences.
     figsize:
-        Figure size ``(width, height)`` in inches.
+        Approximate figure size ``(width, height)`` in inches.  The height is
+        used to derive the ``FacetGrid`` row height (``height / n_fragments``).
     neg_color, pos_color:
-        Matplotlib colour strings for negative and positive sides.
+        Matplotlib colour strings for the tails of the fragment palette.
     kde_bandwidth:
-        Bandwidth parameter for ``scipy.stats.gaussian_kde``.
-    show_averages:
-        Whether to overlay mean markers with value annotations.
+        ``bw_adjust`` parameter forwarded to ``sns.kdeplot``.
+    top_n:
+        If set, only the ``top_n`` fragments with the highest mean attribution
+        and the ``top_n`` with the lowest mean attribution are shown.
+        Pass ``None`` to show all fragments.
 
     Returns
     -------
     plt.Figure
     """
-    rcParams.update(
-        {
-            "font.size": 12,
-            "font.family": "sans-serif",
-            "axes.linewidth": 1.2,
-            "axes.labelsize": 14,
-            "axes.titleweight": "bold",
-            "axes.titlepad": 15,
-            "xtick.major.size": 4,
-            "ytick.major.size": 4,
-        }
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
+    n = len(ordered_frags)
+    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
+
+    row_height = max(0.4, figsize[1] / n)
+    aspect = figsize[0] / row_height
+
+    sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
+
+    g = sns.FacetGrid(
+        df, row="fragment", hue="fragment", aspect=aspect, height=row_height, palette=palette
     )
 
-    labels = list(attribution_dict.keys())
-    values = list(attribution_dict.values())
+    # Filled KDE
+    g.map(
+        sns.kdeplot,
+        "attribution",
+        bw_adjust=kde_bandwidth,
+        clip_on=False,
+        fill=True,
+        alpha=0.8,
+        linewidth=1.5,
+    )
+
+    # White outline for separation between overlapping rows
+    g.map(sns.kdeplot, "attribution", bw_adjust=kde_bandwidth, clip_on=False, color="w", lw=2)
+
+    # Zero baseline
+    g.refline(y=0, linewidth=1, linestyle="-", color="black", clip_on=False)
+
+    # Fragment label on the left of each row
+    def _label(x, color, label):
+        ax = plt.gca()
+        ax.text(
+            0,
+            0.2,
+            label,
+            fontweight="bold",
+            color=color,
+            ha="left",
+            va="center",
+            transform=ax.transAxes,
+            fontsize=9,
+        )
+
+    g.map(_label, "attribution")
+    g.set_titles("")
+    g.set(yticks=[], ylabel="")
+    g.set_xlabels("Attribution")
+    g.despine(bottom=True, left=True)
+
+    # Overlap rows
+    g.figure.subplots_adjust(hspace=-0.3)
+
+    return g.figure
+
+
+def _prepare_attribution_df(
+    attribution_dict: dict[str, list[float]], top_n: int | None
+) -> tuple[pd.DataFrame, list[str], pd.Series]:
+    """
+    Shared data-preparation step for all global attribution plots.
+
+    Returns
+    -------
+    df : long-form DataFrame with columns ``fragment`` and ``attribution``
+    ordered_frags : fragment names sorted by mean (descending, already filtered)
+    means : per-fragment mean Series (filtered)
+    """
+    rows = []
+    for frag, scores in attribution_dict.items():
+        for s in scores:
+            rows.append({"fragment": frag, "attribution": float(s)})
+    df = pd.DataFrame(rows)
+
+    means = df.groupby("fragment")["attribution"].mean()
+    ordered_frags = means.sort_values(ascending=False).index.tolist()
+
+    if top_n is not None and len(ordered_frags) > top_n * 2:
+        ordered_frags = ordered_frags[:top_n] + ordered_frags[-top_n:]
+        df = df[df["fragment"].isin(ordered_frags)]
+        means = means[ordered_frags]
+
+    df["fragment"] = pd.Categorical(df["fragment"], categories=ordered_frags, ordered=True)
+    df = df.sort_values("fragment")
+    return df, ordered_frags, means
+
+
+def _build_fragment_palette(
+    ordered_frags: list[str], means: pd.Series, neg_color: str, pos_color: str
+) -> dict:
+    neg_rgb = np.array(mcolors.to_rgb(neg_color))
+    pos_rgb = np.array(mcolors.to_rgb(pos_color))
+    min_mean, max_mean = means.min(), means.max()
+    denom = max_mean - min_mean if max_mean != min_mean else 1.0
+    return {
+        frag: tuple((neg_rgb + (pos_rgb - neg_rgb) * (means[frag] - min_mean) / denom).tolist())
+        for frag in ordered_frags
+    }
+
+
+def plot_attribution_bar(
+    attribution_dict: dict[str, list[float]],
+    figsize: tuple[int, int] = (10, 6),
+    neg_color: str = "#1f77b4",
+    pos_color: str = "#ff7f0e",
+    top_n: int | None = None,
+) -> plt.Figure:
+    """
+    Horizontal bar chart of mean fragment attributions with 95 % CI error bars.
+
+    Bars are coloured by the same neg→pos interpolation used in the ridge plot,
+    sorted from most positive (top) to most negative (bottom).  Error bars show
+    the 95 % bootstrap confidence interval across all scores for that fragment.
+
+    Parameters
+    ----------
+    attribution_dict:
+        ``{frag_smiles: [score1, score2, ...]}``.
+    figsize:
+        Figure size ``(width, height)``.
+    neg_color, pos_color:
+        Hex colours for negative / positive attribution ends of the palette.
+    top_n:
+        Show only the ``top_n`` highest and ``top_n`` lowest mean-attribution
+        fragments. Pass ``None`` to show all.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
+    palette = _build_fragment_palette(ordered_frags, means, neg_color, pos_color)
+
+    # 95 % CI via 1.96 × SEM
+    stats = df.groupby("fragment", observed=True)["attribution"].agg(["mean", "sem", "count"])
+    stats["ci95"] = 1.96 * stats["sem"].fillna(0)
+
+    # Plot in descending mean order (top of chart = most positive)
+    plot_frags = list(reversed(ordered_frags))
+    y_pos = np.arange(len(plot_frags))
+    bar_means = stats.loc[plot_frags, "mean"].values
+    bar_ci = stats.loc[plot_frags, "ci95"].values
+    colors = [palette[f] for f in plot_frags]
 
     fig, ax = plt.subplots(figsize=figsize)
-    fig.subplots_adjust(left=0.32, right=0.95)
+    bars = ax.barh(
+        y_pos,
+        bar_means,
+        xerr=bar_ci,
+        color=colors,
+        height=0.6,
+        error_kw={"ecolor": "0.3", "capsize": 3, "linewidth": 1.2},
+    )
 
-    y_pos = np.arange(len(labels))
-    ax.axvline(0, color="black", linewidth=1.2, linestyle="-", alpha=0.8, zorder=1)
-
-    verts_pos: list = []
-    verts_neg: list = []
-
-    for i, vals in enumerate(values):
-        vals = np.array(vals, dtype=float)
-        if len(vals) == 0:
-            continue
-        if len(vals) > 1 and np.allclose(vals, vals[0]):
-            vals = vals + np.random.normal(0, 1e-6, size=len(vals))
-
-        pos_vals = vals[vals > 0]
-        if len(pos_vals) > 1:
-            try:
-                kde = gaussian_kde(pos_vals, bw_method=kde_bandwidth)
-                x = np.linspace(0, max(3, vals.max() * 1.4), 120)
-                d = kde(x)
-                d = d / (d.max() + 1e-8) * 0.45
-                verts_pos.append(list(zip(x, i + d)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass
-
-        neg_vals = vals[vals < 0]
-        if len(neg_vals) > 1:
-            try:
-                kde = gaussian_kde(neg_vals, bw_method=kde_bandwidth)
-                x = np.linspace(min(-3, vals.min() * 1.4), 0, 120)
-                d = kde(x)
-                d = d / (d.max() + 1e-8) * 0.45
-                verts_neg.append(list(zip(x, i - d)) + [(0, i)])
-            except np.linalg.LinAlgError:
-                pass
-
-    if verts_pos:
-        ax.add_collection(
-            PolyCollection(
-                verts_pos,
-                facecolors=pos_color,
-                edgecolors=pos_color,
-                linewidths=1,
-                alpha=0.6,
-                zorder=3,
-            )
-        )
-
-    if verts_neg:
-        ax.add_collection(
-            PolyCollection(
-                verts_neg,
-                facecolors=neg_color,
-                edgecolors=neg_color,
-                linewidths=1,
-                alpha=0.6,
-                zorder=3,
-            )
-        )
-
-    if show_averages:
-        for i, vals in enumerate(values):
-            if not len(vals):
-                continue
-            avg = float(np.mean(vals))
-            colour = pos_color if avg > 0 else neg_color
-            ax.scatter(avg, i, s=70, color=colour, edgecolors="black", linewidths=0.8, zorder=5)
-            ax.text(
-                avg + 0.12 * np.sign(avg),
-                i,
-                f"{avg:.2f}",
-                fontsize=11,
-                va="center",
-                ha="left" if avg > 0 else "right",
-                weight="bold",
-            )
-
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(labels, fontsize=12)
-    ax.set_xlabel("Attribution", fontsize=14)
-    ax.set_title("Attribution Distributions by Functional Group")
+    ax.set_yticklabels(plot_frags, fontsize=9)
+    ax.set_xlabel("Mean Attribution (Y − Y_masked)", fontsize=11)
+    ax.set_title("Fragment Mean Attribution", fontsize=13, pad=10)
+    sns.despine(ax=ax, left=True)
+    ax.grid(axis="x", linestyle="--", alpha=0.4)
+    plt.tight_layout()
+    return fig
 
-    limit = max(3, float(np.abs(ax.get_xlim()).max()))
-    ax.set_xlim(-limit, limit)
 
-    ax.grid(True, axis="x", linestyle="--", alpha=0.3, linewidth=0.8, zorder=0)
-    for spine in ["top", "right"]:
-        ax.spines[spine].set_visible(False)
-    ax.spines["bottom"].set_linewidth(1.2)
-    ax.spines["left"].set_linewidth(1.2)
+def plot_attribution_strip(
+    attribution_dict: dict[str, list[float]],
+    figsize: tuple[int, int] = (10, 6),
+    neg_color: str = "#1f77b4",
+    pos_color: str = "#ff7f0e",
+    top_n: int | None = None,
+) -> plt.Figure:
+    """
+    Horizontal strip / swarm-style plot showing every individual attribution score.
 
+    Each fragment gets one row; individual scores are jittered vertically so
+    overlapping points are visible.  The mean is overlaid as a larger diamond
+    marker.  This combines the transparency of the ridge plot (shows spread and
+    outliers) with the compactness of the bar chart.
+
+    Parameters
+    ----------
+    attribution_dict:
+        ``{frag_smiles: [score1, score2, ...]}``.
+    figsize:
+        Figure size ``(width, height)``.
+    neg_color, pos_color:
+        Hex colours for the palette endpoints.
+    top_n:
+        Limit to top-N and bottom-N fragments by mean. Pass ``None`` for all.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    if not attribution_dict:
+        fig, ax = plt.subplots()
+        ax.text(0.5, 0.5, "No attribution data", ha="center", va="center")
+        return fig
+
+    df, ordered_frags, means = _prepare_attribution_df(attribution_dict, top_n)
+
+    n = len(ordered_frags)
+    fig, ax = plt.subplots(figsize=figsize)
+
+    # Build a diverging colormap and a normaliser anchored at 0, spanning the
+    # full range of all scores in the plot so every point's colour reflects its
+    # actual attribution value regardless of which fragment row it sits in.
+    cmap = mcolors.LinearSegmentedColormap.from_list("strip_cmap", [neg_color, "white", pos_color])
+    all_scores = df["attribution"].values
+    abs_max = max(abs(all_scores.min()), abs(all_scores.max())) or 1.0
+    norm = plt.Normalize(vmin=-abs_max, vmax=abs_max)
+
+    rng = np.random.default_rng(seed=0)
+    for i, frag in enumerate(reversed(ordered_frags)):
+        scores = df.loc[df["fragment"] == frag, "attribution"].values
+        jitter = rng.uniform(-0.25, 0.25, size=len(scores))
+        point_colors = cmap(norm(scores))
+        ax.scatter(
+            scores,
+            np.full_like(scores, i) + jitter,
+            c=point_colors,
+            alpha=0.75,
+            s=22,
+            linewidths=0,
+            zorder=2,
+        )
+        # Mean marker — coloured by its own value, outlined for visibility
+        ax.scatter(
+            [means[frag]],
+            [i],
+            c=[cmap(norm(means[frag]))],
+            s=90,
+            marker="D",
+            edgecolors="0.25",
+            linewidths=0.9,
+            zorder=3,
+        )
+
+    ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
+    ax.set_yticks(np.arange(n))
+    ax.set_yticklabels(list(reversed(ordered_frags)), fontsize=9)
+    ax.set_xlabel("Attribution (Y − Y_masked)", fontsize=11)
+    ax.set_title("Fragment Attribution — Individual Scores + Mean (◆)", fontsize=13, pad=10)
+    sns.despine(ax=ax, left=True)
+    ax.grid(axis="x", linestyle="--", alpha=0.4)
+
+    # Colourbar
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+    cb = fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.03)
+    cb.set_label("Attribution", fontsize=9)
+    cb.ax.tick_params(labelsize=8)
+    plt.tight_layout()
     return fig
 
 
