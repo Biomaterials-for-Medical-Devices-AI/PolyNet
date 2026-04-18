@@ -211,6 +211,13 @@ def embedding_projection(
 # ---------------------------------------------------------------------------
 
 
+def _parse_gnn_filename(fname: str) -> tuple[str, int]:
+    """Return (architecture_name, iteration) from a GNN model filename like 'GCN_2.pt'."""
+    stem = fname.rsplit(".", 1)[0]
+    parts = stem.rsplit("_", 1)
+    return parts[0], int(parts[1])
+
+
 def _shared_params_section(
     gnn_models: list,
     gnn_models_dir: Path,
@@ -222,20 +229,37 @@ def _shared_params_section(
     Render the parameters shared by both explanation tabs and return them as a
     dict.  Returns ``None`` and stops rendering if no models are selected.
     """
-    sorted_models = sorted(gnn_models)
+    all_archs = sorted({_parse_gnn_filename(f)[0] for f in gnn_models})
+    all_iterations = sorted({_parse_gnn_filename(f)[1] for f in gnn_models})
+
     select_all = st.toggle(
-        "Select all models", key=ExplainModelStateKeys.SelectAllModels, value=False
+        "Select all GNN models", key=ExplainModelStateKeys.SelectAllModels, value=False
     )
-    selected_models = st.multiselect(
-        "Select GNN Models to Explain",
-        options=sorted_models,
-        default=sorted_models if select_all else None,
-        key=ExplainModelStateKeys.ExplainModel,
+    selected_archs = st.multiselect(
+        "Select GNN architectures to explain",
+        options=all_archs,
+        default=all_archs if select_all else None,
+        key=ExplainModelStateKeys.GNNArchSelector,
+    )
+    selected_iterations = st.multiselect(
+        "Select bootstrap iterations",
+        options=all_iterations,
+        default=all_iterations,
+        key=ExplainModelStateKeys.GNNBootstrapSelector,
+        help="Each iteration is one train/test split. Explanations are averaged across selected iterations.",
     )
 
-    if not selected_models:
-        st.info("Select at least one GNN model to explain.")
+    if not selected_archs or not selected_iterations:
+        st.info("Select at least one architecture and one bootstrap iteration.")
         return None
+
+    selected_archs_set = set(selected_archs)
+    selected_iterations_set = set(selected_iterations)
+    selected_models = [
+        f for f in gnn_models
+        if _parse_gnn_filename(f)[0] in selected_archs_set
+        and _parse_gnn_filename(f)[1] in selected_iterations_set
+    ]
 
     models_dict = {}
     iterations = set()
