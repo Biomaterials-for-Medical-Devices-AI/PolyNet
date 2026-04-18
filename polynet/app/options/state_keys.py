@@ -180,6 +180,10 @@ class ExplainModelStateKeys(StrEnum):
     SelectAllModels = "SelectAllModels"
     TargetClassSelector = "TargetClassSelector"
 
+    # Architecture / iteration selectors
+    GNNArchSelector = "GNNArchSelector"
+    GNNBootstrapSelector = "GNNBootstrapSelector"
+
     # Global explanation tab
     GlobalExplainSet = "GlobalExplainSet"
     GlobalExplainManuallySelector = "GlobalExplainManuallySelector"
@@ -194,6 +198,33 @@ class ExplainModelStateKeys(StrEnum):
 
     # Deprecated — kept for session-state compatibility
     # ExplainSet, ExplainIDSelector, ExplainManuallySelector, PlotIDSelector, SetMolName
+
+
+class TMLExplainStateKeys(StrEnum):
+    """Keys for the TML SHAP explainability form."""
+
+    ExplainTML = "ExplainTML"
+    SelectAllTMLModels = "SelectAllTMLModels"
+    TMLModelSelector = "TMLModelSelector"
+    TMLRepresentationSelector = "TMLRepresentationSelector"
+    TMLBootstrapSelector = "TMLBootstrapSelector"
+    NormalisationTML = "NormalisationTML"
+    NegColorTML = "NegColorTML"
+    PosColorTML = "PosColorTML"
+    TargetClassTML = "TargetClassTML"
+
+    # Global explanation tab
+    GlobalTMLExplainSet = "GlobalTMLExplainSet"
+    GlobalTMLManualSelector = "GlobalTMLManualSelector"
+    GlobalTMLIDSelector = "GlobalTMLIDSelector"
+    GlobalTMLPlotType = "GlobalTMLPlotType"
+    GlobalTMLTopN = "GlobalTMLTopN"
+    GlobalTMLKeepRunning = "GlobalTMLKeepRunning"
+
+    # Local explanation tab
+    LocalTMLIDSelector = "LocalTMLIDSelector"
+    LocalTMLPlotType = "LocalTMLPlotType"
+    LocalTMLKeepRunning = "LocalTMLKeepRunning"
 
 
 class PredictPageStateKeys(StrEnum):
