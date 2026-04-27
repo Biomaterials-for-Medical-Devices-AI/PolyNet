@@ -260,26 +260,24 @@ def _tml_local_tab(
             break
 
     preds_dedup = preds[~preds.index.duplicated(keep="first")]
+    class_names = data_options.class_names
     preds_dict: dict = {}
     for sid in local_samples:
         preds_dict[sid] = {}
         try:
             if true_col in preds_dedup.columns and sid in preds_dedup.index:
-                true_val = preds_dedup.loc[sid, true_col]
-                if (
-                    data_options.problem_type == ProblemType.Classification
-                    and data_options.class_names
-                ):
-                    true_val = data_options.class_names.get(int(true_val), str(true_val))
-                preds_dict[sid]["true"] = str(true_val)
+                if data_options.problem_type == ProblemType.Regression:
+                    preds_dict[sid]["true"] = str(preds_dedup.loc[sid, true_col])
+                else:
+                    # Convert to int → str key to mirror the GNN class_names lookup
+                    true_str = str(int(preds_dedup.loc[sid, true_col]))
+                    preds_dict[sid]["true"] = class_names[true_str] if class_names else true_str
             if pred_col and sid in preds_dedup.index:
-                pred_val = preds_dedup.loc[sid, pred_col]
-                if (
-                    data_options.problem_type == ProblemType.Classification
-                    and data_options.class_names
-                ):
-                    pred_val = data_options.class_names.get(int(pred_val), str(pred_val))
-                preds_dict[sid]["predicted"] = str(pred_val)
+                if data_options.problem_type == ProblemType.Regression:
+                    preds_dict[sid]["predicted"] = str(preds_dedup.loc[sid, pred_col])
+                else:
+                    pred_str = str(int(preds_dedup.loc[sid, pred_col]))
+                    preds_dict[sid]["predicted"] = class_names[pred_str] if class_names else pred_str
         except (KeyError, TypeError, ValueError):
             pass
 
