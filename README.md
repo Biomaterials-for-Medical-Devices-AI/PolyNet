@@ -44,7 +44,8 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
 - **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features
-- **Fragment-level explainability** — chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023): each fragment's importance is measured as the change in prediction when that fragment is masked from the graph pooling step; results are aggregated to functional-group level using BRICS, RECAP, Murcko scaffold, or functional-group fragmentation
+- **GNN fragment-level explainability** — chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023): each fragment's importance is measured as the change in prediction when that fragment is masked from the graph pooling step; results are aggregated to functional-group level using BRICS or Murcko scaffold fragmentation; supports global distribution plots (ridge, bar, strip) and per-molecule attribution heatmaps
+- **TML SHAP explainability** — SHAP-based attribution for all traditional ML models using auto-selected explainers (`TreeExplainer` for RF/XGBoost, `LinearExplainer` for linear models, `KernelExplainer` for SVM); SHAP values are cached to CSV and reused across runs; supports the same global distribution plots and per-instance waterfall, force, and bar plots as the GNN pipeline
 - **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
 - **Single-command pipeline** — YAML config file drives the entire workflow; no code changes between experiments
@@ -227,6 +228,7 @@ polynet/
 │       ├── feature_preprocessing.py  # FeatureTransformConfig
 │       ├── target_preprocessing.py   # TargetTransformConfig
 │       ├── plotting.py        # PlottingConfig
+│       ├── tml_explainability.py  # TMLExplainabilityConfig
 │       └── base.py            # PolynetBaseModel (shared Pydantic base)
 │
 ├── data/                      # Data loading and preprocessing
@@ -285,15 +287,17 @@ polynet/
 │   └── stages.py              # build_graph_dataset(), compute_descriptors(),
 │                              # compute_data_splits(), train_gnn(), run_gnn_inference(),
 │                              # train_tml(), run_tml_inference(), compute_metrics(),
-│                              # plot_results_stage(), predict_external(), run_explainability()
+│                              # plot_results_stage(), predict_external(),
+│                              # run_explainability(), run_tml_explainability()
 │
 ├── explainability/            # Attribution-based model explanation
 │   ├── __init__.py
 │   ├── attributions.py        # deep_update() — cache merging utility
 │   ├── masking.py             # calculate_masking_attributions(), fragment_attributions_to_distribution()
-│   ├── explain.py             # compute_global_attribution(), compute_local_attribution()
+│   ├── explain.py             # compute_global_attribution(), compute_local_attribution() (GNN)
+│   ├── shap_explain.py        # compute_global_shap_attribution(), compute_local_shap_attribution() (TML)
 │   ├── embeddings.py          # Graph embedding extraction (PCA, t-SNE)
-│   ├── visualization.py       # plot_mols_with_weights(), plot_attribution_distribution()
+│   ├── visualization.py       # plot_mols_with_weights(), plot_attribution_distribution() — shared by GNN and TML
 │   └── pipeline.py            # run_explanation() — orchestrates full explainability run
 │
 ├── plotting/                  # Data exploration plots
@@ -326,12 +330,15 @@ polynet/
     │   ├── experiments.py
     │   ├── plots.py
     │   └── forms/
+    │       ├── explain_model.py   # GNN explanation form (architecture + bootstrap selectors, global/local tabs)
+    │       └── explain_tml.py     # TML SHAP form (algorithm + bootstrap + descriptor selectors, global/local tabs)
     ├── services/              # Thin re-exports of core modules (backward-compatible shims)
     │   ├── configurations.py  → polynet.config.io
     │   ├── experiments.py     → polynet.experiment.manager
     │   ├── model_training.py  → polynet.models.persistence
     │   ├── predict_model.py   → polynet.inference.predict
-    │   ├── explain_model.py   (Streamlit-coupled; stays in app)
+    │   ├── explain_model.py   (Streamlit rendering for GNN attributions; stays in app)
+    │   ├── explain_tml.py     (Streamlit rendering for TML SHAP attributions; stays in app)
     │   └── plot.py            (Streamlit-coupled; stays in app)
     ├── options/               # App-specific options (re-exports + Streamlit state keys)
     │   ├── file_paths.py      → polynet.config.paths
@@ -378,7 +385,8 @@ from polynet.pipeline import (
     compute_metrics,        # Compute evaluation metrics from predictions DataFrame
     plot_results_stage,     # Generate learning curves and result plots
     predict_external,       # Predict on unseen data using a trained experiment
-    run_explainability,     # Run attribution-based explainability and save heatmaps
+    run_explainability,     # Run GNN chemistry-masking attribution and save heatmaps
+    run_tml_explainability, # Run TML SHAP attribution and save distribution plots / per-instance plots
 )
 from polynet.config.schemas import TargetTransformConfig   # Target scaling config (regression)
 from polynet.config.enums import TargetTransformDescriptor # Enum of scaling strategies
@@ -876,7 +884,7 @@ target_transform:
 
 > **Note:** Using `log10` or `log1p` with non-positive target values will raise a `ValueError` at fit time with a descriptive message.
 
-### `explainability`
+### `explainability` (GNN)
 
 ```yaml
 explainability:
@@ -886,19 +894,69 @@ explainability:
   # Which GNN architectures to explain (must match gnn_training keys).
   models: "all"             # or: [GCN, GAT]
 
-  # Which bootstrap iterations to explain (0-based).
-  bootstraps: "all"         # or: [0, 1]
+  # Which bootstrap iterations to explain (1-based, matching model filenames).
+  bootstraps: "all"         # or: [1, 2]
 
   fragmentation: "brics"    # brics | murcko_scaffold
-  explain_set: "test"       # train | validation | test | all
+  explain_set: "test"       # train | validation | test | all  — controls the global distribution plot
   normalisation: "per_model" # local | global | per_model | no_normalisation
   target_class: null        # null for regression; integer for classification
   plot_type: "ridge"        # ridge | bar | strip
   top_n: 10                 # top-N and bottom-N fragments shown; null = all
-  explain_mol_ids: null     # explicit IDs override explain_set when provided
+
+  # Molecule IDs to generate per-molecule heatmaps and attribution CSVs for.
+  # When null (default), the local explanation step is skipped entirely.
+  # explain_set still controls which molecules go into the distribution plot.
+  local_explain_mol_ids: null
+  # local_explain_mol_ids:
+  #   - "poly_0001"
+  #   - "poly_0042"
 ```
 
 **Attribution method:** chemistry-masking only (`chemistry_masking`). Attribution is defined as `Y_pred_full − Y_pred_masked` for each fragment occurrence.
+
+**Global vs local explanation:**
+- `explain_set` — selects all molecules included in the fragment attribution distribution plot (ridge/bar/strip).
+- `local_explain_mol_ids` — selects the subset that gets per-molecule heatmaps and attribution CSVs saved to `explanations/`. When `null`, the local step is skipped entirely.
+
+### `tml_explainability` (TML SHAP)
+
+```yaml
+tml_explainability:
+  enabled: false
+
+  # Which TML model types to explain (must match tml_models.selected_models).
+  models: "all"             # or: [RandomForest, XGBoost]
+
+  # Which descriptor representations to explain (must match representations.molecular_descriptors keys).
+  representations: "all"    # or: [Morgan, RDKit]
+
+  # Which bootstrap iterations to explain (1-based, matching model filenames).
+  bootstraps: "all"         # or: [1, 2]
+
+  explain_set: "test"       # train | validation | test | all  — controls the global distribution plot
+  normalisation: "per_model" # local | global | per_model | no_normalisation
+  target_class: null        # null for regression; integer class index for classification
+  plot_type: "ridge"        # ridge | bar | strip
+  top_n: 10                 # Features shown; null = all
+
+  # Sample IDs to generate per-instance SHAP plots for.
+  # When null (default), the local explanation step is skipped entirely.
+  local_explain_sample_ids: null
+  # local_explain_sample_ids:
+  #   - "poly_0001"
+  #   - "poly_0042"
+
+  local_plot_type: "waterfall"  # waterfall | force | bar
+```
+
+**Explainer selection:** PolyNet automatically picks the right SHAP explainer based on model type — `TreeExplainer` for Random Forest and XGBoost, `LinearExplainer` for linear/logistic regression, and `KernelExplainer` for SVM.
+
+**Caching:** SHAP values are written to `explanations/shap_{descriptor}.csv` on first computation and reused on subsequent runs. Delete these files to force recomputation (e.g. after retraining or changing the target class).
+
+**Global vs local explanation:**
+- `explain_set` — selects the sample set for the feature attribution distribution plot (ridge/bar/strip).
+- `local_explain_sample_ids` — selects the subset that gets per-instance SHAP waterfall/force/bar plots. When `null`, the local step is skipped entirely.
 
 ### `prediction`
 
@@ -1096,8 +1154,12 @@ results/my_experiment/
 │       ├── metrics.json
 │       └── representation/GNN/raw/
 ├── explanations/
-│   ├── fragment_attributions.png
-│   └── poly_0001_heatmap.png
+│   ├── fragment_attributions.png      # GNN global distribution plot
+│   ├── poly_0001_heatmap.png          # GNN per-molecule attribution heatmap
+│   ├── shap_morgan.csv                # TML SHAP value cache (one file per descriptor)
+│   ├── tml_morgan_attributions.png    # TML global SHAP distribution plot
+│   └── tml/
+│       └── poly_0001_waterfall.png    # TML per-instance SHAP plot
 └── gnn_hyp_opt/                 # Ray Tune HPO results (when HPO was triggered)
 ```
 
@@ -1119,7 +1181,7 @@ The app is organised into six sequential pages:
 | **2 — Representation** | Select molecular descriptors (RDKit, Morgan, PolyBERT) and GNN featurisation options |
 | **3 — Train Models** | Configure GNN architectures and TML models, set data splits, optionally apply target variable scaling (regression), start training |
 | **4 — Predict** | Upload an unseen CSV and run prediction using a trained experiment |
-| **5 — Explain Models** | Run atom attribution and visualise fragment importance heatmaps |
+| **5 — Explain Models** | Run GNN fragment-masking attribution (global distribution + per-molecule heatmaps) and TML SHAP attribution (global distribution + per-instance waterfall/force/bar plots); both sections share architecture/bootstrap/representation selectors consistent with the TML training UI |
 | **6 — Analyse Results** | Inspect training metrics, parity plots, ROC curves, and statistical comparisons |
 
 The GUI is an optional extension of the core package. `polynet.app` can be omitted entirely — the core pipeline works without Streamlit.
