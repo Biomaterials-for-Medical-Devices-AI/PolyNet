@@ -76,6 +76,7 @@ def explain_tml_local(
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
     target_class: int | None = None,
     local_plot_type: str = "waterfall",
+    predictions: dict | None = None,
 ) -> None:
     """Compute and render per-instance SHAP panels (table + plot)."""
     results: dict[str, list[InstanceAttributionResult]] = compute_local_shap_attribution(
@@ -89,6 +90,7 @@ def explain_tml_local(
         normalisation_type=normalisation_type,
         target_class=target_class,
         local_plot_type=local_plot_type,
+        predictions=predictions,
     )
 
     for descriptor, instance_results in results.items():
