@@ -18,6 +18,7 @@ import streamlit as st
 from polynet.app.components.forms.explain_model import explain_mols_widget
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
+from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod, ProblemType
 from polynet.config.schemas import DataConfig
 
@@ -246,6 +247,42 @@ def _tml_local_tab(
             "**Bar** — simple ranked horizontal bar chart."
         ),
     )
+
+    # Build predictions dict for true / predicted label display
+    true_col = get_true_label_column_name(data_options.target_variable_name)
+    pred_col = None
+    for key in models:
+        # key format: "{algo}-{descriptor}_{iteration}" → ml_model = "{algo}-{descriptor}"
+        ml_model = key.rsplit("_", 1)[0]
+        candidate = get_predicted_label_column_name(data_options.target_variable_name, ml_model)
+        if candidate in preds.columns:
+            pred_col = candidate
+            break
+
+    preds_dedup = preds[~preds.index.duplicated(keep="first")]
+    preds_dict: dict = {}
+    for sid in local_samples:
+        preds_dict[sid] = {}
+        try:
+            if true_col in preds_dedup.columns and sid in preds_dedup.index:
+                true_val = preds_dedup.loc[sid, true_col]
+                if (
+                    data_options.problem_type == ProblemType.Classification
+                    and data_options.class_names
+                ):
+                    true_val = data_options.class_names.get(int(true_val), str(true_val))
+                preds_dict[sid]["true"] = str(true_val)
+            if pred_col and sid in preds_dedup.index:
+                pred_val = preds_dedup.loc[sid, pred_col]
+                if (
+                    data_options.problem_type == ProblemType.Classification
+                    and data_options.class_names
+                ):
+                    pred_val = data_options.class_names.get(int(pred_val), str(pred_val))
+                preds_dict[sid]["predicted"] = str(pred_val)
+        except (KeyError, TypeError, ValueError):
+            pass
+
     if st.button("Run Local SHAP Explanation") or st.toggle(
         "Keep running automatically", key=TMLExplainStateKeys.LocalTMLKeepRunning
     ):
@@ -260,6 +297,7 @@ def _tml_local_tab(
             normalisation_type=shared["normalisation_type"],
             target_class=shared["target_class"],
             local_plot_type=local_plot_type,
+            predictions=preds_dict,
         )
 
 
