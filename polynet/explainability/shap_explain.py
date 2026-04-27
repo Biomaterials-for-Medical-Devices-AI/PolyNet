@@ -41,6 +41,7 @@ from pathlib import Path
 
 import joblib
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 import numpy as np
 import pandas as pd
 
@@ -552,8 +553,215 @@ def merge_shap_attributions(
 
 
 # ---------------------------------------------------------------------------
-# Local visualisation
+# Local visualisation helpers — arrow-based plots
 # ---------------------------------------------------------------------------
+
+
+def _arrow_right(x_start, x_end, y, bar_h, tip, notch_left: bool) -> list:
+    """Polygon vertices for a rightward-pointing arrow (positive SHAP contribution)."""
+    t = min(tip, (x_end - x_start) * 0.49)
+    pts = [
+        (x_start,     y - bar_h),
+        (x_end - t,   y - bar_h),
+        (x_end,       y),
+        (x_end - t,   y + bar_h),
+        (x_start,     y + bar_h),
+    ]
+    if notch_left:
+        pts.append((x_start + t, y))
+    return pts
+
+
+def _arrow_left(x_start, x_end, y, bar_h, tip, notch_right: bool) -> list:
+    """Polygon vertices for a leftward-pointing arrow (negative SHAP contribution)."""
+    t = min(tip, (x_start - x_end) * 0.49)
+    pts = [
+        (x_start,     y + bar_h),
+        (x_end + t,   y + bar_h),
+        (x_end,       y),
+        (x_end + t,   y - bar_h),
+        (x_start,     y - bar_h),
+    ]
+    if notch_right:
+        pts.append((x_start - t, y))
+    return pts
+
+
+def _plot_shap_force(
+    values: np.ndarray,
+    feature_names: list[str],
+    base_value: float,
+    neg_color: str,
+    pos_color: str,
+) -> plt.Figure:
+    """
+    Arrow-based force plot anchored at *base_value*.
+
+    Positive features expand as right-pointing arrows to the left of the base;
+    negative features expand as left-pointing arrows to the right.  Each arrow
+    segment is labelled with the feature name and its SHAP value.
+    """
+    df = pd.DataFrame({"feature": feature_names, "value": values})
+    df["label"] = [f"{f}\n({v:+.4f})" for f, v in zip(feature_names, values)]
+
+    pos_df = df[df["value"] > 0].sort_values("value", ascending=False)
+    neg_df = df[df["value"] < 0].sort_values("value")
+
+    pos_total = float(pos_df["value"].sum()) if len(pos_df) else 0.0
+    neg_total = float(neg_df["value"].sum()) if len(neg_df) else 0.0
+    x_range = max(abs(pos_total) + abs(neg_total), 1e-9)
+
+    n_labels = max(len(pos_df), len(neg_df), 1)
+    fig_w, fig_h = 12, max(2.5, 0.22 * n_labels + 1.8)
+    figsize = (fig_w, fig_h)
+
+    y = 0.0
+    BAR_H = 0.15
+    tip = (BAR_H / 0.6) * (fig_h / fig_w) * x_range
+
+    fig, ax = plt.subplots(figsize=figsize, dpi=150)
+
+    # Positive segments — right-pointing, expand leftward from base_value
+    current = base_value
+    for i, (_, row) in enumerate(pos_df.iterrows()):
+        x_end = current
+        x_start = current - row["value"]
+        ax.add_patch(Polygon(
+            _arrow_right(x_start, x_end, y, BAR_H, tip, notch_left=(i > 0)),
+            closed=True, facecolor=pos_color, edgecolor="none", zorder=2,
+        ))
+        ax.text(
+            (x_start + x_end) / 2, y - BAR_H - 0.03,
+            row["label"], ha="center", va="top", fontsize=7, color=pos_color,
+        )
+        current = x_start
+
+    # Negative segments — left-pointing, expand rightward from base_value
+    current = base_value
+    for i, (_, row) in enumerate(neg_df.iterrows()):
+        x_start = current
+        x_end = current - row["value"]  # value < 0 → x_end > x_start
+        ax.add_patch(Polygon(
+            _arrow_left(x_end, x_start, y, BAR_H, tip, notch_right=(i > 0)),
+            closed=True, facecolor=neg_color, edgecolor="none", zorder=2,
+        ))
+        ax.text(
+            (x_start + x_end) / 2, y - BAR_H - 0.03,
+            row["label"], ha="center", va="top", fontsize=7, color=neg_color,
+        )
+        current = x_end
+
+    # Base value and prediction markers
+    ax.axvline(base_value, color="black", linewidth=1.0, zorder=3)
+    ax.text(base_value, y + BAR_H + 0.03, f"base\n{base_value:.3f}",
+            ha="center", va="bottom", fontsize=7)
+
+    pred = base_value + float(df["value"].sum())
+    ax.axvline(pred, color="dimgray", linewidth=1.0, linestyle="--", zorder=3)
+    ax.text(pred, y + BAR_H + 0.03, f"pred\n{pred:.3f}",
+            ha="center", va="bottom", fontsize=7, color="dimgray")
+
+    left_ext = base_value - pos_total
+    right_ext = base_value - neg_total
+    margin = x_range * 0.08
+    ax.set_xlim(left_ext - margin, right_ext + margin)
+
+    label_drop = 0.03 + 0.22 * n_labels
+    ax.set_ylim(y - BAR_H - label_drop - 0.05, y + BAR_H + 0.35)
+
+    ax.set_yticks([])
+    ax.set_xticks([])
+    for spine in ax.spines.values():
+        spine.set_visible(False)
+    ax.set_title("SHAP Force Plot", fontsize=9, pad=4)
+    plt.tight_layout()
+    return fig
+
+
+def _plot_shap_waterfall(
+    values: np.ndarray,
+    feature_names: list[str],
+    base_value: float,
+    neg_color: str,
+    pos_color: str,
+) -> plt.Figure:
+    """
+    Arrow-based waterfall plot.
+
+    One horizontal arrow per feature, cascading from *base_value* to the final
+    prediction.  Features are sorted by |SHAP| ascending (smallest at top,
+    largest at bottom).  Arrow direction shows the sign of each contribution.
+    """
+    # Sort ascending by |shap| so the largest contributor is at the bottom
+    order = np.argsort(np.abs(values))
+    shap_sorted = values[order]
+    names_sorted = [feature_names[i] for i in order]
+
+    n = len(names_sorted)
+    x_range = max(float(np.sum(np.abs(shap_sorted))), 1e-9)
+    base_tip = x_range * 0.04
+
+    fig, ax = plt.subplots(figsize=(9, max(3.5, n * 0.40 + 1.5)), dpi=150)
+
+    BAR_H = 0.28
+    running = base_value
+    all_x = [base_value]
+
+    for i, (val, _) in enumerate(zip(shap_sorted, names_sorted)):
+        y = float(i)
+        x0, x1 = running, running + val
+        all_x += [x0, x1]
+
+        if val == 0.0:
+            running += val
+            continue
+
+        color = pos_color if val >= 0 else neg_color
+        width = abs(val)
+        tip = min(base_tip, width * 0.40)
+        has_prev = i > 0
+
+        if val > 0:
+            pts = _arrow_right(x0, x1, y, BAR_H, tip, notch_left=has_prev)
+        else:
+            pts = _arrow_left(x0, x1, y, BAR_H, tip, notch_right=has_prev)
+
+        ax.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor="none", zorder=2))
+
+        label = f"{val:+.4f}"
+        mid_x = (x0 + x1) / 2
+        if width > x_range * 0.07:
+            ax.text(mid_x, y, label, ha="center", va="center",
+                    fontsize=7, color="white", weight="bold", zorder=3)
+        else:
+            offset = x_range * 0.012
+            ax.text(x1 + offset * np.sign(val), y, label,
+                    ha="left" if val > 0 else "right", va="center",
+                    fontsize=6, color=color, zorder=3)
+
+        running += val
+
+    ax.set_yticks(range(n))
+    ax.set_yticklabels(names_sorted, fontsize=8)
+
+    ax.axvline(base_value, color="black", linewidth=0.8, linestyle="--",
+               alpha=0.6, zorder=1, label=f"base = {base_value:.3f}")
+
+    final_pred = base_value + float(np.sum(shap_sorted))
+    ax.axvline(final_pred, color="dimgray", linewidth=0.8, linestyle=":",
+               alpha=0.8, zorder=1, label=f"pred = {final_pred:.3f}")
+
+    margin = x_range * 0.10
+    ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
+    ax.set_ylim(-0.7, n - 0.3)
+    ax.set_xlabel("SHAP value (contribution to prediction)", fontsize=8)
+    ax.set_title(
+        f"SHAP Waterfall  (base = {base_value:.3f},  pred = {final_pred:.3f})", fontsize=9
+    )
+    ax.legend(fontsize=7, loc="upper right")
+    ax.spines[["top", "right"]].set_visible(False)
+    plt.tight_layout()
+    return fig
 
 
 def plot_shap_waterfall(
@@ -572,13 +780,15 @@ def plot_shap_waterfall(
     shap_values:
         ``{feature_name: shap_value}`` for one sample (ensemble-averaged).
     base_value:
-        Model expected value (base line).  Not used for the simple bar variant.
+        Expected model output used as the anchor for waterfall / force plots.
     plot_type:
-        ``"waterfall"``, ``"force"``, or ``"bar"``.
+        ``"waterfall"`` — cascading arrow waterfall (one arrow per feature).
+        ``"force"`` — horizontal stacked arrow force plot.
+        ``"bar"`` — ranked mean-attribution bar chart.
     neg_color, pos_color:
         Hex colours for negative / positive attributions.
     top_n:
-        Maximum features to show (sorted by |SHAP|).
+        Maximum features to show (sorted by |SHAP| descending).
     """
     if not shap_values:
         fig, ax = plt.subplots()
@@ -586,90 +796,20 @@ def plot_shap_waterfall(
         ax.axis("off")
         return fig
 
-    # Sort by |shap| descending, keep top_n
     items = sorted(shap_values.items(), key=lambda kv: abs(kv[1]), reverse=True)[:top_n]
-    features = [k for k, _ in items]
+    feature_names = [k for k, _ in items]
     values = np.array([v for _, v in items])
 
     if plot_type == "bar":
-        # Reuse shared distribution bar — wrap single instance as {feat: [val]}
         return plot_attribution_bar(
-            {f: [v] for f, v in zip(features, values)}, neg_color=neg_color, pos_color=pos_color
+            {f: [v] for f, v in zip(feature_names, values)},
+            neg_color=neg_color,
+            pos_color=pos_color,
         )
-
-    # Waterfall / force: custom matplotlib implementation
-    colors = [pos_color if v >= 0 else neg_color for v in values]
-
-    if plot_type == "waterfall":
-        # Features sorted: smallest |shap| at top, largest at bottom (conventional)
-        features = features[::-1]
-        values = values[::-1]
-        colors = colors[::-1]
-
-        running = base_value
-        lefts = []
-        for v in values:
-            lefts.append(min(running, running + v))
-            running += v
-
-        fig, ax = plt.subplots(figsize=(9, max(4, len(features) * 0.4 + 1)))
-        bars = ax.barh(
-            range(len(features)),
-            np.abs(values),
-            left=lefts,
-            color=[pos_color if v >= 0 else neg_color for v in values],
-            edgecolor="white",
-            linewidth=0.5,
-            height=0.6,
-        )
-        ax.set_yticks(range(len(features)))
-        ax.set_yticklabels(features, fontsize=9)
-        ax.axvline(base_value, color="black", linewidth=0.8, linestyle="--", alpha=0.6)
-        ax.set_xlabel("Prediction value")
-        ax.set_title(f"SHAP waterfall (base = {base_value:.3f})")
-
-    else:  # force-style: stacked horizontal bars from base
-        pos_feats = [(f, v) for f, v in zip(features, values) if v > 0]
-        neg_feats = [(f, v) for f, v in zip(features, values) if v <= 0]
-
-        fig, ax = plt.subplots(figsize=(10, 3))
-        cursor = base_value
-        for f, v in sorted(pos_feats, key=lambda x: -abs(x[1])):
-            ax.barh(0, v, left=cursor, color=pos_color, edgecolor="white", height=0.6)
-            if abs(v) > 0.01:
-                ax.text(
-                    cursor + v / 2,
-                    0,
-                    f"{f}\n{v:+.3f}",
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color="white",
-                    weight="bold",
-                )
-            cursor += v
-        cursor = base_value
-        for f, v in sorted(neg_feats, key=lambda x: abs(x[1])):
-            ax.barh(0, v, left=cursor + v, color=neg_color, edgecolor="white", height=0.6)
-            if abs(v) > 0.01:
-                ax.text(
-                    cursor + v / 2,
-                    0,
-                    f"{f}\n{v:+.3f}",
-                    ha="center",
-                    va="center",
-                    fontsize=7,
-                    color="white",
-                    weight="bold",
-                )
-            cursor += v
-        ax.axvline(base_value, color="black", linewidth=1.2)
-        ax.set_yticks([])
-        ax.set_xlabel("Prediction value")
-        ax.set_title("SHAP force plot")
-
-    plt.tight_layout()
-    return fig
+    elif plot_type == "force":
+        return _plot_shap_force(values, feature_names, base_value, neg_color, pos_color)
+    else:  # waterfall
+        return _plot_shap_waterfall(values, feature_names, base_value, neg_color, pos_color)
 
 
 # ---------------------------------------------------------------------------
