@@ -30,6 +30,14 @@ Low-level building blocks::
 Embeddings::
 
     from polynet.explainability import get_graph_embeddings, reduce_embeddings
+
+TML SHAP API (no Streamlit)::
+
+    from polynet.explainability import (
+        compute_global_shap_attribution,
+        compute_local_shap_attribution,
+        InstanceAttributionResult,
+    )
 """
 
 from polynet.explainability.attributions import deep_update
@@ -48,6 +56,11 @@ from polynet.explainability.masking import (
     fragment_attributions_to_distribution,
     merge_fragment_attributions,
 )
+from polynet.explainability.shap_explain import (
+    InstanceAttributionResult,
+    compute_global_shap_attribution,
+    compute_local_shap_attribution,
+)
 from polynet.explainability.visualization import (
     get_cmap,
     plot_attribution_bar,
@@ -59,7 +72,7 @@ from polynet.explainability.visualization import (
 )
 
 __all__ = [
-    # High-level masking pipeline
+    # High-level masking pipeline (GNN)
     "compute_and_cache_masking",
     "build_display_data",
     "compute_global_attribution",
@@ -76,6 +89,10 @@ __all__ = [
     # Embeddings
     "get_graph_embeddings",
     "reduce_embeddings",
+    # TML SHAP pipeline
+    "compute_global_shap_attribution",
+    "compute_local_shap_attribution",
+    "InstanceAttributionResult",
     # Visualization
     "get_cmap",
     "plot_mols_with_weights",

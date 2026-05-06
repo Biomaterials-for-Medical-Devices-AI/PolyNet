@@ -37,6 +37,7 @@ from polynet.config.schemas import (
     RepresentationConfig,
     SplitConfig,
     TargetTransformConfig,
+    TMLExplainabilityConfig,
     TrainGNNConfig,
     TrainTMLConfig,
 )
@@ -1065,30 +1066,24 @@ def run_explainability(
     )
 
     # ------------------------------------------------------------------
-    # 2. Resolve which molecules to explain
+    # 2. Resolve which molecules to include in the global distribution plot
     # ------------------------------------------------------------------
-    if exp_cfg.explain_mol_ids is not None:
-        explain_mol_ids = [str(m) for m in exp_cfg.explain_mol_ids]
-        logger.info(f"Using {len(explain_mol_ids)} explicit molecule ID(s) from config.")
-    else:
-        mol_id_set: set[str] = set()
+    mol_id_set: set[str] = set()
 
-        def _collect(idx_lists):
-            for i in sorted(selected_iters):
-                if i < len(idx_lists):
-                    mol_id_set.update(str(idx) for idx in idx_lists[i])
+    def _collect(idx_lists):
+        for i in sorted(selected_iters):
+            if i < len(idx_lists):
+                mol_id_set.update(str(idx) for idx in idx_lists[i])
 
-        if exp_cfg.explain_set in ("test", "all"):
-            _collect(test_idxs)
-        if exp_cfg.explain_set in ("train", "all"):
-            _collect(train_idxs)
-        if exp_cfg.explain_set in ("validation", "all"):
-            _collect(val_idxs)
+    if exp_cfg.explain_set in ("test", "all"):
+        _collect(test_idxs)
+    if exp_cfg.explain_set in ("train", "all"):
+        _collect(train_idxs)
+    if exp_cfg.explain_set in ("validation", "all"):
+        _collect(val_idxs)
 
-        explain_mol_ids = sorted(mol_id_set)
-        logger.info(
-            f"Explaining {len(explain_mol_ids)} molecule(s) from " f"'{exp_cfg.explain_set}' set."
-        )
+    explain_mol_ids = sorted(mol_id_set)
+    logger.info(f"Explaining {len(explain_mol_ids)} molecule(s) from '{exp_cfg.explain_set}' set.")
 
     if not explain_mol_ids:
         logger.warning("No molecules to explain. Skipping explainability stage.")
@@ -1125,12 +1120,19 @@ def run_explainability(
     # ------------------------------------------------------------------
     # 4. Per-molecule heatmaps and attribution tables
     # ------------------------------------------------------------------
-    logger.info("Computing per-molecule attribution heatmaps…")
+    if exp_cfg.local_explain_mol_ids is None:
+        logger.info("No local_explain_mol_ids set — skipping per-molecule heatmaps.")
+        return
+
+    local_mol_ids = [str(m) for m in exp_cfg.local_explain_mol_ids]
+    logger.info(
+        f"Computing per-molecule attribution heatmaps for {len(local_mol_ids)} molecule(s)…"
+    )
     local_results = compute_local_attribution(
         models=models_to_explain,
         experiment_path=out_dir,
         dataset=dataset,
-        explain_mols=explain_mol_ids,
+        explain_mols=local_mol_ids,
         problem_type=data_cfg.problem_type,
         normalisation_type=exp_cfg.normalisation,
         fragmentation_approach=exp_cfg.fragmentation,
@@ -1150,3 +1152,222 @@ def run_explainability(
         saved_heatmaps += 1
 
     logger.info(f"Saved {saved_heatmaps}/{len(local_results)} molecule heatmap(s) and CSV(s).")
+
+
+# ---------------------------------------------------------------------------
+# TML SHAP explainability stage
+# ---------------------------------------------------------------------------
+
+
+def run_tml_explainability(
+    tml_trained: dict,
+    descriptor_dfs: dict,
+    split_indexes: tuple,
+    data_cfg: DataConfig,
+    tml_exp_cfg: TMLExplainabilityConfig,
+    out_dir: Path,
+) -> None:
+    """
+    Run SHAP-based explainability for TML models and save outputs to disk.
+
+    Parameters
+    ----------
+    tml_trained:
+        Trained TML models from ``train_tml``, keyed ``"{ModelType}-{descriptor}_{iter}"``.
+    descriptor_dfs:
+        Descriptor DataFrames from ``compute_descriptors``, keyed by
+        ``MolecularDescriptor`` enum value (e.g. ``"morgan"``).
+    split_indexes:
+        ``(train_idxs, val_idxs, test_idxs)`` from ``compute_data_splits``.
+        Each element is a list of index arrays, one per bootstrap iteration.
+    data_cfg:
+        Data configuration.
+    tml_exp_cfg:
+        ``TMLExplainabilityConfig`` instance.
+    out_dir:
+        Experiment root directory.  All outputs go to ``out_dir/explanations/tml/``.
+
+    Outputs
+    -------
+    ``explanations/shap_{descriptor}.csv``
+        SHAP value cache (appended on repeated runs).
+    ``explanations/tml/{descriptor}_shap_distribution.png``
+        Global population-level SHAP attribution distribution plot.
+    ``explanations/tml/{descriptor}_{sample_id}_shap.png``
+        Per-instance SHAP plot (waterfall / force / bar).
+    ``explanations/tml/{descriptor}_{sample_id}_shap.csv``
+        Per-instance SHAP attribution table.
+    """
+    from polynet.explainability.shap_explain import (
+        compute_global_shap_attribution,
+        compute_local_shap_attribution,
+    )
+    from polynet.visualization.utils import save_plot
+
+    explain_dir = out_dir / "explanations" / "tml"
+    explain_dir.mkdir(parents=True, exist_ok=True)
+
+    train_idxs, val_idxs, test_idxs = split_indexes
+    n_iters = len(train_idxs)
+
+    # ------------------------------------------------------------------
+    # 1. Filter models by config
+    # ------------------------------------------------------------------
+    if tml_exp_cfg.bootstraps == "all":
+        selected_iters = set(range(n_iters))
+    else:
+        selected_iters = {i for i in tml_exp_cfg.bootstraps if i < n_iters}
+        invalid = set(tml_exp_cfg.bootstraps) - selected_iters
+        if invalid:
+            logger.warning(
+                f"Bootstrap indices {sorted(invalid)} are out of range "
+                f"(only {n_iters} iteration(s) trained). They will be skipped."
+            )
+
+    # Parse model log names: "{ModelType}-{descriptor}_{iter}"
+    def _iter_of(key: str) -> int:
+        return int(key.rsplit("_", 1)[1])
+
+    def _model_type_of(key: str) -> str:
+        return key.split("-", 1)[0]
+
+    def _descriptor_of(key: str) -> str:
+        mid = key.split("-", 1)[1]
+        return mid.rsplit("_", 1)[0]
+
+    if tml_exp_cfg.models == "all":
+        selected_model_types = {_model_type_of(k) for k in tml_trained}
+    else:
+        available_types = {_model_type_of(k) for k in tml_trained}
+        selected_model_types = set(tml_exp_cfg.models)
+        unknown = selected_model_types - available_types
+        if unknown:
+            logger.warning(
+                f"TML model type(s) {sorted(unknown)} not found in trained models "
+                f"(available: {sorted(available_types)}). They will be skipped."
+            )
+        selected_model_types &= available_types
+
+    str_dfs = {str(k): v for k, v in descriptor_dfs.items()}
+    if tml_exp_cfg.representations == "all":
+        selected_reprs = set(str_dfs.keys())
+    else:
+        selected_reprs = set(tml_exp_cfg.representations)
+        unknown_reprs = selected_reprs - set(str_dfs.keys())
+        if unknown_reprs:
+            logger.warning(
+                f"Representation(s) {sorted(unknown_reprs)} not found in descriptor DataFrames "
+                f"(available: {sorted(str_dfs.keys())}). They will be skipped."
+            )
+        selected_reprs &= set(str_dfs.keys())
+
+    models_to_explain = {
+        key: model
+        for key, model in tml_trained.items()
+        if _model_type_of(key) in selected_model_types
+        and _descriptor_of(key) in selected_reprs
+        and _iter_of(key) in selected_iters
+    }
+
+    if not models_to_explain:
+        logger.warning(
+            "No TML model instances matched the explainability config. "
+            f"models={tml_exp_cfg.models!r}, representations={tml_exp_cfg.representations!r}, "
+            f"bootstraps={tml_exp_cfg.bootstraps!r}. Skipping TML explainability stage."
+        )
+        return
+
+    logger.info(
+        f"Explaining {len(models_to_explain)} TML model instance(s): "
+        f"{sorted(models_to_explain.keys())}"
+    )
+
+    # ------------------------------------------------------------------
+    # 2. Resolve sample IDs for the global distribution plot
+    # ------------------------------------------------------------------
+    sample_id_set: set[str] = set()
+
+    def _collect(idx_lists):
+        for i in sorted(selected_iters):
+            if i < len(idx_lists):
+                sample_id_set.update(str(idx) for idx in idx_lists[i])
+
+    if tml_exp_cfg.explain_set in ("test", "all"):
+        _collect(test_idxs)
+    if tml_exp_cfg.explain_set in ("train", "all"):
+        _collect(train_idxs)
+    if tml_exp_cfg.explain_set in ("validation", "all"):
+        _collect(val_idxs)
+
+    explain_sample_ids = sorted(sample_id_set)
+    logger.info(
+        f"Explaining {len(explain_sample_ids)} sample(s) from '{tml_exp_cfg.explain_set}' set."
+    )
+
+    if not explain_sample_ids:
+        logger.warning("No samples to explain. Skipping TML explainability stage.")
+        return
+
+    # ------------------------------------------------------------------
+    # 3. Global SHAP attribution distribution (one plot per descriptor)
+    # ------------------------------------------------------------------
+    logger.info("Computing global SHAP attribution distributions…")
+    global_results = compute_global_shap_attribution(
+        models=models_to_explain,
+        descriptor_dfs=str_dfs,
+        experiment_path=out_dir,
+        problem_type=data_cfg.problem_type,
+        explain_sample_ids=explain_sample_ids,
+        normalisation_type=tml_exp_cfg.normalisation,
+        target_class=tml_exp_cfg.target_class,
+        top_n=tml_exp_cfg.top_n,
+        plot_type=tml_exp_cfg.plot_type,
+    )
+
+    for descriptor, result in global_results.items():
+        if result.warning:
+            logger.warning(f"Global SHAP ({descriptor}): {result.warning}")
+        else:
+            plot_path = explain_dir / f"{descriptor}_shap_distribution.png"
+            save_plot(result.figure, plot_path)
+            logger.info(
+                f"Saved {plot_path.name} "
+                f"({result.n_mols} sample(s) × {result.n_models} model(s), "
+                f"{result.n_frags_total} feature(s), top {result.n_shown} shown)"
+            )
+
+    # ------------------------------------------------------------------
+    # 4. Per-instance local SHAP plots
+    # ------------------------------------------------------------------
+    if tml_exp_cfg.local_explain_sample_ids is None:
+        logger.info("No local_explain_sample_ids set — skipping per-instance SHAP plots.")
+        return
+
+    local_ids = [str(s) for s in tml_exp_cfg.local_explain_sample_ids]
+    logger.info(f"Computing per-instance SHAP plots for {len(local_ids)} sample(s)…")
+
+    local_results = compute_local_shap_attribution(
+        models=models_to_explain,
+        descriptor_dfs=str_dfs,
+        experiment_path=out_dir,
+        problem_type=data_cfg.problem_type,
+        explain_sample_ids=local_ids,
+        normalisation_type=tml_exp_cfg.normalisation,
+        target_class=tml_exp_cfg.target_class,
+        local_plot_type=tml_exp_cfg.local_plot_type,
+    )
+
+    saved_local = 0
+    for descriptor, instance_results in local_results.items():
+        for inst in instance_results:
+            if inst.warning:
+                logger.warning(f"Local SHAP ({descriptor}, {inst.sample_idx}): {inst.warning}")
+                continue
+            stem = f"{descriptor}_{inst.sample_idx}_shap"
+            if inst.figure is not None:
+                save_plot(inst.figure, explain_dir / f"{stem}.png")
+            inst.attribution_df.to_csv(explain_dir / f"{stem}.csv", index=False)
+            saved_local += 1
+
+    total_local = sum(len(v) for v in local_results.values())
+    logger.info(f"Saved {saved_local}/{total_local} local SHAP plots and CSV(s).")

@@ -459,6 +459,7 @@ def plot_attribution_strip(
     neg_color: str = "#1f77b4",
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
+    feature_values_dict: dict[str, list[float]] | None = None,
 ) -> plt.Figure:
     """
     Horizontal strip / swarm-style plot showing every individual attribution score.
@@ -478,6 +479,12 @@ def plot_attribution_strip(
         Hex colours for the palette endpoints.
     top_n:
         Limit to top-N and bottom-N fragments by mean. Pass ``None`` for all.
+    feature_values_dict:
+        Optional ``{feature_name: [raw_value1, raw_value2, ...]}``.  When
+        provided the points are coloured by **feature value** rather than
+        attribution value.  Each list must be parallel (same length and order)
+        to the corresponding list in ``attribution_dict``.  Pass ``None``
+        (default) to retain attribution-based colouring (GNN behaviour).
 
     Returns
     -------
@@ -493,19 +500,54 @@ def plot_attribution_strip(
     n = len(ordered_frags)
     fig, ax = plt.subplots(figsize=figsize)
 
-    # Build a diverging colormap and a normaliser anchored at 0, spanning the
-    # full range of all scores in the plot so every point's colour reflects its
-    # actual attribution value regardless of which fragment row it sits in.
     cmap = mcolors.LinearSegmentedColormap.from_list("strip_cmap", [neg_color, "white", pos_color])
+
+    colour_by_feature = feature_values_dict is not None
+
+    # Attribution normaliser: diverging, anchored at 0 (used by GNN and as
+    # fallback for NaN feature values in TML).
     all_scores = df["attribution"].values
     abs_max = max(abs(all_scores.min()), abs(all_scores.max())) or 1.0
-    norm = plt.Normalize(vmin=-abs_max, vmax=abs_max)
+    attr_norm = plt.Normalize(vmin=-abs_max, vmax=abs_max)
+
+    # Colourbar uses the attribution scale for GNN; a generic [0, 1] "Low→High"
+    # scale for TML (each row is normalised independently, so a shared numeric
+    # axis would be meaningless — mirrors SHAP's beeswarm convention).
+    if colour_by_feature:
+        cb_norm = plt.Normalize(vmin=0.0, vmax=1.0)
+        colorbar_label = "Feature value"
+    else:
+        cb_norm = attr_norm
+        colorbar_label = "Attribution"
 
     rng = np.random.default_rng(seed=0)
     for i, frag in enumerate(reversed(ordered_frags)):
         scores = df.loc[df["fragment"] == frag, "attribution"].values
         jitter = rng.uniform(-0.25, 0.25, size=len(scores))
-        point_colors = cmap(norm(scores))
+
+        if colour_by_feature and frag in feature_values_dict:
+            fvs = np.array(feature_values_dict[frag], dtype=float)
+
+            # Per-feature normalisation: map this feature's own [min, max] to
+            # [0, 1] so "low value" and "high value" are always relative to the
+            # feature itself — identical to SHAP beeswarm behaviour.
+            finite = fvs[np.isfinite(fvs)]
+            fv_lo = float(finite.min()) if len(finite) else 0.0
+            fv_hi = float(finite.max()) if len(finite) else 1.0
+            if fv_lo == fv_hi:
+                fv_lo, fv_hi = fv_lo - 1.0, fv_hi + 1.0
+            per_feat_norm = plt.Normalize(vmin=fv_lo, vmax=fv_hi)
+
+            fv_colors = np.array([list(c) for c in cmap(per_feat_norm(np.nan_to_num(fvs)))])
+            attr_colors = np.array([list(c) for c in cmap(attr_norm(scores))])
+            # Fallback to attribution colour for any NaN feature values;
+            # [:, None] broadcasts (N,) mask against (N, 4) RGBA arrays.
+            point_colors = np.where(np.isfinite(fvs)[:, None], fv_colors, attr_colors)
+            mean_color = cmap(per_feat_norm(float(np.nanmean(fvs))))
+        else:
+            point_colors = cmap(attr_norm(scores))
+            mean_color = cmap(attr_norm(means[frag]))
+
         ax.scatter(
             scores,
             np.full_like(scores, i) + jitter,
@@ -515,11 +557,12 @@ def plot_attribution_strip(
             linewidths=0,
             zorder=2,
         )
-        # Mean marker — coloured by its own value, outlined for visibility
+        # Mean attribution marker — position always reflects attribution mean;
+        # colour reflects feature-value mean (TML) or attribution mean (GNN).
         ax.scatter(
             [means[frag]],
             [i],
-            c=[cmap(norm(means[frag]))],
+            c=[mean_color],
             s=90,
             marker="D",
             edgecolors="0.25",
@@ -530,17 +573,25 @@ def plot_attribution_strip(
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(np.arange(n))
     ax.set_yticklabels(list(reversed(ordered_frags)), fontsize=9)
-    ax.set_xlabel("Attribution (Y − Y_masked)", fontsize=11)
-    ax.set_title("Fragment Attribution — Individual Scores + Mean (◆)", fontsize=13, pad=10)
+    ax.set_xlabel("Attribution (SHAP value)", fontsize=11)
+    title_suffix = "coloured by feature value" if colour_by_feature else "coloured by attribution"
+    ax.set_title(
+        f"Feature Attribution — Individual Scores + Mean (◆) — {title_suffix}", fontsize=11, pad=10
+    )
     sns.despine(ax=ax, left=True)
     ax.grid(axis="x", linestyle="--", alpha=0.4)
 
     # Colourbar
-    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=cb_norm)
     sm.set_array([])
     cb = fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.03)
-    cb.set_label("Attribution", fontsize=9)
+    cb.set_label(colorbar_label, fontsize=9)
     cb.ax.tick_params(labelsize=8)
+    if colour_by_feature:
+        # Replace numeric [0, 1] ticks with "Low" / "High" labels so it is
+        # clear the scale is per-feature relative, not a shared absolute axis.
+        cb.set_ticks([0.0, 1.0])
+        cb.set_ticklabels(["Low", "High"])
     plt.tight_layout()
     return fig
 

@@ -133,9 +133,7 @@ def _build_data_config(cfg: dict) -> DataConfig:
 
 
 def _build_repr_config(
-    cfg: dict,
-    node_feats: dict | None = None,
-    edge_feats: dict | None = None,
+    cfg: dict, node_feats: dict | None = None, edge_feats: dict | None = None
 ) -> RepresentationConfig:
     """Build RepresentationConfig from the 'representations' section.
 
@@ -166,10 +164,7 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
 
     gnn_dict = cfg["gnn_training"]
     raw_layers = gnn_dict.get("gnn_convolutional_layers", {})
-    _KEY_MAP = {
-        "LearningRate": TrainingParam.LearningRate,
-        "BatchSize": TrainingParam.BatchSize,
-    }
+    _KEY_MAP = {"LearningRate": TrainingParam.LearningRate, "BatchSize": TrainingParam.BatchSize}
     layers = {}
     for arch_name, arch_params in raw_layers.items():
         net = Network(arch_name)
@@ -211,6 +206,13 @@ def _build_explainability_config(cfg: dict) -> ExplainabilityConfig:
     legacy YAML files without an explainability block stay compatible.
     """
     return ExplainabilityConfig.model_validate(cfg.get("explainability", {}))
+
+
+def _build_tml_explainability_config(cfg: dict):
+    """Build TMLExplainabilityConfig from the 'tml_explainability' section."""
+    from polynet.config.schemas import TMLExplainabilityConfig
+
+    return TMLExplainabilityConfig.model_validate(cfg.get("tml_explainability", {}))
 
 
 # ---------------------------------------------------------------------------
@@ -315,6 +317,7 @@ def main() -> None:
         predict_external,
         run_explainability,
         run_gnn_inference,
+        run_tml_explainability,
         run_tml_inference,
         train_gnn,
         train_tml,
@@ -343,6 +346,7 @@ def main() -> None:
     gnn_enabled = cfg["gnn_training"].get("train_gnn", True)
     tml_enabled = cfg["tml_models"].get("train_tml", False)
     explain_enabled = cfg["explainability"].get("enabled", False)
+    tml_explain_enabled = cfg.get("tml_explainability", {}).get("enabled", False)
     desc_enabled = bool(cfg["representations"].get("molecular_descriptors", False))
 
     random_seed = cfg["experiment"]["random_seed"]
@@ -398,11 +402,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     t0 = announce("4. Compute data splits")
     train_idxs, val_idxs, test_idxs = compute_data_splits(
-        data=df,
-        data_cfg=data_cfg,
-        split_cfg=split_cfg,
-        random_seed=random_seed,
-        out_dir=out_dir,
+        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=random_seed, out_dir=out_dir
     )
     split_indexes = (train_idxs, val_idxs, test_idxs)
     save_options(out_dir / "split_options.json", split_cfg)
@@ -525,16 +525,30 @@ def main() -> None:
         predictions.to_csv(out_dir / "ml_results" / "predictions.csv", index=False)
 
     # ------------------------------------------------------------------
-    # Stage 11 — Explainability
+    # Stage 11 — GNN Explainability
     # ------------------------------------------------------------------
     if explain_enabled and dataset is not None and gnn_trained:
-        t0 = announce("11. Explainability")
+        t0 = announce("11. GNN Explainability")
         try:
             explain_cfg = _build_explainability_config(cfg)
             run_explainability(gnn_trained, dataset, split_indexes, data_cfg, explain_cfg, out_dir)
             done(t0)
         except Exception as e:
-            logger.error(f"Explainability failed: {e}", exc_info=True)
+            logger.error(f"GNN explainability failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stage 11b — TML SHAP Explainability
+    # ------------------------------------------------------------------
+    if tml_explain_enabled and tml_trained and desc_dfs is not None:
+        t0 = announce("11b. TML SHAP Explainability")
+        try:
+            tml_explain_cfg = _build_tml_explainability_config(cfg)
+            run_tml_explainability(
+                tml_trained, desc_dfs, split_indexes, data_cfg, tml_explain_cfg, out_dir
+            )
+            done(t0)
+        except Exception as e:
+            logger.error(f"TML explainability failed: {e}", exc_info=True)
 
     # ------------------------------------------------------------------
     # Stage 12 — Predict on external dataset

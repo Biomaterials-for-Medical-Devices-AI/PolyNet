@@ -38,8 +38,10 @@ YAML layout::
       # null shows all fragments.
       top_n: 10
 
-      # Optional explicit molecule IDs.  When set, overrides explain_set.
-      # explain_mol_ids: null
+      # Molecule IDs to generate per-molecule heatmaps and attribution tables for.
+      # When null (default), the local explanation step is skipped entirely.
+      # local_explain_mol_ids:
+      #   - "poly_0001"
 """
 
 from __future__ import annotations
@@ -80,9 +82,9 @@ class ExplainabilityConfig(PolynetBaseModel):
     fragmentation:
         Fragmentation strategy used to decompose monomers into fragments.
     explain_set:
-        Which data split to draw molecules from when ``explain_mol_ids``
-        is not given.  ``"all"`` takes the union of train, validation,
-        and test sets across the selected bootstrap iterations.
+        Which data split to draw molecules from for the global distribution
+        plot.  ``"all"`` takes the union of train, validation, and test sets
+        across the selected bootstrap iterations.
     normalisation:
         How to normalise fragment attribution scores before plotting.
     target_class:
@@ -93,9 +95,9 @@ class ExplainabilityConfig(PolynetBaseModel):
     top_n:
         Number of top and bottom fragments shown in the global plot.
         ``null`` shows every fragment.
-    explain_mol_ids:
-        Explicit list of molecule IDs to explain.  When provided,
-        ``explain_set`` is ignored.
+    local_explain_mol_ids:
+        Molecule IDs to generate per-molecule heatmaps and attribution tables
+        for.  When ``None``, the local explanation step is skipped entirely.
     """
 
     enabled: bool = False
@@ -108,7 +110,7 @@ class ExplainabilityConfig(PolynetBaseModel):
     target_class: int | None = None
     plot_type: AttributionPlotType = AttributionPlotType.Ridge
     top_n: int | None = 10
-    explain_mol_ids: list[str] | None = None
+    local_explain_mol_ids: list[str] | None = None
 
     @field_validator("algorithm")
     @classmethod
