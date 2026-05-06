@@ -576,8 +576,7 @@ def plot_attribution_strip(
     ax.set_xlabel("Attribution (SHAP value)", fontsize=11)
     title_suffix = "coloured by feature value" if colour_by_feature else "coloured by attribution"
     ax.set_title(
-        f"Feature Attribution — Individual Scores + Mean (◆) — {title_suffix}",
-        fontsize=11, pad=10,
+        f"Feature Attribution — Individual Scores + Mean (◆) — {title_suffix}", fontsize=11, pad=10
     )
     sns.despine(ax=ax, left=True)
     ax.grid(axis="x", linestyle="--", alpha=0.4)

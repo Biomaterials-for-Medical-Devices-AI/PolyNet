@@ -256,7 +256,8 @@ def _shared_params_section(
     selected_archs_set = set(selected_archs)
     selected_iterations_set = set(selected_iterations)
     selected_models = [
-        f for f in gnn_models
+        f
+        for f in gnn_models
         if _parse_gnn_filename(f)[0] in selected_archs_set
         and _parse_gnn_filename(f)[1] in selected_iterations_set
     ]

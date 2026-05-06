@@ -133,9 +133,7 @@ def _build_data_config(cfg: dict) -> DataConfig:
 
 
 def _build_repr_config(
-    cfg: dict,
-    node_feats: dict | None = None,
-    edge_feats: dict | None = None,
+    cfg: dict, node_feats: dict | None = None, edge_feats: dict | None = None
 ) -> RepresentationConfig:
     """Build RepresentationConfig from the 'representations' section.
 
@@ -166,10 +164,7 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
 
     gnn_dict = cfg["gnn_training"]
     raw_layers = gnn_dict.get("gnn_convolutional_layers", {})
-    _KEY_MAP = {
-        "LearningRate": TrainingParam.LearningRate,
-        "BatchSize": TrainingParam.BatchSize,
-    }
+    _KEY_MAP = {"LearningRate": TrainingParam.LearningRate, "BatchSize": TrainingParam.BatchSize}
     layers = {}
     for arch_name, arch_params in raw_layers.items():
         net = Network(arch_name)
@@ -407,11 +402,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     t0 = announce("4. Compute data splits")
     train_idxs, val_idxs, test_idxs = compute_data_splits(
-        data=df,
-        data_cfg=data_cfg,
-        split_cfg=split_cfg,
-        random_seed=random_seed,
-        out_dir=out_dir,
+        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=random_seed, out_dir=out_dir
     )
     split_indexes = (train_idxs, val_idxs, test_idxs)
     save_options(out_dir / "split_options.json", split_cfg)

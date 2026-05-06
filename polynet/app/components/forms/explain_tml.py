@@ -22,7 +22,6 @@ from polynet.config.column_names import get_predicted_label_column_name, get_tru
 from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod, ProblemType
 from polynet.config.schemas import DataConfig
 
-
 # ---------------------------------------------------------------------------
 # Shared parameters
 # ---------------------------------------------------------------------------
@@ -277,7 +276,9 @@ def _tml_local_tab(
                     preds_dict[sid]["predicted"] = str(preds_dedup.loc[sid, pred_col])
                 else:
                     pred_str = str(int(preds_dedup.loc[sid, pred_col]))
-                    preds_dict[sid]["predicted"] = class_names[pred_str] if class_names else pred_str
+                    preds_dict[sid]["predicted"] = (
+                        class_names[pred_str] if class_names else pred_str
+                    )
         except (KeyError, TypeError, ValueError):
             pass
 
