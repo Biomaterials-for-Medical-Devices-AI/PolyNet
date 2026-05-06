@@ -411,7 +411,8 @@ def shap_cache_to_distribution(
     model_log_names: list[str],
     sample_ids: list[str],
     normalisation_type: ImportanceNormalisationMethod,
-) -> dict[str, list[float]]:
+    descriptor_df: pd.DataFrame | None = None,
+) -> tuple[dict[str, list[float]], dict[str, list[float]] | None]:
     """
     Flatten a SHAP cache DataFrame into ``{feature_name: [scores]}`` for plotting.
 
@@ -432,18 +433,36 @@ def shap_cache_to_distribution(
         Sample IDs to include.
     normalisation_type:
         Normalisation strategy.
+    descriptor_df:
+        Optional raw descriptor DataFrame (samples × features, target last).
+        When provided, raw feature values are collected in parallel with
+        attribution scores so they can be used for strip-plot colouring.
 
     Returns
     -------
-    dict[str, list[float]]
-        ``{feature_name: [score_1, score_2, ...]}``.
-        All individual scores are preserved (no averaging across models).
+    tuple[dict[str, list[float]], dict[str, list[float]] | None]
+        ``(attribution_distribution, feature_values_dict)``.
+        ``feature_values_dict`` mirrors the structure and order of
+        ``attribution_distribution`` but holds raw feature values instead of
+        SHAP scores.  Returns ``None`` as the second element when
+        ``descriptor_df`` is not supplied.
     """
     if cache_df.empty:
-        return {}
+        return {}, None
 
     feature_cols = [c for c in cache_df.columns if c not in _META_COLS]
     sample_ids_set = set(str(s) for s in sample_ids)
+
+    # Prepare descriptor index as strings for fast lookup
+    if descriptor_df is not None:
+        desc_index_str = descriptor_df.index.astype(str)
+        desc_str_df = descriptor_df.copy()
+        desc_str_df.index = desc_index_str
+        # Only keep feature columns (drop target = last column)
+        desc_feature_cols = set(desc_str_df.columns[:-1])
+    else:
+        desc_str_df = None
+        desc_feature_cols = set()
 
     # Build lookup sets for filtering
     model_specs: list[tuple[str, str]] = []
@@ -452,6 +471,7 @@ def shap_cache_to_distribution(
         model_specs.append((mt, str(it)))
 
     distribution: dict[str, list[float]] = {f: [] for f in feature_cols}
+    feature_values: dict[str, list[float]] = {f: [] for f in feature_cols}
 
     # ---- Global divisor pre-computation ----
     global_divisor = 1.0
@@ -481,6 +501,7 @@ def shap_cache_to_distribution(
 
         for _, row in subset.iterrows():
             unit_vals = row[feature_cols].to_numpy(dtype=float)
+            sid = str(row["sample_id"])
 
             if normalisation_type == ImportanceNormalisationMethod.Local:
                 max_abs = np.nanmax(np.abs(unit_vals))
@@ -495,8 +516,28 @@ def shap_cache_to_distribution(
             for feat, val in zip(feature_cols, unit_vals / divisor):
                 distribution[feat].append(float(val))
 
-    # Drop features with no scores
-    return {f: v for f, v in distribution.items() if v}
+            # Raw feature value lookup (same iteration order as attribution)
+            if desc_str_df is not None and sid in desc_str_df.index:
+                for feat in feature_cols:
+                    fv = (
+                        float(desc_str_df.at[sid, feat])
+                        if feat in desc_feature_cols
+                        else float("nan")
+                    )
+                    feature_values[feat].append(fv)
+            elif desc_str_df is not None:
+                for feat in feature_cols:
+                    feature_values[feat].append(float("nan"))
+
+    # Drop features with no attribution scores
+    populated = {f for f, v in distribution.items() if v}
+    clean_dist = {f: v for f, v in distribution.items() if f in populated}
+    clean_fv = (
+        {f: v for f, v in feature_values.items() if f in populated}
+        if desc_str_df is not None
+        else None
+    )
+    return clean_dist, clean_fv
 
 
 def merge_shap_attributions(
@@ -873,6 +914,9 @@ def compute_global_shap_attribution(
         target_class=target_class,
     )
 
+    # Normalise descriptor_dfs keys to strings for lookup
+    str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
+
     results: dict[str, GlobalAttributionResult] = {}
 
     for descriptor, cache_df in cache_by_descriptor.items():
@@ -880,11 +924,14 @@ def compute_global_shap_attribution(
         n_models = len({_parse_model_log_name(k)[0] for k in model_log_names})
         n_samples = cache_df["sample_id"].nunique()
 
-        attribution_dict = shap_cache_to_distribution(
+        # Pass the raw descriptor DataFrame so feature values can be collected
+        # in the same iteration order as SHAP scores (used for strip-plot colouring).
+        attribution_dict, feature_values_dict = shap_cache_to_distribution(
             cache_df=cache_df,
             model_log_names=model_log_names,
             sample_ids=explain_sample_ids,
             normalisation_type=normalisation_type,
+            descriptor_df=str_dfs.get(descriptor),
         )
 
         if not attribution_dict:
@@ -903,18 +950,27 @@ def compute_global_shap_attribution(
 
         n_frags_total = len(attribution_dict)
 
-        # Apply top_n filtering by mean attribution
+        # Apply top_n filtering by mean attribution; keep feature_values in sync
         if top_n is not None and n_frags_total > top_n * 2:
             means = {f: float(np.mean(v)) for f, v in attribution_dict.items()}
             sorted_feats = sorted(means, key=lambda f: means[f])
             top_feats = set(sorted_feats[:top_n] + sorted_feats[-top_n:])
             attribution_dict = {f: v for f, v in attribution_dict.items() if f in top_feats}
+            if feature_values_dict is not None:
+                feature_values_dict = {f: v for f, v in feature_values_dict.items() if f in top_feats}
         n_shown = len(attribution_dict)
 
         if plot_type == AttributionPlotType.Bar:
             fig = plot_attribution_bar(attribution_dict, neg_color=neg_color, pos_color=pos_color)
         elif plot_type == AttributionPlotType.Strip:
-            fig = plot_attribution_strip(attribution_dict, neg_color=neg_color, pos_color=pos_color)
+            # TML: colour points by raw feature value; GNN path never reaches here
+            # (it calls compute_global_attribution in explain.py, not this function)
+            fig = plot_attribution_strip(
+                attribution_dict,
+                neg_color=neg_color,
+                pos_color=pos_color,
+                feature_values_dict=feature_values_dict,
+            )
         else:
             fig = plot_attribution_distribution(
                 attribution_dict, neg_color=neg_color, pos_color=pos_color
