@@ -218,7 +218,7 @@ explainability:
   # Molecular fragmentation strategy.
   fragmentation: "brics"             # brics | recap | murcko_scaffold | functional_groups
 
-  # Data split to draw molecules from (ignored when explain_mol_ids is set).
+  # Data split to draw molecules from for the global distribution plot.
   explain_set: "test"                # train | validation | test | all
 
   # Normalisation applied to attribution scores before plotting.
@@ -234,8 +234,52 @@ explainability:
   # null shows every fragment.
   top_n: 10
 
-  # Optional explicit molecule IDs — overrides explain_set when provided.
-  explain_mol_ids: null
-  # explain_mol_ids:
+  # Molecule IDs to generate per-molecule heatmaps and attribution tables for.
+  # When null (default), the local explanation step is skipped entirely.
+  local_explain_mol_ids: null
+  # local_explain_mol_ids:
   #   - "poly_0001"
-  #   - "poly_0042"
+
+# -----------------------------------------------------------------------------
+# TML SHAP Explainability
+# Requires tml_models.train_tml: true and descriptor representations.
+# -----------------------------------------------------------------------------
+tml_explainability:
+  enabled: false
+
+  # TML model types to explain, e.g. [RandomForest, XGBoost].
+  # "all" explains every trained TML model type.
+  models: "all"
+
+  # Descriptor representations to explain, e.g. [morgan, rdkit].
+  # "all" explains every trained descriptor.
+  representations: "all"
+
+  # Bootstrap iteration indices to explain (0-based).
+  # "all" explains every trained iteration.
+  bootstraps: "all"
+
+  # Data split to draw samples from for the global distribution plot.
+  explain_set: "test"              # train | validation | test | all
+
+  # Normalisation applied to SHAP scores before plotting.
+  normalisation: "per_model"       # local | global | per_model | no_normalisation
+
+  # For classification: which class to attribute (null for regression).
+  target_class: null
+
+  # SHAP attribution distribution plot style.
+  plot_type: "ridge"               # ridge | bar | strip
+
+  # Show only the top-N features by mean |SHAP|.
+  # null shows all features.
+  top_n: 10
+
+  # Sample IDs to generate per-instance waterfall/force plots for.
+  # When null (default), the local explanation step is skipped entirely.
+  local_explain_sample_ids: null
+  # local_explain_sample_ids:
+  #   - "poly_0001"
+
+  # Plot style for per-instance SHAP explanations.
+  local_plot_type: "waterfall"     # waterfall | force | bar
