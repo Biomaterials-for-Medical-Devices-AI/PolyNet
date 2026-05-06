@@ -1083,9 +1083,7 @@ def run_explainability(
         _collect(val_idxs)
 
     explain_mol_ids = sorted(mol_id_set)
-    logger.info(
-        f"Explaining {len(explain_mol_ids)} molecule(s) from '{exp_cfg.explain_set}' set."
-    )
+    logger.info(f"Explaining {len(explain_mol_ids)} molecule(s) from '{exp_cfg.explain_set}' set.")
 
     if not explain_mol_ids:
         logger.warning("No molecules to explain. Skipping explainability stage.")
@@ -1127,7 +1125,9 @@ def run_explainability(
         return
 
     local_mol_ids = [str(m) for m in exp_cfg.local_explain_mol_ids]
-    logger.info(f"Computing per-molecule attribution heatmaps for {len(local_mol_ids)} molecule(s)…")
+    logger.info(
+        f"Computing per-molecule attribution heatmaps for {len(local_mol_ids)} molecule(s)…"
+    )
     local_results = compute_local_attribution(
         models=models_to_explain,
         experiment_path=out_dir,
