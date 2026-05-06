@@ -824,7 +824,9 @@ def predict_external(
         keep = []
         if data_cfg.id_col and data_cfg.id_col in df.columns:
             keep.append(data_cfg.id_col)
-        keep += data_cfg.smiles_cols + [data_cfg.target_variable_col]
+        keep += data_cfg.smiles_cols
+        if has_target:
+            keep.append(data_cfg.target_variable_col)
         if repr_cfg.weights_col:
             keep += [c for c in repr_cfg.weights_col.values() if c in df.columns]
         keep += [c for c in polymer_descriptors if c in df.columns]

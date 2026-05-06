@@ -187,7 +187,7 @@ def sanitise_df(
     df_clean = df_clean.drop(columns=cols_to_drop)
 
     if target_variable_col not in df_clean.columns:
-        raise ValueError(f"Target column '{target_variable_col}' not found after sanitisation.")
+        return df_clean
 
     # Move target column to the end
     cols = [c for c in df_clean.columns if c != target_variable_col]

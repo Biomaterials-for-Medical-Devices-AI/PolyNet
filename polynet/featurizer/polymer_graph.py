@@ -169,6 +169,10 @@ class CustomPolymerGraph(PolymerGraphDataset):
         monomers: list[str] = []
 
         for smiles_col in self.smiles_col:
+            if self.weights_col and smiles_col in self.weights_col:
+                if row[self.weights_col[smiles_col]] == 0:
+                    continue
+
             smiles = row[smiles_col]
             mol = Chem.MolFromSmiles(smiles)
 
