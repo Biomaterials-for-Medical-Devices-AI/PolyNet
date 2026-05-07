@@ -271,7 +271,7 @@ def train_gnn_ensemble(
             scheduler = create_scheduler(
                 Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
             )
-            loss_fn = create_loss(problem_type, class_weights=class_weights)
+            loss_fn = create_loss(problem_type, class_weights=class_weights).to(device)
 
             model = train_model(
                 model=model,
