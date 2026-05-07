@@ -297,7 +297,7 @@ def _load_best_config(hop_results_path: Path, gnn_arch: Network, config_keys: di
         value = best_row[col]
         if isinstance(value, np.generic):
             value = value.item()
-        elif pd.isna(value):
+        if pd.isna(value):
             value = None
 
         best_config[param] = value
