@@ -117,7 +117,7 @@ class CGGNNBase(BaseNetwork):
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
-        return self.pooling_fn(x, batch_index)
+        return self._pool(x, batch_index, monomer_weight)
 
     def get_node_embeddings(
         self,
