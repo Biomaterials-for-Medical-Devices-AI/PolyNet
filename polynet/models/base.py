@@ -213,6 +213,56 @@ class BaseNetwork(nn.Module):
 
         return preds
 
+    def _pool(
+        self,
+        x: Tensor,
+        batch_index: Tensor,
+        monomer_weight: Tensor | None = None,
+    ) -> Tensor:
+        """
+        Pool node features into a graph-level embedding.
+
+        When ``monomer_weight`` is provided AND ``apply_weighting_to_graph``
+        is ``BeforePooling`` (i.e. node features have just been multiplied
+        by their monomer weight), the mean component of the pool is computed
+        as a proper weighted mean — ``sum(weight * x) / sum(weight)`` per
+        graph — matching the wD-MPNN readout convention from Aldeghi & Coley
+        (2022, https://pubs.rsc.org/en/content/articlehtml/2022/sc/d2sc02839e,
+        see ``polymer-chemprop/chemprop/models/mpn.py`` line 159).
+
+        This makes the pooled embedding:
+          * invariant to zero-weighted monomers (they cancel from numerator
+            and denominator alike);
+          * consistent in magnitude between homopolymers and copolymers;
+          * a true weighted mean of monomer-level averages when each
+            monomer's atoms are of similar count.
+
+        Sum and max pooling are unaffected — only the mean component
+        (in ``GlobalMeanPool`` and ``GlobalMeanMaxPool``) is replaced.
+        """
+        use_weighted_mean = (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        )
+        if not use_weighted_mean:
+            return self.pooling_fn(x, batch_index)
+
+        if self.pooling == Pooling.GlobalMeanPool:
+            num = gap(x, batch_index)
+            denom = gap(monomer_weight, batch_index).clamp(min=1e-8)
+            return num / denom
+
+        if self.pooling == Pooling.GlobalMeanMaxPool:
+            num = gap(x, batch_index)
+            denom = gap(monomer_weight, batch_index).clamp(min=1e-8)
+            mean_part = num / denom
+            max_part = gmp(x, batch_index)
+            # Match the column order produced by ``_max_mean_pool``: [max, mean]
+            return torch.cat([max_part, mean_part], dim=1)
+
+        # GlobalAddPool / GlobalMaxPool: no normalization change needed
+        return self.pooling_fn(x, batch_index)
+
     def get_graph_embedding(
         self,
         x: Tensor,
@@ -249,7 +299,7 @@ class BaseNetwork(nn.Module):
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
-        return self.pooling_fn(x, batch_index)
+        return self._pool(x, batch_index, monomer_weight)
 
     def get_node_embeddings(
         self,
