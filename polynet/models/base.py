@@ -213,12 +213,7 @@ class BaseNetwork(nn.Module):
 
         return preds
 
-    def _pool(
-        self,
-        x: Tensor,
-        batch_index: Tensor,
-        monomer_weight: Tensor | None = None,
-    ) -> Tensor:
+    def _pool(self, x: Tensor, batch_index: Tensor, monomer_weight: Tensor | None = None) -> Tensor:
         """
         Pool node features into a graph-level embedding.
 
