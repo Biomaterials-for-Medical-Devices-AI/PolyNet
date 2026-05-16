@@ -51,6 +51,7 @@ _POOLING_COMPAT: dict[str, str] = {
 _WEIGHTING_COMPAT: dict[str, str] = {
     "Before MPP": "before_mpp",
     "Before Pooling": "before_pooling",
+    "Per Monomer Pooling": "per_monomer_pooling",
     "No Weighting": "no_weighting",
 }
 
