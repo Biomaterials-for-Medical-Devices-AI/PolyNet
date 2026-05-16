@@ -170,6 +170,7 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
         polymer_descriptors: Tensor | None = None,
     ) -> Tensor:
         """
@@ -203,6 +204,7 @@ class BaseNetwork(nn.Module):
             batch_index=batch_index,
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
+            monomer_id=monomer_id,
         )
         if polymer_descriptors is not None and self.n_polymer_descriptors > 0:
             embedding = torch.cat([embedding, polymer_descriptors], dim=1)
@@ -213,28 +215,80 @@ class BaseNetwork(nn.Module):
 
         return preds
 
-    def _pool(self, x: Tensor, batch_index: Tensor, monomer_weight: Tensor | None = None) -> Tensor:
+    def _pool_per_monomer(
+        self,
+        x: Tensor,
+        batch_index: Tensor,
+        monomer_weight: Tensor,
+        monomer_id: Tensor,
+    ) -> Tensor:
+        """
+        "Ideal" per-monomer pooling.
+
+        Pools each monomer's nodes *separately* using the configured
+        pooling function, multiplies each monomer's pooled embedding by
+        its molar weight, then sums the weighted per-monomer embeddings
+        within each polymer:
+
+            embedding(polymer) = Σ_m  w_m · pool(nodes of monomer m)
+
+        This is invariant to monomer atom counts and to zero-weight
+        monomers (a zero-weight monomer contributes ``0`` to the sum and
+        nothing else), and matches the user's mental model of a copolymer
+        as a weighted blend of monomer-level representations. Works for
+        any pooling style (add / mean / max / mean-max) because the same
+        ``pooling_fn`` is applied per monomer; the output dimensionality
+        is unchanged.
+        """
+        # Unique consecutive segment id per (polymer, monomer).
+        m_id = monomer_id.view(-1).long()
+        n_mon = int(m_id.max().item()) + 1 if m_id.numel() > 0 else 1
+        seg_raw = batch_index * n_mon + m_id
+        _, seg = torch.unique(seg_raw, return_inverse=True)
+
+        # Per-monomer embedding (configured pooling applied within each monomer).
+        g_seg = self.pooling_fn(x, seg)
+        # Per-monomer scalar weight (constant across a monomer's nodes;
+        # mean of a constant returns that constant).
+        w_seg = gmeanp(monomer_weight, seg)
+        # Which polymer each segment belongs to (batch_index is constant
+        # within a segment).
+        poly_of_seg = (
+            gmeanp(batch_index.float().view(-1, 1), seg).round().long().view(-1)
+        )
+        # Weighted sum of per-monomer embeddings, grouped back to polymers.
+        return gap(g_seg * w_seg, poly_of_seg)
+
+    def _pool(
+        self,
+        x: Tensor,
+        batch_index: Tensor,
+        monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
+    ) -> Tensor:
         """
         Pool node features into a graph-level embedding.
 
-        When ``monomer_weight`` is provided AND ``apply_weighting_to_graph``
-        is ``BeforePooling`` (i.e. node features have just been multiplied
-        by their monomer weight), the mean component of the pool is computed
-        as a proper weighted mean — ``sum(weight * x) / sum(weight)`` per
-        graph — matching the wD-MPNN readout convention from Aldeghi & Coley
-        (2022, https://pubs.rsc.org/en/content/articlehtml/2022/sc/d2sc02839e,
-        see ``polymer-chemprop/chemprop/models/mpn.py`` line 159).
+        ``PerMonomerPooling``: each monomer is pooled separately, weighted
+        by its molar fraction, then summed (see ``_pool_per_monomer``).
+        Falls back to plain pooling if the required per-node tensors are
+        absent.
 
-        This makes the pooled embedding:
-          * invariant to zero-weighted monomers (they cancel from numerator
-            and denominator alike);
-          * consistent in magnitude between homopolymers and copolymers;
-          * a true weighted mean of monomer-level averages when each
-            monomer's atoms are of similar count.
-
-        Sum and max pooling are unaffected — only the mean component
-        (in ``GlobalMeanPool`` and ``GlobalMeanMaxPool``) is replaced.
+        ``BeforePooling``: when ``monomer_weight`` is provided (node
+        features have just been multiplied by their monomer weight), the
+        mean component of the pool is computed as a proper weighted mean —
+        ``sum(weight * x) / sum(weight)`` per graph — matching the wD-MPNN
+        readout convention from Aldeghi & Coley (2022,
+        https://pubs.rsc.org/en/content/articlehtml/2022/sc/d2sc02839e,
+        see ``polymer-chemprop/chemprop/models/mpn.py`` line 159). Sum and
+        max pooling are unaffected — only the mean component (in
+        ``GlobalMeanPool`` and ``GlobalMeanMaxPool``) is replaced.
         """
+        if self.apply_weighting_to_graph == ApplyWeightingToGraph.PerMonomerPooling:
+            if monomer_weight is None or monomer_id is None:
+                return self.pooling_fn(x, batch_index)
+            return self._pool_per_monomer(x, batch_index, monomer_weight, monomer_id)
+
         use_weighted_mean = (
             monomer_weight is not None
             and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
@@ -265,6 +319,7 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """
         Run message passing and pooling to produce a graph-level embedding.
@@ -294,7 +349,7 @@ class BaseNetwork(nn.Module):
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
-        return self._pool(x, batch_index, monomer_weight)
+        return self._pool(x, batch_index, monomer_weight, monomer_id)
 
     def get_node_embeddings(
         self,
@@ -303,6 +358,7 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """
         Run message passing and return pre-pooling node embeddings.
@@ -355,6 +411,7 @@ class BaseNetwork(nn.Module):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
         polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """
@@ -377,6 +434,7 @@ class BaseNetwork(nn.Module):
                 batch_index=batch_index,
                 edge_attr=edge_attr,
                 monomer_weight=monomer_weight,
+                monomer_id=monomer_id,
                 polymer_descriptors=polymer_descriptors,
             )
             .detach()
@@ -413,6 +471,7 @@ class BaseNetwork(nn.Module):
                     batch_index=batch.batch,
                     edge_attr=batch.edge_attr,
                     monomer_weight=getattr(batch, "weight_monomer", None),
+                    monomer_id=getattr(batch, "monomer_id", None),
                     polymer_descriptors=getattr(batch, "polymer_descriptors", None),
                 )
                 y_pred.append(out.cpu().detach().numpy().flatten())
@@ -494,6 +553,7 @@ class BaseNetworkClassifier(BaseNetwork):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
         polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """Return hard class predictions (argmax of softmax)."""
@@ -503,6 +563,7 @@ class BaseNetworkClassifier(BaseNetwork):
             batch_index=batch_index,
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
+            monomer_id=monomer_id,
             polymer_descriptors=polymer_descriptors,
         )
         return np.argmax(probs, axis=1)
@@ -514,6 +575,7 @@ class BaseNetworkClassifier(BaseNetwork):
         batch_index: Tensor | None = None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
         polymer_descriptors: Tensor | None = None,
     ) -> np.ndarray:
         """Return softmax class probabilities."""
@@ -523,6 +585,7 @@ class BaseNetworkClassifier(BaseNetwork):
             batch_index=batch_index,
             edge_attr=edge_attr,
             monomer_weight=monomer_weight,
+            monomer_id=monomer_id,
             polymer_descriptors=polymer_descriptors,
         )
         return torch.softmax(out, dim=1).detach().numpy()
@@ -552,6 +615,7 @@ class BaseNetworkClassifier(BaseNetwork):
                         batch_index=batch.batch,
                         edge_attr=batch.edge_attr,
                         monomer_weight=getattr(batch, "weight_monomer", None),
+                        monomer_id=getattr(batch, "monomer_id", None),
                         polymer_descriptors=getattr(batch, "polymer_descriptors", None),
                     )
                     .cpu()
