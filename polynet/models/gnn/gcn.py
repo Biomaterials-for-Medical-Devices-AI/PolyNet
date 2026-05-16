@@ -91,6 +91,7 @@ class GCNBase(BaseNetwork):
         batch_index=None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """
         GCN-specific embedding — ``edge_attr`` is intentionally ignored
@@ -116,7 +117,7 @@ class GCNBase(BaseNetwork):
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
-        return self._pool(x, batch_index, monomer_weight)
+        return self._pool(x, batch_index, monomer_weight, monomer_id)
 
     def get_node_embeddings(
         self,
@@ -125,6 +126,7 @@ class GCNBase(BaseNetwork):
         batch_index=None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """GCN-specific pre-pooling node embeddings — ``edge_attr`` is ignored."""
         if (

@@ -85,6 +85,7 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> pd.DataFrame:
                 edge_attr=batch.edge_attr,
                 batch_index=batch.batch,
                 monomer_weight=getattr(batch, "weight_monomer", None),
+                monomer_id=getattr(batch, "monomer_id", None),
             )
             embeddings.append(embedding.cpu().numpy())
             idx.append(batch.idx)

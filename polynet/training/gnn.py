@@ -409,6 +409,7 @@ def train_network(
             batch_index=batch.batch,
             edge_attr=batch.edge_attr,
             monomer_weight=getattr(batch, "weight_monomer", None),
+            monomer_id=getattr(batch, "monomer_id", None),
             polymer_descriptors=getattr(batch, "polymer_descriptors", None),
         )
 
@@ -454,6 +455,7 @@ def eval_network(
                 batch_index=batch.batch,
                 edge_attr=batch.edge_attr,
                 monomer_weight=getattr(batch, "weight_monomer", None),
+                monomer_id=getattr(batch, "monomer_id", None),
                 polymer_descriptors=getattr(batch, "polymer_descriptors", None),
             )
             loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
