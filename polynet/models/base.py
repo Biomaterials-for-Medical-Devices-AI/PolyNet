@@ -216,11 +216,7 @@ class BaseNetwork(nn.Module):
         return preds
 
     def _pool_per_monomer(
-        self,
-        x: Tensor,
-        batch_index: Tensor,
-        monomer_weight: Tensor,
-        monomer_id: Tensor,
+        self, x: Tensor, batch_index: Tensor, monomer_weight: Tensor, monomer_id: Tensor
     ) -> Tensor:
         """
         "Ideal" per-monomer pooling.
@@ -253,9 +249,7 @@ class BaseNetwork(nn.Module):
         w_seg = gmeanp(monomer_weight, seg)
         # Which polymer each segment belongs to (batch_index is constant
         # within a segment).
-        poly_of_seg = (
-            gmeanp(batch_index.float().view(-1, 1), seg).round().long().view(-1)
-        )
+        poly_of_seg = gmeanp(batch_index.float().view(-1, 1), seg).round().long().view(-1)
         # Weighted sum of per-monomer embeddings, grouped back to polymers.
         return gap(g_seg * w_seg, poly_of_seg)
 
