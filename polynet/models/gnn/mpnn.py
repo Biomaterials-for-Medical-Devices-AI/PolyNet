@@ -107,6 +107,7 @@ class MPNNBase(BaseNetwork):
         batch_index=None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """MPNN-specific embedding — includes node projection before convolutions."""
         if (
@@ -133,7 +134,7 @@ class MPNNBase(BaseNetwork):
         if self.cross_att:
             x = self._cross_attention(x, batch_index, monomer_weight)
 
-        return self._pool(x, batch_index, monomer_weight)
+        return self._pool(x, batch_index, monomer_weight, monomer_id)
 
     def get_node_embeddings(
         self,
@@ -142,6 +143,7 @@ class MPNNBase(BaseNetwork):
         batch_index=None,
         edge_attr: Tensor | None = None,
         monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
     ) -> Tensor:
         """MPNN-specific pre-pooling node embeddings — includes node projection."""
         if (
