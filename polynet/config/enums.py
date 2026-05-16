@@ -273,6 +273,7 @@ class ApplyWeightingToGraph(StrEnum):
 
     BeforeMPP = "before_mpp"
     BeforePooling = "before_pooling"
+    PerMonomerPooling = "per_monomer_pooling"
     NoWeighting = "no_weighting"
 
 
