@@ -166,6 +166,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
         accumulated_edge_index: torch.Tensor | None = None
         accumulated_edge_feats: torch.Tensor | None = None
         accumulated_weights: torch.Tensor | None = None
+        accumulated_monomer_id: torch.Tensor | None = None
         monomers: list[str] = []
 
         for smiles_col in self.smiles_col:
@@ -211,6 +212,17 @@ class CustomPolymerGraph(PolymerGraphDataset):
                     else torch.cat([accumulated_weights, monomer_weights], dim=0)
                 )
 
+            # Per-node local monomer index (0, 1, …) within this polymer.
+            # ``len(monomers) - 1`` is the index of the monomer just appended;
+            # skipped (zero-weight / unparseable) monomers are excluded, so ids
+            # stay contiguous. Used by PerMonomerPooling to segment the graph.
+            monomer_id = torch.full((node_feats.shape[0], 1), len(monomers) - 1, dtype=torch.long)
+            accumulated_monomer_id = (
+                monomer_id
+                if accumulated_monomer_id is None
+                else torch.cat([accumulated_monomer_id, monomer_id], dim=0)
+            )
+
         if accumulated_node_feats is None:
             logger.error(f"All monomers failed to parse for row {row.name} — skipping polymer.")
             return None
@@ -232,6 +244,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
             edge_index=accumulated_edge_index,
             y=y,
             weight_monomer=accumulated_weights,
+            monomer_id=accumulated_monomer_id,
             polymer_descriptors=poly_desc_tensor,
             mols=monomers,
             idx=sample_id,
