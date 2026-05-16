@@ -370,6 +370,7 @@ def _compute_masking_attributions(
     """
     polymer_descriptors = getattr(mol, "polymer_descriptors", None)
     monomer_weight = getattr(mol, "weight_monomer", None)
+    monomer_id = getattr(mol, "monomer_id", None)
 
     with torch.no_grad():
         # --- Baseline prediction ---
@@ -380,6 +381,7 @@ def _compute_masking_attributions(
                 batch_index=None,
                 edge_attr=mol.edge_attr,
                 monomer_weight=monomer_weight,
+                monomer_id=monomer_id,
                 polymer_descriptors=polymer_descriptors,
             ),
             problem_type=problem_type,
