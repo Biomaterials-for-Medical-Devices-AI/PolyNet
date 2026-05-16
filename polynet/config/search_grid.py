@@ -77,7 +77,7 @@ _GNN_SHARED_GRID: dict = {
     ArchitectureParam.EmbeddingDim: [32, 64, 128],
     ArchitectureParam.ReadoutLayers: [1, 2, 3],
     ArchitectureParam.Dropout: [0.01, 0.05, 0.1],
-    ArchitectureParam.ApplyWeightingGraph: [ApplyWeightingToGraph.BeforePooling],
+    ArchitectureParam.ApplyWeightingGraph: [ApplyWeightingToGraph.PerMonomerPooling],
     TrainingParam.LearningRate: [0.0001, 0.001, 0.01],
     TrainingParam.BatchSize: [16, 32, 64],
     TrainingParam.AsymmetricLossStrength: [None],
@@ -169,7 +169,9 @@ def get_tml_search_grid(
     return grid
 
 
-def get_gnn_search_grid(network: Network, random_seed: int) -> dict:
+def get_gnn_search_grid(
+    network: Network, random_seed: int, problem_type: ProblemType | None = None
+) -> dict:
     """
     Return a hyperparameter search grid for a GNN architecture.
 
@@ -201,5 +203,7 @@ def get_gnn_search_grid(network: Network, random_seed: int) -> dict:
 
     specific = copy.deepcopy(_GNN_SPECIFIC_GRIDS[network])
     shared = copy.deepcopy(_GNN_SHARED_GRID)
+    if problem_type == ProblemType.Classification:
+        shared[TrainingParam.AsymmetricLossStrength] = [None, 0.25, 0.5, 0.75, 1.0]
     grid = {**specific, **shared, TrainingParam.Seed: [random_seed]}
     return grid
