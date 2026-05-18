@@ -145,6 +145,51 @@ TOPOLOGICAL_FEATURIZER_REGISTRY = {
 }
 
 
+_ALL_SENTINEL = "all"
+
+
+def _expand_all(features: Sequence[PMXFeature] | str | None, part: str) -> Sequence[PMXFeature]:
+    """
+    Expand the ``"all"`` sentinel into every available feature for *part*.
+
+    Accepts ``"all"`` either as a bare string (``backbone: all``) or as the
+    sole element of a list (``backbone: ["all"]``), case-insensitively. Any
+    other value is returned unchanged.
+
+    "All available" is part-specific:
+
+    - ``side_chain``: every chemical feature + every side-chain topological
+      featurizer.
+    - ``backbone``: every chemical feature + every backbone topological
+      featurizer.
+    - ``polymer``: every chemical feature only — :class:`FullPolymerFeaturizer`
+      has no topological equivalent (see :func:`_validate_polymer_features`).
+    """
+    if isinstance(features, str):
+        is_all = features.strip().lower() == _ALL_SENTINEL
+    elif (
+        features is not None
+        and len(features) == 1
+        and isinstance(features[0], str)
+        and features[0].strip().lower() == _ALL_SENTINEL
+    ):
+        is_all = True
+    else:
+        is_all = False
+
+    if not is_all:
+        return features
+
+    chem = [f.value for f in PMXChemFeature]
+    if part == "side_chain":
+        return chem + [f.value for f in SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY]
+    if part == "backbone":
+        return chem + [f.value for f in BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY]
+    if part == "polymer":
+        return chem
+    return features
+
+
 def _parse_chem_feature(feature: PMXChemFeature | str) -> PMXChemFeature:
     """Parse a chemical feature enum from enum or string input."""
     return PMXChemFeature(feature) if isinstance(feature, str) else feature
@@ -347,6 +392,13 @@ def create_pmx_featurizer(
         **not** supported here and will raise a :exc:`ValueError`.
         Defaults to an empty sequence (no whole-polymer features).
 
+    Each of ``side_chain_features``, ``backbone_features`` and
+    ``polymer_features`` also accepts the sentinel ``"all"`` (as a bare
+    string or the sole element of a list, case-insensitive) to request
+    every available feature for that part: all chemical features plus the
+    part's topological featurizers for side-chain/backbone, and all
+    chemical features for polymer.
+
     Returns
     -------
     MultipleFeaturizer
@@ -370,6 +422,11 @@ def create_pmx_featurizer(
     ...     polymer_features=[PMXChemFeature.MolecularWeight, PMXChemFeature.TopologicalSurfaceArea],
     ... )
     """
+    # Expand the "all" sentinel into the full feature set for each part.
+    side_chain_features = _expand_all(side_chain_features, "side_chain")
+    backbone_features = _expand_all(backbone_features, "backbone")
+    polymer_features = _expand_all(polymer_features, "polymer")
+
     _validate_features(
         side_chain_features=side_chain_features,
         backbone_features=backbone_features,
