@@ -34,11 +34,18 @@ from polynet.config.enums import (
 
 _LINEAR_REGRESSION_GRID: dict = {"fit_intercept": [True, False]}
 
+# sklearn >= 1.8 deprecated ``penalty`` in favour of ``l1_ratio``
+# (0.0 = L2, 1.0 = L1, in-between = elastic-net). The ``saga`` solver
+# supports the full ``l1_ratio`` range, so there are no invalid
+# solver/penalty combinations (avoids FitFailedWarning) and no use of
+# the deprecated ``penalty`` arg (avoids FutureWarning). ``max_iter``
+# is raised well above the default of 100 to avoid ConvergenceWarning.
 _LOGISTIC_REGRESSION_GRID: dict = {
-    "penalty": ["l1", "l2"],
+    "solver": ["saga"],
+    "l1_ratio": [0.0, 0.5, 1.0],
     "C": [0.1, 1, 10, 100],
     "fit_intercept": [True, False],
-    "solver": ["lbfgs", "liblinear"],
+    "max_iter": [5000],
 }
 
 _RANDOM_FOREST_GRID: dict = {
