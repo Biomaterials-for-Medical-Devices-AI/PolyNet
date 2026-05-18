@@ -104,6 +104,37 @@ class RepresentationConfig(PolynetBaseModel):
         return self
 
     @model_validator(mode="after")
+    def polymetrix_requires_a_descriptor(self) -> "RepresentationConfig":
+        pmx = self.molecular_descriptors.get(MolecularDescriptor.PolyMetriX)
+        if pmx is None:
+            return self
+        if not isinstance(pmx, dict):
+            raise ValueError(
+                "molecular_descriptors['polymetrix'] must be a mapping with "
+                "'side_chain', 'backbone' and/or 'polymer' descriptor lists "
+                "(plus an optional 'agg'), not "
+                f"{type(pmx).__name__}."
+            )
+
+        def _provided(value) -> bool:
+            # The "all" sentinel (a non-empty string) or a non-empty list
+            # counts as requesting at least one descriptor. "agg" is an
+            # aggregation setting, not a descriptor, so it never counts.
+            if isinstance(value, str):
+                return value.strip() != ""
+            if isinstance(value, (list, tuple)):
+                return len(value) > 0
+            return False
+
+        if not any(_provided(pmx.get(part)) for part in ("side_chain", "backbone", "polymer")):
+            raise ValueError(
+                "molecular_descriptors['polymetrix'] requests no descriptors. "
+                "Provide at least one descriptor (or the 'all' sentinel) for "
+                "'side_chain', 'backbone' or 'polymer'."
+            )
+        return self
+
+    @model_validator(mode="after")
     def at_least_one_representation(self) -> "RepresentationConfig":
         has_graph = bool(self.node_features)
         has_descriptors = bool(self.molecular_descriptors)
