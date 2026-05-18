@@ -330,7 +330,7 @@ def get_polybert_fingerprints(
     from canonicalize_psmiles.canonicalize import canonicalize
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer("kuelumbus/polyBERT")
+    model = SentenceTransformer("xushijie/polyBERT")
 
     # 1) Canonicalize (keep a mapping from original -> canonical)
     orig_to_canon: dict[str, str] = {}
