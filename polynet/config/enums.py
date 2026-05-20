@@ -157,6 +157,7 @@ class AtomFeature(StrEnum):
     GetMass = "GetMass"
     GetImplicitValence = "GetImplicitValence"
     IsInRing = "IsInRing"
+    IsAttachmentPoint = "IsAttachmentPoint"
 
 
 class BondFeature(StrEnum):
