@@ -176,8 +176,8 @@ def molecular_descriptor_representation(
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
-            disabled=True,
-            help="polyBERT disabled as it was retired from Hugging Face",
+            disabled=disabled,
+            help=message,
         )
 
         if st.checkbox(
