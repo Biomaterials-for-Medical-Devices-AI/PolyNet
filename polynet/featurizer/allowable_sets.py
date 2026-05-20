@@ -65,6 +65,7 @@ atom_properties[AtomFeature.GetImplicitValence] = {
 }
 
 atom_properties[AtomFeature.IsInRing] = None  # boolean property, no options needed
+atom_properties[AtomFeature.IsAttachmentPoint] = None  # boolean property, no options needed
 
 
 bond_features = {}
