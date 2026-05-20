@@ -289,8 +289,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
         attachment_orig = {
             a.GetIdx()
             for a in mol.GetAtoms()
-            if a.GetAtomicNum() != 0
-            and any(n.GetAtomicNum() == 0 for n in a.GetNeighbors())
+            if a.GetAtomicNum() != 0 and any(n.GetAtomicNum() == 0 for n in a.GetNeighbors())
         }
 
         # Removing atoms in descending index order keeps earlier indices stable
