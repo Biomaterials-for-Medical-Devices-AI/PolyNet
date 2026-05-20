@@ -330,7 +330,7 @@ def get_polybert_fingerprints(
     from canonicalize_psmiles.canonicalize import canonicalize
     from sentence_transformers import SentenceTransformer
 
-    model = SentenceTransformer("kuelumbus/polyBERT")
+    model = SentenceTransformer("xushijie/polyBERT")
 
     # 1) Canonicalize (keep a mapping from original -> canonical)
     orig_to_canon: dict[str, str] = {}
@@ -420,12 +420,15 @@ def calculate_PMX_df_dict(
     unique_psmiles: list[str], data: pd.DataFrame, psmiles_cols: list[str], pmx_descriptors: dict
 ):
 
+    # Each part is optional: an absent key means "compute nothing for that
+    # part" rather than raising a KeyError, so a config can request, e.g.,
+    # only side-chain + backbone descriptors and omit "polymer" entirely.
     pmx_dict, cols = get_PMX_descriptors(
         unique_psmiles=unique_psmiles,
-        side_chain_desc_list=pmx_descriptors["side_chain"],
-        backbone_desclist=pmx_descriptors["backbone"],
-        agg_method=pmx_descriptors["agg"],
-        polymer_desc_list=pmx_descriptors["polymer"],
+        side_chain_desc_list=pmx_descriptors.get("side_chain", []),
+        backbone_desclist=pmx_descriptors.get("backbone", []),
+        agg_method=pmx_descriptors.get("agg", []),
+        polymer_desc_list=pmx_descriptors.get("polymer", []),
     )
 
     pmx_df = pd.DataFrame.from_dict(pmx_dict, orient="index", columns=cols)

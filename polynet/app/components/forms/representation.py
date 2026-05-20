@@ -76,6 +76,8 @@ def select_polymer_descriptors(
 
     st.markdown("### Add polymer variables as descriptors")
 
+    polymer_descriptors = None
+
     smiles_cols = data_options.smiles_cols
     target_col = data_options.target_variable_col
     id_col = data_options.id_col
@@ -174,8 +176,8 @@ def molecular_descriptor_representation(
             "Calculate polyBERT fingerprint",
             value=False,
             key=DescriptorCalculationStateKeys.polyBERTfp,
-            disabled=True,
-            help="polyBERT disabled as it was retired from Hugging Face",
+            disabled=disabled,
+            help=message,
         )
 
         if st.checkbox(

@@ -37,7 +37,9 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 
 - **Six GNN architectures** — GCN, GAT, CGGNN, MPNN, GraphSAGE, TransformerGNN — each with regression and classification variants
 - **Traditional ML** — Random Forest, XGBoost, SVM, Logistic Regression, Linear Regression
-- **Multi-monomer polymers** — handles copolymers with arbitrary numbers of monomers and weight fractions
+- **Multi-monomer polymers** — handles copolymers with up to two monomers and weight fractions; ratio-0 monomers are excluded from the graph entirely so homopolymers written as `(monomer, 100/0)` are invariant to the second SMILES column
+- **Per-monomer pooling** — `PerMonomerPooling` weighting mode pools each monomer's nodes separately and combines them as `Σ wᵢ·pool(monomerᵢ)`, removing the atom-count bias that arises when weighting before pooling on mixed-size copolymers (wD-MPNN-style weighted-mean pooling is also supported)
+- **PSMILES attachment-point handling** — opt-in `IsAttachmentPoint` atom feature strips `*` (wildcard) atoms from the graph and flags the atoms that were attached to them, replacing dangling pseudo-element nodes with an explicit boolean marker
 - **Cross-monomer attention** — optional attention mechanism that models interactions between monomer subgraphs
 - **PolyMetriX descriptors** — polymer-aware chemical descriptors (molecular weight, ring counts, TPSA, etc.) computed on the full repeat unit, side chain, or backbone, with configurable aggregation; three modes — `side_chain`, `backbone`, and `polymer` — can be used in any combination
 - **Automatic HPO** — Ray Tune with ASHA early stopping when no hyperparameters are provided
@@ -581,9 +583,13 @@ representations:
     Morgan: []                     # Morgan fingerprints
     PolyBERT: []                   # PolyBERT fingerprints (requires psmiles)
     PolyMetriX:                    # PolyMetriX polymer-aware descriptors (requires polymetrix)
-      polymer: []                  # Chemical features on the full repeat unit (no aggregation)
-      side_chain: []               # Chemical features on side chains (with aggregation)
-      backbone: []                 # Chemical features on the backbone
+      # Each of side_chain / backbone / polymer accepts either a list of
+      # descriptor names OR the sentinel "all" to request every available
+      # descriptor for that part. Any of the three keys may be omitted entirely
+      # (the config requires only that *one* of them is provided).
+      side_chain: "all"            # All chemical features + sidechain-topological features
+      backbone:  ["num_rings", "num_atoms", "molecular_weight"]
+      # polymer key omitted entirely — no full-repeat-unit descriptors computed
       agg: [sum, mean]             # Aggregation methods for side-chain features
   smiles_merge_approach: "weighted_average"   # weighted_average | concatenate | no_merging
   polymer_descriptors:             # Optional: column names from your CSV to use as given features
@@ -717,7 +723,7 @@ All three modes accept the same set of **chemical features**. The `side_chain` m
 
 ### Configuration
 
-The three modes can be used in any combination. Only keys that are present and non-empty are computed:
+The three modes can be used in any combination. Any key may be **omitted entirely** — only keys that are present and non-empty are computed. The only requirement, enforced at config-load time, is that at least one of `side_chain`, `backbone` or `polymer` provides a descriptor (the `agg` key alone does not count). Each of the three descriptor lists also accepts the sentinel **`"all"`** (as a bare string or a one-element list, case-insensitive) as a shortcut for "every available descriptor for this part" — chemical features for `polymer`, chemical + the part-specific topological features for `side_chain` and `backbone`.
 
 ```yaml
 representations:
@@ -742,6 +748,17 @@ representations:
       backbone:
         - num_atoms
         - topological_surface_area
+```
+
+A minimal configuration that uses `"all"` and omits `polymer` entirely:
+
+```yaml
+representations:
+  molecular_descriptors:
+    PolyMetriX:
+      side_chain: "all"           # every chemical + sidechain-topological descriptor
+      backbone:   "all"           # every chemical + backbone-topological descriptor
+      agg: [sum, mean, min, max]
 ```
 
 ### Python API
@@ -780,6 +797,7 @@ labels   = featurizer.feature_labels()
 - All three modes are combined into a single `MultipleFeaturizer` and featurized in one pass per polymer — no redundant SMILES parsing.
 - Feature column ordering in the output is: side-chain features → backbone features → topological features → polymer (full repeat unit) features.
 - Omitting a key (or leaving it as an empty list) is safe — that mode is simply skipped with no error.
+- The config-schema validator requires that **at least one** of `side_chain`, `backbone` or `polymer` actually provides a descriptor (`"all"` or a non-empty list). A `PolyMetriX` block that only sets `agg` is rejected at load time.
 - The `polymer` mode raises a `ValueError` at featurizer construction time if any topological feature is passed, giving a clear message before any computation begins.
 
 ---
@@ -845,7 +863,8 @@ training:
 | Parameter | Default | Description |
 |---|---|---|
 | `cross_att` | `false` | Enable cross-monomer attention |
-| `apply_weighting_to_graph` | `"BeforePooling"` | `BeforePooling` or `BeforeMPP` |
+| `apply_weighting_to_graph` | `"PerMonomerPooling"` | One of: `PerMonomerPooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `BeforePooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), or `BeforeMPP` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs) |
+| `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Automatically explored by HPO over `[null, 0.25, 0.5, 0.75, 1.0]` for classification tasks. Ignored for regression. |
 
 ### `tml_models`
 

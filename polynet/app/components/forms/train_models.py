@@ -565,8 +565,12 @@ def GNN_shared_params_form(
         if representation_opts.weights_col:
             apply_weighting = st.selectbox(
                 "Select when you would like to apply the weighting to the graph",
-                options=[ApplyWeightingToGraph.BeforeMPP, ApplyWeightingToGraph.BeforePooling],
-                index=1,
+                options=[
+                    ApplyWeightingToGraph.BeforeMPP,
+                    ApplyWeightingToGraph.BeforePooling,
+                    ApplyWeightingToGraph.PerMonomerPooling,
+                ],
+                index=2,
                 key=TrainGNNStateKeys.GNNMonomerWeighting + network.value if network else "",
             )
         else:

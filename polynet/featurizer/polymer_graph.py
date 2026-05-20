@@ -185,7 +185,19 @@ class CustomPolymerGraph(PolymerGraphDataset):
                 continue
 
             monomers.append(smiles)
-            node_feats = self._atom_features(mol)
+
+            # Opt-in: when ``IsAttachmentPoint`` is among the configured node
+            # features, drop all wildcard ('*', atomic-num 0) atoms from the
+            # molecule and instead flag their non-wildcard neighbours. Both
+            # the stripping and the flagging are gated on the same switch so
+            # they cannot get out of sync. When the feature is absent the
+            # mol passes through unchanged (no behaviour change for existing
+            # experiments).
+            attachment_idxs: set[int] | None = None
+            if AtomFeature.IsAttachmentPoint in self.node_feats:
+                mol, attachment_idxs = self._strip_wildcards(mol)
+
+            node_feats = self._atom_features(mol, attachment_idxs=attachment_idxs)
             edge_index, edge_feats = self._bond_features(mol)
             n_existing_nodes = (
                 accumulated_node_feats.shape[0] if accumulated_node_feats is not None else 0
@@ -254,7 +266,46 @@ class CustomPolymerGraph(PolymerGraphDataset):
     # Atom feature extraction
     # ------------------------------------------------------------------
 
-    def _atom_features(self, mol) -> torch.Tensor:
+    @staticmethod
+    def _strip_wildcards(mol):
+        """
+        Remove wildcard atoms (atomic number 0, the ``*`` placeholders in
+        PSMILES) from a molecule and return the stripped mol together with
+        the set of *post-strip* atom indices that were directly bonded to a
+        removed wildcard — i.e. the attachment points.
+
+        Returns
+        -------
+        tuple[rdkit.Chem.Mol, set[int]]
+            ``(stripped_mol, attachment_idxs_in_stripped_mol)``. When the
+            input has no wildcard atoms the mol is returned unchanged and
+            the set is empty (so non-PSMILES inputs degrade to an all-zero
+            attachment-point column).
+        """
+        dummy_orig = {a.GetIdx() for a in mol.GetAtoms() if a.GetAtomicNum() == 0}
+        if not dummy_orig:
+            return mol, set()
+
+        attachment_orig = {
+            a.GetIdx()
+            for a in mol.GetAtoms()
+            if a.GetAtomicNum() != 0 and any(n.GetAtomicNum() == 0 for n in a.GetNeighbors())
+        }
+
+        # Removing atoms in descending index order keeps earlier indices stable
+        # so we can rebuild a deterministic original -> stripped index map.
+        rw = Chem.RWMol(mol)
+        for idx in sorted(dummy_orig, reverse=True):
+            rw.RemoveAtom(idx)
+        stripped = rw.GetMol()
+
+        kept_in_order = [i for i in range(mol.GetNumAtoms()) if i not in dummy_orig]
+        orig_to_new = {orig: new for new, orig in enumerate(kept_in_order)}
+        attachment_new = {orig_to_new[i] for i in attachment_orig}
+
+        return stripped, attachment_new
+
+    def _atom_features(self, mol, attachment_idxs: set[int] | None = None) -> torch.Tensor:
         """
         Extract node feature vectors for all atoms in a molecule.
 
@@ -335,6 +386,9 @@ class CustomPolymerGraph(PolymerGraphDataset):
                 ),
                 AtomFeature.GetMass: lambda a: [a.GetMass() / 100.0],
                 AtomFeature.IsInRing: lambda a: [int(a.IsInRing())],
+                AtomFeature.IsAttachmentPoint: lambda a: [
+                    int(attachment_idxs is not None and a.GetIdx() in attachment_idxs)
+                ],
             }
 
             for feature, extractor in feature_extractors.items():
