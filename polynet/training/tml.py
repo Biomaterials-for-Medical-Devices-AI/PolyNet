@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
@@ -313,7 +313,14 @@ def _run_grid_search(
 
     logger.info(f"Running GridSearchCV for {model_id.value} (seed={random_seed})...")
 
-    grid_search = GridSearchCV(estimator=model, param_grid=param_grid, cv=cv, n_jobs=-1)
+    grid_search = RandomizedSearchCV(
+        estimator=model,
+        param_distributions=param_grid,
+        n_iter=30,
+        cv=cv,
+        random_state=random_seed,
+        n_jobs=-1,
+    )
     grid_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
     logger.info(f"Best params for {model_id.value}: {grid_search.best_params_}")
