@@ -216,12 +216,17 @@ def _compute_shap_values_for_row(
     x_2d = x_row.reshape(1, -1)
     values = explainer.shap_values(x_2d)
 
+    # Track whether the per-class slice has already been chosen, so the 2-D
+    # branch below doesn't re-apply class handling to an already-selected array.
+    class_already_selected = False
+
     # List of arrays: older SHAP TreeExplainer for binary/multiclass classification.
-    # Each element has shape (1, n_features).
+    # Each element has shape (1, n_features) and already corresponds to one class.
     if isinstance(values, list):
         idx = target_class if target_class is not None else 1
         idx = min(idx, len(values) - 1)
         values = values[idx]
+        class_already_selected = True
 
     arr = np.asarray(values, dtype=float)
 
@@ -231,7 +236,24 @@ def _compute_shap_values_for_row(
         class_idx = min(class_idx, arr.shape[2] - 1)
         arr = arr[0, :, class_idx]  # → (n_features,)
     elif arr.ndim == 2:
-        arr = arr[0]  # (1, n_features) → (n_features,)
+        # (1, n_features) — regression, or binary classification where SHAP
+        # returns a single set of contributions for the POSITIVE class (class 1).
+        # LinearExplainer (LogisticRegression) and binary TreeExplainer (XGBoost)
+        # both do this. For binary classification the negative class (class 0) is
+        # the exact mirror of the positive class, so negate when class 0 is
+        # requested — this keeps the 2-D path consistent with the 3-D and list
+        # paths (which return class0 = -class1) instead of silently ignoring
+        # ``target_class``. Skip this when the class was already selected from a
+        # list output, and never negate regression (target_class is None).
+        row = arr[0]  # (1, n_features) → (n_features,)
+        if (
+            not class_already_selected
+            and problem_type != ProblemType.Regression
+            and target_class is not None
+            and int(target_class) == 0
+        ):
+            row = -row
+        arr = row
 
     return arr.ravel()  # guarantee 1-D
 
