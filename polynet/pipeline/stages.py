@@ -788,7 +788,31 @@ def predict_external(
                 scaler_name = model_name.rsplit("-", 1)[-1]
                 scaler = scalers[scaler_name]
                 desc_arr = scaler.transform(desc_df)
-                desc_df = pd.DataFrame(desc_arr, columns=scaler.get_feature_names_out())
+                desc_df = pd.DataFrame(
+                    desc_arr, columns=scaler.get_feature_names_out(), index=desc_df.index
+                )
+
+            # Some descriptors are computable for the training molecules but
+            # undefined for new ones — e.g. the Gasteiger-charge-based RDKit
+            # descriptors (MaxPartialCharge, BCUT2D_*) return NaN for atoms
+            # RDKit cannot parameterise, which is common for PSMILES dummy
+            # atoms and unusual elements. sklearn models such as
+            # LogisticRegression/SVM reject NaN. Impute with the training mean
+            # (== 0 in StandardScaler-scaled space) so prediction can proceed,
+            # and warn so the user can decide whether to drop those descriptors.
+            if desc_df.isna().to_numpy().any():
+                nan_cols = desc_df.columns[desc_df.isna().any()].tolist()
+                logger.warning(
+                    "Descriptor set '%s': %d feature column(s) contain NaN for the "
+                    "prediction data and were imputed with the training mean "
+                    "(0 in scaled space) so prediction could proceed. Columns: %s. "
+                    "Consider removing these descriptors from molecular_descriptors "
+                    "if they are frequently undefined for your molecules.",
+                    df_name,
+                    len(nan_cols),
+                    nan_cols[:12],
+                )
+                desc_df = desc_df.fillna(0.0)
 
             preds = model.predict(desc_df)
 

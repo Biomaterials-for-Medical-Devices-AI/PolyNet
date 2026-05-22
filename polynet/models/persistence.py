@@ -162,6 +162,18 @@ def _resolve_features(
 
     if not features:
         return None
+
+    # The "all" sentinel (e.g. ``rdkit: "all"``) means the featurizer chooses
+    # the columns — every available descriptor — so the config does not
+    # enumerate them. Validate against whatever was saved in the CSV instead of
+    # treating the string as an iterable of characters (``list("all")`` would
+    # give ``['a', 'l', 'l']``). A bare non-"all" string is treated as a single
+    # column name for the same reason.
+    if isinstance(features, str):
+        if features.strip().lower() == "all":
+            return [c for c in sanitised_cols if c != target_col]
+        return [features]
+
     return list(features)
 
 
