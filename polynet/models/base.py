@@ -278,6 +278,15 @@ class BaseNetwork(nn.Module):
         max pooling are unaffected — only the mean component (in
         ``GlobalMeanPool`` and ``GlobalMeanMaxPool``) is replaced.
         """
+        # PyG convention: ``batch_index=None`` means "a single graph". The
+        # explainability path (masking / embeddings) explains one molecule at
+        # a time and passes None. PyG's own pooling functions accept None, but
+        # ``_pool_per_monomer`` does arithmetic on ``batch_index``, so
+        # materialise it to an all-zeros vector here to keep every branch
+        # None-safe.
+        if batch_index is None:
+            batch_index = x.new_zeros(x.size(0), dtype=torch.long)
+
         if self.apply_weighting_to_graph == ApplyWeightingToGraph.PerMonomerPooling:
             if monomer_weight is None or monomer_id is None:
                 return self.pooling_fn(x, batch_index)
