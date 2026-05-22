@@ -350,7 +350,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
                     self.node_feats[AtomFeature.GetTotalDegree][AtomBondDescriptorDictKey.Wildcard],
                 ),
                 AtomFeature.GetImplicitValence: lambda a: self._one_hot_encode(
-                    a.GetImplicitValence(),
+                    a.GetValence(Chem.rdchem.ValenceType.IMPLICIT),
                     self.node_feats[AtomFeature.GetImplicitValence][
                         AtomBondDescriptorDictKey.AllowableVals
                     ],
