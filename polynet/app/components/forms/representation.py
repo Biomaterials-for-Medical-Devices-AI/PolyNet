@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
 from rdkit.Chem import Descriptors
@@ -23,6 +23,11 @@ from polynet.featurizer.pmx import (
     SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
+from polynet.utils.graph_analysis import (
+    get_atom_prop_defaults,
+    get_bar_data,
+    get_bond_prop_defaults,
+)
 
 
 def select_weight_factor(
@@ -318,7 +323,9 @@ def molecular_descriptor_representation(
 
 
 def graph_representation(
-    data_opts: DataConfig, df: pd.DataFrame
+    data_opts: DataConfig,
+    df: pd.DataFrame,
+    feature_analysis: Optional[Dict] = None,
 ) -> tuple[Dict[AtomFeature, List[str]], Dict[BondFeature, List[str]]]:
 
     atomic_properties = sorted(atom_properties.keys())
@@ -382,8 +389,21 @@ def graph_representation(
 
                 for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                    prop_counts = count_atom_property_frequency(df, smiles_col, prop)
-                    prop_defaults.update(prop_counts.keys())
+                    if feature_analysis is not None:
+                        # Fast path: use pre-computed analysis saved at experiment creation.
+                        prop_defaults.update(
+                            get_atom_prop_defaults(feature_analysis, prop, smiles_col)
+                        )
+                        df_plot = get_bar_data(feature_analysis, "atom", prop, smiles_col)
+                    else:
+                        # Fallback: compute on the fly (experiments created before this feature).
+                        prop_counts = count_atom_property_frequency(df, smiles_col, prop)
+                        prop_defaults.update(prop_counts.keys())
+                        df_plot = pd.DataFrame.from_dict(
+                            prop_counts, orient="index", columns=["Frequency"]
+                        )
+                        df_plot.index.name = str(prop)
+                        df_plot = df_plot.sort_index()
 
                     residue = int(i % 2)
 
@@ -391,12 +411,8 @@ def graph_representation(
 
                         if show:
                             st.write(f"### Column `{smiles_col}`")
-                            df_plot = pd.DataFrame.from_dict(
-                                prop_counts, orient="index", columns=["Frequency"]
-                            )
-                            df_plot.index.name = str(prop)
-                            df_plot = df_plot.sort_index()
-                            st.bar_chart(df_plot, color="#ff3c00")
+                            if df_plot is not None:
+                                st.bar_chart(df_plot, color="#ff3c00")
 
                 node_feats_config[prop] = {}
                 if atom_properties[prop]:
@@ -482,8 +498,21 @@ def graph_representation(
 
                 for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                    prop_counts = count_bond_property_frequency(df, smiles_col, prop)
-                    prop_defaults.update(prop_counts.keys())
+                    if feature_analysis is not None:
+                        # Fast path: use pre-computed analysis saved at experiment creation.
+                        prop_defaults.update(
+                            get_bond_prop_defaults(feature_analysis, prop, smiles_col)
+                        )
+                        df_plot = get_bar_data(feature_analysis, "bond", prop, smiles_col)
+                    else:
+                        # Fallback: compute on the fly (experiments created before this feature).
+                        prop_counts = count_bond_property_frequency(df, smiles_col, prop)
+                        prop_defaults.update(prop_counts.keys())
+                        df_plot = pd.DataFrame.from_dict(
+                            prop_counts, orient="index", columns=["Frequency"]
+                        )
+                        df_plot.index.name = str(prop)
+                        df_plot = df_plot.sort_index()
 
                     residue = int(i % 2)
 
@@ -491,12 +520,8 @@ def graph_representation(
 
                         if show:
                             st.write(f"### Column `{smiles_col}`")
-                            df_plot = pd.DataFrame.from_dict(
-                                prop_counts, orient="index", columns=["Frequency"]
-                            )
-                            df_plot.index.name = str(prop)
-                            df_plot = df_plot.sort_index()
-                            st.bar_chart(df_plot, color="#ff3c00")
+                            if df_plot is not None:
+                                st.bar_chart(df_plot, color="#ff3c00")
 
                 edge_feats_config[prop] = {}
                 if bond_features[prop]:

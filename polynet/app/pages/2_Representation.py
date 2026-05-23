@@ -13,6 +13,7 @@ from polynet.app.components.forms.representation import (
 )
 from polynet.app.options.file_paths import (
     data_options_path,
+    graph_feature_analysis_path,
     polynet_experiment_path,
     polynet_experiments_base_dir,
     representation_options_path,
@@ -26,6 +27,7 @@ from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.pipeline import build_graph_dataset, compute_descriptors
+from polynet.utils.graph_analysis import load_graph_feature_analysis
 
 
 def parse_representation_options(
@@ -145,6 +147,13 @@ if experiment_name:
 
     st.write(data.describe())
 
+    # Load the pre-computed atom/bond frequency analysis written at experiment
+    # creation time.  Falls back to None for older experiments — graph_representation
+    # will compute on the fly in that case.
+    feature_analysis = load_graph_feature_analysis(
+        graph_feature_analysis_path(experiment_path=experiment_path)
+    )
+
     molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
     descriptors_weighted = (
         st.session_state.get(
@@ -154,7 +163,9 @@ if experiment_name:
         == DescriptorMergingMethod.WeightedAverage
     )
 
-    atomic_properties, bond_properties = graph_representation(data_opts=data_opts, df=data)
+    atomic_properties, bond_properties = graph_representation(
+        data_opts=data_opts, df=data, feature_analysis=feature_analysis
+    )
     graphs_weighted = st.session_state.get(
         DescriptorCalculationStateKeys.GraphWeightingFactor, False
     )
