@@ -35,12 +35,26 @@ from polynet.featurizer import compute_rdkit_descriptors
 def explain_mols_widget(
     data: pd.DataFrame, SetStateKey: str, ManuallySelectStateKey: str, MolsStateKey: str
 ) -> list:
-    """Pills + optional manual multiselect for choosing a molecule set."""
+    """Pills + optional manual multiselect for choosing a molecule set.
+
+    When the predictions table has no ``SET`` column (external/unseen datasets
+    have no train/val/test split), the split pills are replaced by a single
+    "External" option covering all rows; manual refinement still works.
+    """
+    has_set_column = ResultColumn.SET in data.columns
+
+    if has_set_column:
+        options = [DataSet.Training, DataSet.Validation, DataSet.Test, "All"]
+        default = ["All"]
+    else:
+        options = ["External"]
+        default = ["External"]
+
     mols_to_explain = st.pills(
         "Select a set to explain",
-        options=[DataSet.Training, DataSet.Validation, DataSet.Test, "All"],
+        options=options,
         key=SetStateKey,
-        default=["All"],
+        default=default,
     )
 
     if mols_to_explain == DataSet.Training:
@@ -49,7 +63,7 @@ def explain_mols_widget(
         explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Validation].index
     elif mols_to_explain == DataSet.Test:
         explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Test].index
-    elif mols_to_explain == "All":
+    elif mols_to_explain in ("All", "External"):
         explain_mols = data.index
     else:
         explain_mols = None
@@ -276,7 +290,12 @@ def _shared_params_section(
     # Deduplicate by index: when multiple models are selected, each mol_id
     # appears once per iteration; molecule selectors and label display need
     # exactly one row per molecule.
-    _preds_iter = preds.loc[preds[iterator_col].isin(iterations)]
+    # External/unseen predictions are wide (one row per molecule, no iterator
+    # column), so skip the iteration filter when the column is absent.
+    if iterator_col in preds.columns:
+        _preds_iter = preds.loc[preds[iterator_col].isin(iterations)]
+    else:
+        _preds_iter = preds
     preds_filtered = _preds_iter[~_preds_iter.index.duplicated(keep="first")]
 
     predicted_col_name = get_predicted_label_column_name(
@@ -382,8 +401,8 @@ def _global_tab_section(
     shared: dict,
     experiment_path: Path,
     dataset: Dataset,
-    data: pd.DataFrame,
     data_options: DataConfig,
+    cache_root: Path | None = None,
 ) -> None:
     st.markdown(
         "**Which molecular fragments drive predictions across the population?**  \n"
@@ -439,6 +458,7 @@ def _global_tab_section(
             target_class=shared["target_class"],
             top_n=int(top_n),
             plot_type=plot_type,
+            cache_root=cache_root,
         )
 
 
@@ -451,8 +471,8 @@ def _local_tab_section(
     shared: dict,
     experiment_path: Path,
     dataset: Dataset,
-    data: pd.DataFrame,
     data_options: DataConfig,
+    cache_root: Path | None = None,
 ) -> None:
     st.markdown(
         "**How does a specific polymer's structure influence its prediction?**  \n"
@@ -522,6 +542,7 @@ def _local_tab_section(
             mol_names=mol_names,
             predictions=preds_dict,
             class_labels=data_options.class_names,
+            cache_root=cache_root,
         )
 
 
@@ -536,9 +557,9 @@ def explain_predictions_form(
     gnn_models_dir: Path,
     iterator_col: str,
     data_options: DataConfig,
-    data: pd.DataFrame,
     preds: pd.DataFrame,
     dataset: Dataset,
+    cache_root: Path | None = None,
 ) -> None:
     if not st.checkbox(
         "Explain model predictions", value=True, key=ExplainModelStateKeys.ExplainModels
@@ -564,8 +585,8 @@ def explain_predictions_form(
             shared=shared,
             experiment_path=experiment_path,
             dataset=dataset,
-            data=data,
             data_options=data_options,
+            cache_root=cache_root,
         )
 
     with tab_local:
@@ -573,6 +594,6 @@ def explain_predictions_form(
             shared=shared,
             experiment_path=experiment_path,
             dataset=dataset,
-            data=data,
             data_options=data_options,
+            cache_root=cache_root,
         )
