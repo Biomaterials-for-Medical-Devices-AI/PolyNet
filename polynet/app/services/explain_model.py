@@ -112,6 +112,7 @@ def explain_model_global(
     target_class: int | None = None,
     top_n: int | None = None,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    cache_root: Path | None = None,
 ) -> None:
     """Compute and render the population-level fragment attribution plot."""
     result: GlobalAttributionResult = compute_global_attribution(
@@ -127,6 +128,7 @@ def explain_model_global(
         target_class=target_class,
         top_n=top_n,
         plot_type=plot_type,
+        cache_root=cache_root,
     )
 
     st.info(
@@ -163,6 +165,7 @@ def explain_model_local(
     mol_names: dict | None = None,
     predictions: dict | None = None,
     class_labels: dict | None = None,
+    cache_root: Path | None = None,
 ) -> None:
     """Compute and render per-molecule attribution panels (table + atom heatmap)."""
     mol_results: list[MolAttributionResult] = compute_local_attribution(
@@ -179,6 +182,7 @@ def explain_model_local(
         mol_names=mol_names,
         predictions=predictions,
         class_labels=class_labels,
+        cache_root=cache_root,
     )
 
     for result in mol_results:
