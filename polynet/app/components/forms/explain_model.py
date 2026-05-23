@@ -51,10 +51,7 @@ def explain_mols_widget(
         default = ["External"]
 
     mols_to_explain = st.pills(
-        "Select a set to explain",
-        options=options,
-        key=SetStateKey,
-        default=default,
+        "Select a set to explain", options=options, key=SetStateKey, default=default
     )
 
     if mols_to_explain == DataSet.Training:

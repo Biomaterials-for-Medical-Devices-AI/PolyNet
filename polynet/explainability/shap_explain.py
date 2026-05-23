@@ -490,9 +490,7 @@ def shap_cache_to_distribution(
         desc_str_df = descriptor_df.copy()
         desc_str_df.index = desc_index_str
 
-        desc_feature_cols = set(
-                desc_str_df.drop(columns=[target_col], errors="ignore").columns
-            )
+        desc_feature_cols = set(desc_str_df.drop(columns=[target_col], errors="ignore").columns)
 
     else:
         desc_str_df = None

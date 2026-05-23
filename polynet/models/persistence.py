@@ -81,7 +81,10 @@ def load_gnn_model(path):
 
 
 def load_dataframes(
-    representation_options: RepresentationConfig, data_options: DataConfig, experiment_path: Path, external: bool = False,
+    representation_options: RepresentationConfig,
+    data_options: DataConfig,
+    experiment_path: Path,
+    external: bool = False,
 ) -> dict[MolecularDescriptor, pd.DataFrame]:
     """Load and validate the per-descriptor CSVs saved by the featuriser.
 
