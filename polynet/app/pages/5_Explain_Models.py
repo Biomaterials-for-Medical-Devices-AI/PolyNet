@@ -12,9 +12,7 @@ from polynet.app.components.plots import display_model_results, display_unseen_p
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
-    gnn_raw_data_file,
     gnn_raw_data_path,
-    ml_results_file_path,
     model_dir,
     polynet_experiments_base_dir,
     representation_file_path,
@@ -24,6 +22,11 @@ from polynet.app.options.file_paths import (
 )
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
+from polynet.app.services.explain_source import (
+    external_raw_csv,
+    list_external_datasets,
+    resolve_explain_source,
+)
 from polynet.app.services.model_training import load_dataframes
 from polynet.config.column_names import get_iterator_name
 from polynet.config.schemas import DataConfig, GeneralConfig, RepresentationConfig, SplitConfig
@@ -93,38 +96,64 @@ if experiment_name:
     display_model_results(experiment_path=experiment_path, expanded=False)
     display_unseen_predictions(experiment_path=experiment_path)
 
-    # load the graph dataset to run the explanations
-    dataset = CustomPolymerGraph(
-        filename=data_options.data_name,
-        root=gnn_raw_data_path(experiment_path=experiment_path).parent,
-        smiles_cols=data_options.smiles_cols,
-        target_col=data_options.target_variable_col,
-        id_col=data_options.id_col,
-        weights_col=representation_options.weights_col,
-        node_feats=representation_options.node_features,
-        edge_feats=representation_options.edge_features,
-        polymer_descriptors=representation_options.polymer_descriptors,
+    # ------------------------------------------------------------------
+    # Data source: the experiment's own data, or an external (unseen) dataset
+    # ------------------------------------------------------------------
+    external_datasets = list_external_datasets(experiment_path)
+    source_choice = st.radio(
+        "Explain on",
+        options=["Experiment data", "External dataset"],
+        horizontal=True,
+        help=(
+            "Explain the experiment's own train/val/test data, or a dataset you "
+            "previously ran predictions on via the Predict page."
+        ),
     )
 
-    # load the original data
-    data = pd.read_csv(
-        gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
-        index_col=0,
-    )
+    external_name = None
+    if source_choice == "External dataset":
+        if not external_datasets:
+            st.info(
+                "No external prediction datasets found for this experiment. "
+                "Generate predictions on the Predict page first."
+            )
+            st.stop()
+        external_name = st.selectbox("Select external dataset", options=external_datasets)
 
-    # load the predictions of the model
-    preds = pd.read_csv(ml_results_file_path(experiment_path=experiment_path), index_col=0)
+    # Resolve where to read data/predictions from and where to write explanations.
+    # Models always come from the experiment — only the data source changes.
+    source = resolve_explain_source(experiment_path, external_name)
 
-    # get the name of the iterator used for training
+    # Raw dataset filename (shared by the data CSV and the GNN raw CSV).
+    raw_csv = external_raw_csv(source.data_root) if source.is_external else None
+    data_name = raw_csv.name if raw_csv else data_options.data_name
+
+    # Graph dataset for GNN explanations (only when a graph representation exists).
+    dataset = None
+    if path_to_train_gnn_options.exists() and source.has_gnn:
+        dataset = CustomPolymerGraph(
+            filename=data_name,
+            root=gnn_raw_data_path(experiment_path=source.data_root).parent,
+            smiles_cols=data_options.smiles_cols,
+            target_col=data_options.target_variable_col,
+            id_col=data_options.id_col,
+            weights_col=representation_options.weights_col,
+            node_feats=representation_options.node_features,
+            edge_feats=representation_options.edge_features,
+            polymer_descriptors=representation_options.polymer_descriptors,
+        )
+
+    # Predictions for the resolved source (index = sample id).
+    preds = pd.read_csv(source.preds_csv, index_col=0)
+
     iterator_col = get_iterator_name(split_options.split_type)
 
-    # get the list of trained GNN models
     gnn_models_dir = model_dir(experiment_path=experiment_path)
-    gnn_models = [
-        model.name
-        for model in gnn_models_dir.iterdir()
-        if model.is_file() and model.suffix == ".pt"
-    ]
+    gnn_models = (
+        [m.name for m in gnn_models_dir.iterdir() if m.is_file() and m.suffix == ".pt"]
+        if gnn_models_dir.exists()
+        else []
+    )
 
     # st.subheader("Graph Embeddings Projection Plot")
 
@@ -174,8 +203,10 @@ if experiment_name:
     st.subheader("Explain TML Model Predictions")
 
     if path_to_train_tml_options.exists():
-        descriptor_dir = representation_file_path(experiment_path=experiment_path)
-        tml_models_dir = model_dir(experiment_path=experiment_path)
+        # Descriptors come from the resolved source (experiment or external);
+        # models/transformers always come from the experiment.
+        descriptor_dir = representation_file_path(experiment_path=source.data_root)
+        tml_models_dir = model_dir(experiment_path=source.model_path)
 
         tml_model_files = (
             [f for f in tml_models_dir.iterdir() if f.is_file() and f.suffix == ".joblib"]
@@ -195,9 +226,9 @@ if experiment_name:
                 "Train TML models first to enable SHAP explanations."
             )
         elif not descriptor_csvs:
-            st.info(
-                "No descriptor CSVs found for this experiment. "
-                "Compute molecular descriptors first to enable TML SHAP explanations."
+            st.warning(
+                "No descriptor representations found for the selected data source — "
+                "TML SHAP explanations are unavailable here."
             )
         else:
 
@@ -212,16 +243,18 @@ if experiment_name:
             descriptor_dfs = load_dataframes(
                 representation_options=representation_options,
                 data_options=data_options,
-                experiment_path=experiment_path,
+                experiment_path=source.data_root,
+                external=source.is_external,
             )
 
             if tml_trained and descriptor_dfs:
                 explain_tml_form(
-                    experiment_path=experiment_path,
+                    experiment_path=source.model_path,
                     tml_models=tml_trained,
                     descriptor_dfs=descriptor_dfs,
                     data_options=data_options,
                     preds=preds,
+                    cache_root=source.cache_root,
                 )
     else:
         st.error(
@@ -230,18 +263,23 @@ if experiment_name:
 
     st.subheader("Explain GNN Model Predictions")
 
-    if path_to_train_gnn_options.exists():
+    if not path_to_train_gnn_options.exists():
+        st.error(
+            "No GNN training options were found. Please first run model training before running GNN explanations."
+        )
+    elif not source.has_gnn or dataset is None:
+        st.warning(
+            "No GNN graph representation was found for the selected data source. "
+            "GNN explanations are unavailable here."
+        )
+    else:
         explain_predictions_form(
-            experiment_path=experiment_path,
+            experiment_path=source.model_path,
             gnn_models=gnn_models,
             gnn_models_dir=gnn_models_dir,
             iterator_col=iterator_col,
             data_options=data_options,
-            data=data,
             preds=preds,
             dataset=dataset,
-        )
-    else:
-        st.error(
-            "No GNN training options were found. Please first run model training before running GNN explanations."
+            cache_root=source.cache_root,
         )

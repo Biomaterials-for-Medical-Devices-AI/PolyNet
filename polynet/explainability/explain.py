@@ -186,6 +186,7 @@ def compute_and_cache_masking(
     problem_type: ProblemType,
     fragmentation_approach=FragmentationMethod.BRICS,
     target_class: int | None = None,
+    cache_root: Path | None = None,
 ) -> dict:
     """
     Load the JSON cache, compute any missing masking attributions, persist,
@@ -217,11 +218,16 @@ def compute_and_cache_masking(
     dict
         Full combined explanation dict (all models, all cached molecules).
     """
-    explain_path = explanation_parent_directory(experiment_path)
+    # Models / feature-transformers always come from ``experiment_path``; the
+    # cache (explanations dir + JSON) is written under ``cache_root``, which for
+    # external datasets is the unseen-dataset folder. Defaults to the experiment.
+    cache_root = cache_root if cache_root is not None else experiment_path
+
+    explain_path = explanation_parent_directory(cache_root)
     if not explain_path.exists():
         explain_path.mkdir(parents=True, exist_ok=True)
 
-    explanation_file = explanation_json_file_path(experiment_path=experiment_path)
+    explanation_file = explanation_json_file_path(experiment_path=cache_root)
     if explanation_file.exists():
         with open(explanation_file) as f:
             existing_explanations = json.load(f)
@@ -352,6 +358,7 @@ def compute_global_attribution(
     target_class: int | None = None,
     top_n: int | None = None,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    cache_root: Path | None = None,
 ) -> GlobalAttributionResult:
     """
     Compute the population-level fragment attribution plot.
@@ -401,6 +408,7 @@ def compute_global_attribution(
         problem_type=problem_type,
         fragmentation_approach=fragmentation_approach,
         target_class=target_class,
+        cache_root=cache_root,
     )
 
     display_data = build_display_data(combined_explanations, models, explain_mols)
@@ -483,6 +491,7 @@ def compute_local_attribution(
     mol_names: dict | None = None,
     predictions: dict | None = None,
     class_labels: dict | None = None,
+    cache_root: Path | None = None,
 ) -> list[MolAttributionResult]:
     """
     Compute per-molecule attribution tables and atom heatmap figures.
@@ -535,6 +544,7 @@ def compute_local_attribution(
         problem_type=problem_type,
         fragmentation_approach=fragmentation_approach,
         target_class=target_class,
+        cache_root=cache_root,
     )
 
     display_data = build_display_data(combined_explanations, models, explain_mols)

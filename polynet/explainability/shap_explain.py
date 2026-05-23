@@ -270,6 +270,8 @@ def compute_and_cache_shap(
     problem_type: ProblemType,
     explain_sample_ids: list[str],
     target_class: int | None = None,
+    cache_root: Path | None = None,
+    target_col: str | None = None,
 ) -> dict[str, pd.DataFrame]:
     """
     Compute SHAP values for each TML model × sample pair and cache results to CSV.
@@ -281,8 +283,9 @@ def compute_and_cache_shap(
         ``train_tml``.  Keys follow ``"{ModelType}-{descriptor}_{iteration}"``.
     descriptor_dfs:
         Dict of ``{MolecularDescriptor | str: pd.DataFrame}`` as returned by
-        ``load_dataframes``.  Each DataFrame has feature columns followed by the
-        target column as the last column.
+        ``load_dataframes``.  For training data, the target column is last; for
+        external (label-free) datasets it is absent.  Pass ``target_col`` so
+        the pipeline drops the right column rather than blindly using ``iloc[:, :-1]``.
     experiment_path:
         Experiment root directory.  Cache CSVs are written to
         ``{experiment_path}/explanations/``.
@@ -300,6 +303,11 @@ def compute_and_cache_shap(
         filtered to the requested models and sample IDs.
     """
     import shap  # defer import so SHAP is optional
+
+    # Models / feature-transformers always load from ``experiment_path``; SHAP
+    # caches are read/written under ``cache_root`` (the unseen-dataset folder for
+    # external datasets). Defaults to the experiment.
+    cache_root = cache_root if cache_root is not None else experiment_path
 
     cls_key = _class_key(problem_type, target_class)
     explain_ids_set = set(str(s) for s in explain_sample_ids)
@@ -324,11 +332,11 @@ def compute_and_cache_shap(
             continue
 
         df = str_dfs[descriptor]
-        X_all_df = df.iloc[:, :-1]  # all features, excluding target
+        X_all_df = df.drop(columns=[target_col], errors="ignore")
         # Index aligned sample lookup
         df_index_str = X_all_df.index.astype(str)
 
-        cache_df = _load_shap_cache(experiment_path, descriptor)
+        cache_df = _load_shap_cache(cache_root, descriptor)
         new_rows: list[dict] = []
 
         for model_log_name in model_keys:
@@ -406,7 +414,7 @@ def compute_and_cache_shap(
         if new_rows:
             new_df = pd.DataFrame(new_rows)
             cache_df = pd.concat([cache_df, new_df], ignore_index=True)
-            _save_shap_cache(cache_df, experiment_path, descriptor)
+            _save_shap_cache(cache_df, cache_root, descriptor)
             logger.info(f"[SHAP] Cached {len(new_rows)} new row(s) for descriptor '{descriptor}'.")
 
         # Return only the subset relevant to requested models + sample IDs
@@ -434,6 +442,7 @@ def shap_cache_to_distribution(
     sample_ids: list[str],
     normalisation_type: ImportanceNormalisationMethod,
     descriptor_df: pd.DataFrame | None = None,
+    target_col: str | None = None,
 ) -> tuple[dict[str, list[float]], dict[str, list[float]] | None]:
     """
     Flatten a SHAP cache DataFrame into ``{feature_name: [scores]}`` for plotting.
@@ -480,8 +489,9 @@ def shap_cache_to_distribution(
         desc_index_str = descriptor_df.index.astype(str)
         desc_str_df = descriptor_df.copy()
         desc_str_df.index = desc_index_str
-        # Only keep feature columns (drop target = last column)
-        desc_feature_cols = set(desc_str_df.columns[:-1])
+
+        desc_feature_cols = set(desc_str_df.drop(columns=[target_col], errors="ignore").columns)
+
     else:
         desc_str_df = None
         desc_feature_cols = set()
@@ -940,6 +950,8 @@ def compute_global_shap_attribution(
     target_class: int | None = None,
     top_n: int | None = 10,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    cache_root: Path | None = None,
+    target_col: str | None = None,
 ) -> dict[str, GlobalAttributionResult]:
     """
     Compute global SHAP feature attribution across the selected population.
@@ -982,6 +994,8 @@ def compute_global_shap_attribution(
         problem_type=problem_type,
         explain_sample_ids=explain_sample_ids,
         target_class=target_class,
+        cache_root=cache_root,
+        target_col=target_col,
     )
 
     # Normalise descriptor_dfs keys to strings for lookup
@@ -1002,6 +1016,7 @@ def compute_global_shap_attribution(
             sample_ids=explain_sample_ids,
             normalisation_type=normalisation_type,
             descriptor_df=str_dfs.get(descriptor),
+            target_col=target_col,
         )
 
         if not attribution_dict:
@@ -1074,6 +1089,8 @@ def compute_local_shap_attribution(
     target_class: int | None = None,
     local_plot_type: str = "waterfall",
     predictions: dict | None = None,
+    cache_root: Path | None = None,
+    target_col: str | None = None,
 ) -> dict[str, list[InstanceAttributionResult]]:
     """
     Compute per-instance SHAP attribution with waterfall / force / bar plots.
@@ -1114,6 +1131,8 @@ def compute_local_shap_attribution(
         problem_type=problem_type,
         explain_sample_ids=explain_sample_ids,
         target_class=target_class,
+        cache_root=cache_root,
+        target_col=target_col,
     )
 
     results: dict[str, list[InstanceAttributionResult]] = {}

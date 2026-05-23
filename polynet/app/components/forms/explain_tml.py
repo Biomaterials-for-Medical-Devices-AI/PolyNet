@@ -148,6 +148,7 @@ def _tml_global_tab(
     experiment_path: Path,
     preds: pd.DataFrame,
     data_options: DataConfig,
+    cache_root: Path | None = None,
 ) -> None:
     st.markdown(
         "**Which molecular features drive predictions across the population?**  \n"
@@ -202,6 +203,8 @@ def _tml_global_tab(
             target_class=shared["target_class"],
             top_n=int(top_n),
             plot_type=plot_type,
+            cache_root=cache_root,
+            target_col=data_options.target_variable_col,
         )
 
 
@@ -217,6 +220,7 @@ def _tml_local_tab(
     experiment_path: Path,
     preds: pd.DataFrame,
     data_options: DataConfig,
+    cache_root: Path | None = None,
 ) -> None:
     st.markdown(
         "**How do features influence a specific sample's prediction?**  \n"
@@ -297,6 +301,8 @@ def _tml_local_tab(
             target_class=shared["target_class"],
             local_plot_type=local_plot_type,
             predictions=preds_dict,
+            cache_root=cache_root,
+            target_col=data_options.target_variable_col,
         )
 
 
@@ -311,6 +317,7 @@ def explain_tml_form(
     descriptor_dfs: dict[str, pd.DataFrame],
     data_options: DataConfig,
     preds: pd.DataFrame,
+    cache_root: Path | None = None,
 ) -> None:
     """
     Render the full TML SHAP explainability form with shared params + two tabs.
@@ -366,6 +373,7 @@ def explain_tml_form(
             experiment_path=experiment_path,
             preds=preds,
             data_options=data_options,
+            cache_root=cache_root,
         )
 
     with local_tab:
@@ -376,4 +384,5 @@ def explain_tml_form(
             experiment_path=experiment_path,
             preds=preds,
             data_options=data_options,
+            cache_root=cache_root,
         )
