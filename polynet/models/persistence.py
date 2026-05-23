@@ -81,7 +81,7 @@ def load_gnn_model(path):
 
 
 def load_dataframes(
-    representation_options: RepresentationConfig, data_options: DataConfig, experiment_path: Path
+    representation_options: RepresentationConfig, data_options: DataConfig, experiment_path: Path, external: bool = False,
 ) -> dict[MolecularDescriptor, pd.DataFrame]:
     """Load and validate the per-descriptor CSVs saved by the featuriser.
 
@@ -92,6 +92,10 @@ def load_dataframes(
     3. Resolves the expected feature columns for that descriptor type.
     4. Validates that all expected features are present.
 
+    For training data (``external=False``) the target column must be the last column.
+    For external (label-free) prediction datasets (``external=True``) the target column
+    is absent — the last-column check is skipped and all columns are treated as features.
+
     Returns
     -------
     dict[MolecularDescriptor, pd.DataFrame]
@@ -100,7 +104,8 @@ def load_dataframes(
     Raises
     ------
     ValueError
-        If expected feature columns are missing, or the target column is not last.
+        If expected feature columns are missing, or (for non-external data) the target
+        column is not last.
     """
     weights_cols = (
         list(representation_options.weights_col.values())
@@ -132,7 +137,7 @@ def load_dataframes(
             raise ValueError(
                 f"[{representation}] Missing expected feature columns: {sorted(missing)}"
             )
-        if list(df.columns)[-1] != target:
+        if list(df.columns)[-1] != target and not external:
             raise ValueError(
                 f"[{representation}] Target column '{target}' must be last. "
                 f"Got: '{list(df.columns)[-1]}'"
