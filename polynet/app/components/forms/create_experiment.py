@@ -15,6 +15,49 @@ from polynet.utils.chem_utils import (
 )
 
 
+@st.cache_data
+def _load_csv(csv_file) -> pd.DataFrame:
+    return pd.read_csv(csv_file)
+
+
+@st.cache_data
+def _load_benchmark_dataset(dataset_name) -> pd.DataFrame:
+    return DatasetCreator(dataset_name).create_dataset()
+
+
+@st.cache_data
+def _validate_smiles_cols(df: pd.DataFrame, smiles_cols: tuple) -> dict:
+    return check_smiles_cols(col_names=list(smiles_cols), df=df)
+
+
+@st.cache_data
+def _determine_string_representation(df: pd.DataFrame, smiles_cols: tuple) -> str:
+    return determine_string_representation(df=df, smiles_cols=list(smiles_cols))
+
+
+@st.cache_data
+def _canonicalise_df(df: pd.DataFrame, smiles_cols: tuple, str_representation: str) -> pd.DataFrame:
+    df = df.copy()
+    for col in smiles_cols:
+        if str_representation == StringRepresentation.SMILES:
+            df[col] = df[col].apply(canonicalise_smiles)
+        elif str_representation == StringRepresentation.PSMILES:
+            df[col] = df[col].apply(canonicalise_psmiles)
+    return df
+
+
+@st.cache_data
+def _plot_label_distribution(df: pd.DataFrame, target_col: str, title: str, class_names: tuple):
+    return show_label_distribution(
+        data=df, target_variable=target_col, title=title, class_names=dict(class_names)
+    )
+
+
+@st.cache_data
+def _plot_continuous_distribution(df: pd.DataFrame, target_col: str, title: str):
+    return show_continuous_distribution(data=df, target_variable=target_col, title=title)
+
+
 def select_data_form():
 
     class_names = {}
@@ -53,7 +96,7 @@ def select_data_form():
         if not csv_file:
             st.warning("Please upload a CSV file to proceed.")
         else:
-            df = pd.read_csv(csv_file)
+            df = _load_csv(csv_file)
 
     elif dataset_source == "Load benchmarking dataset":
 
@@ -63,8 +106,7 @@ def select_data_form():
             key=CreateExperimentStateKeys.DatasetNameLoad,
         )
 
-        dataset = DatasetCreator(dataset_name)
-        df = dataset.create_dataset()
+        df = _load_benchmark_dataset(dataset_name)
 
     if df is not None and experiment_name != "":
         st.markdown("**Preview Data**")
@@ -82,7 +124,7 @@ def select_data_form():
             st.stop()
 
         else:
-            invalid_smiles = check_smiles_cols(col_names=smiles_cols, df=df)
+            invalid_smiles = _validate_smiles_cols(df, tuple(smiles_cols))
             if invalid_smiles:
                 for col, smiles in invalid_smiles.items():
                     st.error(
@@ -94,7 +136,7 @@ def select_data_form():
                 )
                 st.stop()
 
-            str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
+            str_representation = _determine_string_representation(df, tuple(smiles_cols))
             st.write(f"The `{str_representation}` representation has been identified.")
             st.success(f"`{str_representation}` columns checked successfully.")
             st.session_state[CreateExperimentStateKeys.StringRepresentation] = str_representation
@@ -106,12 +148,7 @@ def select_data_form():
             value=True,
             disabled=True,
         ):
-            for col in smiles_cols:
-
-                if str_representation == StringRepresentation.SMILES:
-                    df[col] = df[col].apply(canonicalise_smiles)
-                elif str_representation == StringRepresentation.PSMILES:
-                    df[col] = df[col].apply(canonicalise_psmiles)
+            df = _canonicalise_df(df, tuple(smiles_cols), str_representation)
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
         id_col = st.selectbox(
@@ -213,32 +250,24 @@ def select_data_form():
                     st.markdown("**Label Distribution**")
 
             if problem_type == ProblemType.Classification:
-
-                fig = show_label_distribution(
-                    data=df,
-                    target_variable=target_col,
-                    title=(
-                        f"Label Distribution for {target_name}"
-                        if target_name
-                        else "Label Distribution"
-                    ),
-                    class_names=class_names,
+                title = (
+                    f"Label Distribution for {target_name}" if target_name else "Label Distribution"
+                )
+                fig = _plot_label_distribution(
+                    df=df,
+                    target_col=target_col,
+                    title=title,
+                    class_names=tuple(class_names.items()),
                 )
                 st.pyplot(fig)
 
             elif problem_type == ProblemType.Regression:
-
                 st.markdown("**Continuous Distribution**")
-                st.pyplot(
-                    show_continuous_distribution(
-                        data=df,
-                        target_variable=target_col,
-                        title=(
-                            f"Continuous Distribution for {target_name}"
-                            if target_name
-                            else "Continuous Distribution"
-                        ),
-                    )
+                title = (
+                    f"Continuous Distribution for {target_name}"
+                    if target_name
+                    else "Continuous Distribution"
                 )
+                st.pyplot(_plot_continuous_distribution(df=df, target_col=target_col, title=title))
 
             return df
