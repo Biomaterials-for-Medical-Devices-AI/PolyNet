@@ -36,6 +36,7 @@ def explain_tml_global(
     top_n: int | None = 10,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     cache_root: Path | None = None,
+    target_col: str | None = None,
 ) -> None:
     """Compute and render the global SHAP attribution distribution (one section per descriptor)."""
     results: dict[str, GlobalAttributionResult] = compute_global_shap_attribution(
@@ -51,6 +52,7 @@ def explain_tml_global(
         top_n=top_n,
         plot_type=plot_type,
         cache_root=cache_root,
+        target_col=target_col,
     )
 
     for descriptor, result in results.items():
@@ -80,6 +82,7 @@ def explain_tml_local(
     local_plot_type: str = "waterfall",
     predictions: dict | None = None,
     cache_root: Path | None = None,
+    target_col: str | None = None,
 ) -> None:
     """Compute and render per-instance SHAP panels (table + plot)."""
     results: dict[str, list[InstanceAttributionResult]] = compute_local_shap_attribution(
@@ -95,6 +98,7 @@ def explain_tml_local(
         local_plot_type=local_plot_type,
         predictions=predictions,
         cache_root=cache_root,
+        target_col=target_col,
     )
 
     for descriptor, instance_results in results.items():
