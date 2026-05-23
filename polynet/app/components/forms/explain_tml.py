@@ -204,6 +204,7 @@ def _tml_global_tab(
             top_n=int(top_n),
             plot_type=plot_type,
             cache_root=cache_root,
+            target_col=data_options.target_variable_col,
         )
 
 
@@ -301,6 +302,7 @@ def _tml_local_tab(
             local_plot_type=local_plot_type,
             predictions=preds_dict,
             cache_root=cache_root,
+            target_col=data_options.target_variable_col,
         )
 
 
