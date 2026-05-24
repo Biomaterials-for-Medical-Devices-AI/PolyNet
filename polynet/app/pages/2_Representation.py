@@ -11,8 +11,10 @@ from polynet.app.components.forms.representation import (
     select_polymer_descriptors,
     select_weight_factor,
 )
+from polynet.app.components.graph_display import show_graph_visualization
 from polynet.app.options.file_paths import (
     data_options_path,
+    graph_feature_analysis_path,
     polynet_experiment_path,
     polynet_experiments_base_dir,
     representation_options_path,
@@ -21,11 +23,11 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.plot import plot_molecule_3d
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.pipeline import build_graph_dataset, compute_descriptors
+from polynet.utils.graph_analysis import load_graph_feature_analysis
 
 
 def parse_representation_options(
@@ -89,25 +91,6 @@ def parse_representation_options(
             out_dir=experiment_path,
         )
 
-        # st.write(dataset[0])
-
-        # if st.selectbox(
-        #     "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
-        # ):
-        #     if len(data_options.smiles_cols) > 1:
-        #         mol = st.selectbox(
-        #             "Select which molecule to display",
-        #             options=data_options.smiles_cols,
-        #             key="smiles_selection",
-        #         )
-        #     else:
-        #         mol = data_options.smiles_cols[0]
-        #     smiles = data.loc[
-        #         data[data_options.id_col] == st.session_state["mol_selection"], mol
-        #     ].values[0]
-        #     st.write(f"Displaying molecule: {smiles}")
-        #     plot_molecule_3d(smiles=smiles)
-
 
 st.header("Representation of Polymers")
 
@@ -145,6 +128,13 @@ if experiment_name:
 
     st.write(data.describe())
 
+    # Load the pre-computed atom/bond frequency analysis written at experiment
+    # creation time.  Falls back to None for older experiments — graph_representation
+    # will compute on the fly in that case.
+    feature_analysis = load_graph_feature_analysis(
+        graph_feature_analysis_path(experiment_path=experiment_path)
+    )
+
     molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
     descriptors_weighted = (
         st.session_state.get(
@@ -154,7 +144,9 @@ if experiment_name:
         == DescriptorMergingMethod.WeightedAverage
     )
 
-    atomic_properties, bond_properties = graph_representation(data_opts=data_opts, df=data)
+    atomic_properties, bond_properties = graph_representation(
+        data_opts=data_opts, df=data, feature_analysis=feature_analysis
+    )
     graphs_weighted = st.session_state.get(
         DescriptorCalculationStateKeys.GraphWeightingFactor, False
     )
@@ -187,4 +179,17 @@ if experiment_name:
             data_options=data_opts,
             polymer_descriptors=polymer_descriptors,
             weights_col=weights,
+        )
+
+    # -----------------------------------------------------------------------
+    # Graph preview — rendered outside the button block so it persists across
+    # all reruns (molecule-selector changes, widget interactions, page revisits).
+    # show_graph_visualization is a no-op when no GNN .pt files exist yet,
+    # so it is safe to call unconditionally whenever the saved config exists.
+    # -----------------------------------------------------------------------
+    if representation_opts.exists():
+        show_graph_visualization(
+            experiment_path=experiment_path,
+            data_opts=data_opts,
+            repr_cfg=load_options(path=representation_opts, options_class=RepresentationConfig),
         )

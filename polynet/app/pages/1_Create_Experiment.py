@@ -5,6 +5,7 @@ from polynet.app.components.forms.create_experiment import select_data_form
 from polynet.app.options.file_paths import (
     data_file_path,
     general_options_path,
+    graph_feature_analysis_path,
     polynet_experiments_base_dir,
 )
 from polynet.app.options.state_keys import CreateExperimentStateKeys, GeneralConfigStateKeys
@@ -13,6 +14,7 @@ from polynet.app.services.experiments import create_experiment
 from polynet.config.constants import ResultColumn
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.general import GeneralConfig
+from polynet.utils.graph_analysis import compute_graph_feature_analysis, save_graph_feature_analysis
 
 
 def save_experiment(df: pd.DataFrame):
@@ -65,6 +67,15 @@ def save_experiment(df: pd.DataFrame):
     )
 
     df.to_csv(path_to_data, index=False)
+
+    # Pre-compute atom/bond property frequencies so the Representation page can
+    # populate allowable-value defaults instantly without re-scanning the dataset.
+    with st.spinner("Analysing graph features for the Representation page…"):
+        smiles_cols = st.session_state[CreateExperimentStateKeys.SmilesCols]
+        analysis = compute_graph_feature_analysis(df=df, smiles_cols=smiles_cols)
+        save_graph_feature_analysis(
+            analysis=analysis, path=graph_feature_analysis_path(experiment_path=experiment_path)
+        )
 
 
 st.write(

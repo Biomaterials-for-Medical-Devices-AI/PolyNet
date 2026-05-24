@@ -287,6 +287,20 @@ def general_options_path(experiment_path: Path) -> Path:
     return experiment_path / "general_options.json"
 
 
+def graph_feature_analysis_path(experiment_path: Path) -> Path:
+    """Return the path to the pre-computed graph feature analysis JSON file.
+
+    This file is written once at experiment-creation time and stores atom/bond
+    property frequency counts across all SMILES columns so the Representation
+    page can pre-populate allowable-value defaults without re-scanning the
+    dataset on every widget interaction.
+
+    Args:
+        experiment_path (Path): The path to the experiment directory.
+    """
+    return experiment_path / "graph_feature_analysis.json"
+
+
 def ml_results_parent_directory(experiment_path: Path) -> Path:
     """Return the path to the ml_results directory in the experiment.
 

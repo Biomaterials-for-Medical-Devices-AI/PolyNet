@@ -1,6 +1,7 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import pandas as pd
+from rdkit import Chem
 from rdkit.Chem import Descriptors
 import streamlit as st
 
@@ -23,6 +24,11 @@ from polynet.featurizer.pmx import (
     SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
+from polynet.utils.graph_analysis import (
+    get_atom_prop_defaults,
+    get_bar_data,
+    get_bond_prop_defaults,
+)
 
 
 def select_weight_factor(
@@ -318,11 +324,25 @@ def molecular_descriptor_representation(
 
 
 def graph_representation(
-    data_opts: DataConfig, df: pd.DataFrame
+    data_opts: DataConfig, df: pd.DataFrame, feature_analysis: Optional[Dict] = None
 ) -> tuple[Dict[AtomFeature, List[str]], Dict[BondFeature, List[str]]]:
 
     atomic_properties = sorted(atom_properties.keys())
     bond_properties = sorted(bond_features.keys())
+
+    # IsAttachmentPoint is a synthetic feature derived from PSMILES [*] markers.
+    # It is meaningless (and uncomputable) for standard SMILES datasets.
+    is_psmiles = data_opts.string_representation == StringRepresentation.PSMILES
+    if not is_psmiles:
+        atomic_properties = [p for p in atomic_properties if p != AtomFeature.IsAttachmentPoint]
+        # Also purge it from session state so the multiselect doesn't reject its own default.
+        current_atom_selection = st.session_state.get(
+            DescriptorCalculationStateKeys.AtomProperties, []
+        )
+        if AtomFeature.IsAttachmentPoint in current_atom_selection:
+            st.session_state[DescriptorCalculationStateKeys.AtomProperties] = [
+                p for p in current_atom_selection if p != AtomFeature.IsAttachmentPoint
+            ]
 
     node_feats_config = {}
     edge_feats_config = {}
@@ -339,6 +359,12 @@ def graph_representation(
         )
 
         st.markdown("#### Atomic Properties")
+
+        if not is_psmiles:
+            st.info(
+                "`IsAttachmentPoint` is only available for **PSMILES** datasets and has been "
+                "removed from the options below."
+            )
 
         select_all_atomic = st.checkbox("Select all atomic properties")
 
@@ -382,8 +408,26 @@ def graph_representation(
 
                 for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                    prop_counts = count_atom_property_frequency(df, smiles_col, prop)
-                    prop_defaults.update(prop_counts.keys())
+                    if feature_analysis is not None:
+                        # Fast path: use pre-computed analysis saved at experiment creation.
+                        prop_defaults.update(
+                            get_atom_prop_defaults(feature_analysis, prop, smiles_col)
+                        )
+                        df_plot = get_bar_data(feature_analysis, "atom", prop, smiles_col)
+                    else:
+                        # Fallback: compute on the fly (experiments created before this feature).
+                        # Skip properties that are not standard RDKit Atom methods
+                        # (e.g. IsAttachmentPoint is derived from PSMILES context).
+                        if hasattr(Chem.Atom, prop):
+                            prop_counts = count_atom_property_frequency(df, smiles_col, prop)
+                            prop_defaults.update(prop_counts.keys())
+                            df_plot = pd.DataFrame.from_dict(
+                                prop_counts, orient="index", columns=["Frequency"]
+                            )
+                            df_plot.index.name = str(prop)
+                            df_plot = df_plot.sort_index()
+                        else:
+                            df_plot = None
 
                     residue = int(i % 2)
 
@@ -391,12 +435,8 @@ def graph_representation(
 
                         if show:
                             st.write(f"### Column `{smiles_col}`")
-                            df_plot = pd.DataFrame.from_dict(
-                                prop_counts, orient="index", columns=["Frequency"]
-                            )
-                            df_plot.index.name = str(prop)
-                            df_plot = df_plot.sort_index()
-                            st.bar_chart(df_plot, color="#ff3c00")
+                            if df_plot is not None:
+                                st.bar_chart(df_plot, color="#ff3c00")
 
                 node_feats_config[prop] = {}
                 if atom_properties[prop]:
@@ -482,8 +522,25 @@ def graph_representation(
 
                 for i, smiles_col in enumerate(data_opts.smiles_cols):
 
-                    prop_counts = count_bond_property_frequency(df, smiles_col, prop)
-                    prop_defaults.update(prop_counts.keys())
+                    if feature_analysis is not None:
+                        # Fast path: use pre-computed analysis saved at experiment creation.
+                        prop_defaults.update(
+                            get_bond_prop_defaults(feature_analysis, prop, smiles_col)
+                        )
+                        df_plot = get_bar_data(feature_analysis, "bond", prop, smiles_col)
+                    else:
+                        # Fallback: compute on the fly (experiments created before this feature).
+                        # Skip properties that are not standard RDKit Bond methods.
+                        if hasattr(Chem.Bond, prop):
+                            prop_counts = count_bond_property_frequency(df, smiles_col, prop)
+                            prop_defaults.update(prop_counts.keys())
+                            df_plot = pd.DataFrame.from_dict(
+                                prop_counts, orient="index", columns=["Frequency"]
+                            )
+                            df_plot.index.name = str(prop)
+                            df_plot = df_plot.sort_index()
+                        else:
+                            df_plot = None
 
                     residue = int(i % 2)
 
@@ -491,12 +548,8 @@ def graph_representation(
 
                         if show:
                             st.write(f"### Column `{smiles_col}`")
-                            df_plot = pd.DataFrame.from_dict(
-                                prop_counts, orient="index", columns=["Frequency"]
-                            )
-                            df_plot.index.name = str(prop)
-                            df_plot = df_plot.sort_index()
-                            st.bar_chart(df_plot, color="#ff3c00")
+                            if df_plot is not None:
+                                st.bar_chart(df_plot, color="#ff3c00")
 
                 edge_feats_config[prop] = {}
                 if bond_features[prop]:
