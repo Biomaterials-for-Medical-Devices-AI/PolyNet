@@ -9,7 +9,7 @@ hyperparameter optimisation flag. All other fields are model-family specific.
 
 from pydantic import Field, model_validator
 
-from polynet.config.enums import Network, TraditionalMLModel, TransformDescriptor
+from polynet.config.enums import HpoSplitStrategy, Network, TraditionalMLModel, TransformDescriptor
 from polynet.config.schemas.base import HyperparamOptimConfig, PolynetBaseModel
 
 # ---------------------------------------------------------------------------
@@ -63,6 +63,17 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=True, description="Share GNN weights across monomers in multi-SMILES polymers."
     )
     epochs: int = Field(default=250, ge=1, description="Number of training epochs per GNN model.")
+    hpo_split_strategy: HpoSplitStrategy = Field(
+        default=HpoSplitStrategy.CrossValidation,
+        description="Split strategy used inside the HPO loop.",
+    )
+    hpo_n_folds: int = Field(default=5, ge=2, description="Folds for CrossValidation HPO strategy.")
+    hpo_val_fraction: float = Field(
+        default=0.2, gt=0.0, lt=1.0, description="Val fraction for Holdout / RepeatedHoldout HPO."
+    )
+    hpo_n_repeats: int = Field(
+        default=3, ge=1, description="Number of random splits for RepeatedHoldout HPO."
+    )
 
     @model_validator(mode="after")
     def layers_required_when_training(self) -> "TrainGNNConfig":
