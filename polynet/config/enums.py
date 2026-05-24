@@ -56,6 +56,14 @@ class SplitMethod(StrEnum):
     Stratified = "stratified"
 
 
+class HpoSplitStrategy(StrEnum):
+    """Data split strategy used inside the GNN hyperparameter optimisation loop."""
+
+    CrossValidation = "cross_validation"
+    Holdout = "holdout"
+    RepeatedHoldout = "repeated_holdout"
+
+
 class IteratorType(StrEnum):
     """Labels for iterative training loops."""
 
