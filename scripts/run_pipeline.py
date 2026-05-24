@@ -21,6 +21,7 @@ Usage
 Stages
 ------
     1.  Load & validate data
+    1b. Graph feature analysis       (atom/bond property frequencies per SMILES column)
     2.  Build graph dataset          (if gnn enabled)
     3.  Compute descriptors          (if descriptors enabled)
     4.  Compute data splits
@@ -364,6 +365,32 @@ def main() -> None:
     df = _load_data(cfg, root, out_dir)
     df.to_csv(out_dir / cfg["data"]["data_name"])
     done(t0)
+
+    # ------------------------------------------------------------------
+    # Stage 1b — Graph feature analysis
+    # Pre-compute atom/bond property frequencies for every SMILES column so
+    # the Representation page in the Streamlit app can populate allowable-value
+    # defaults without re-scanning the dataset on each widget interaction.
+    # The output is graph_feature_analysis.json in the experiment output dir.
+    # ------------------------------------------------------------------
+    t0 = announce("1b. Graph feature analysis")
+    try:
+        from polynet.config.paths import graph_feature_analysis_path
+        from polynet.utils.graph_analysis import (
+            compute_graph_feature_analysis,
+            save_graph_feature_analysis,
+        )
+
+        analysis = compute_graph_feature_analysis(
+            df=df,
+            smiles_cols=data_cfg.smiles_cols,
+        )
+        analysis_path = graph_feature_analysis_path(experiment_path=out_dir)
+        save_graph_feature_analysis(analysis=analysis, path=analysis_path)
+        logger.info(f"  Saved graph feature analysis to {analysis_path}")
+        done(t0)
+    except Exception as e:
+        logger.warning(f"  Graph feature analysis failed ({e}). Continuing without it.")
 
     # ------------------------------------------------------------------
     # Stage 2 — Graph dataset
