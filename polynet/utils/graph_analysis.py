@@ -37,6 +37,7 @@ from pathlib import Path
 from typing import Dict, List, Optional
 
 import pandas as pd
+from rdkit import Chem
 
 from polynet.config.enums import AtomBondDescriptorDictKey, AtomFeature, BondFeature
 from polynet.featurizer.allowable_sets import atom_properties, bond_features
@@ -101,6 +102,11 @@ def compute_graph_feature_analysis(
     analysis: Dict = {"atom": {}, "bond": {}}
 
     for prop, prop_config in atom_properties.items():
+        if not hasattr(Chem.Atom, prop):
+            # Not a standard RDKit atom method (e.g. IsAttachmentPoint is a synthetic
+            # feature derived from PSMILES context, not an actual Atom method).  Skip
+            # frequency analysis — the Representation page handles it separately.
+            continue
         options = (
             prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
         )
@@ -110,6 +116,9 @@ def compute_graph_feature_analysis(
             analysis["atom"][prop][smiles_col] = _encode_col_data(counts, options)
 
     for prop, prop_config in bond_features.items():
+        if not hasattr(Chem.Bond, prop):
+            # Same guard for bond properties.
+            continue
         options = (
             prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
         )
