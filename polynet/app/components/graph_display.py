@@ -57,10 +57,9 @@ def _pt_path(processed_dir: Path, row_idx: int, target_col: str) -> Path:
 # Public entry point
 # ---------------------------------------------------------------------------
 
+
 def show_graph_visualization(
-    experiment_path: Path,
-    data_opts: DataConfig,
-    repr_cfg: RepresentationConfig,
+    experiment_path: Path, data_opts: DataConfig, repr_cfg: RepresentationConfig
 ) -> None:
     """Render the graph-preview section.
 
@@ -110,9 +109,7 @@ def show_graph_visualization(
         mol_options = list(raw_df.index)
 
     selected = st.selectbox(
-        "Select molecule to inspect",
-        options=mol_options,
-        key="graph_viz_mol_selector",
+        "Select molecule to inspect", options=mol_options, key="graph_viz_mol_selector"
     )
     if selected is None:
         return
@@ -146,9 +143,7 @@ def show_graph_visualization(
     n_edges = graph_data.edge_index.shape[1] // 2  # bidirectional storage
     n_monomers = len(graph_data.mols) if hasattr(graph_data, "mols") else 1
     node_feat_dim = graph_data.x.shape[1] if graph_data.x is not None else 0
-    edge_feat_dim = (
-        graph_data.edge_attr.shape[1] if graph_data.edge_attr is not None else 0
-    )
+    edge_feat_dim = graph_data.edge_attr.shape[1] if graph_data.edge_attr is not None else 0
 
     c1, c2, c3, c4, c5 = st.columns(5)
     c1.metric("Atoms (nodes)", n_nodes)
@@ -168,16 +163,15 @@ def show_graph_visualization(
         # Wrap the SMILES in backticks so Streamlit's Markdown renderer does not
         # interpret * characters as italic/bold markers (e.g. "*CC*" → *CC*).
         monomer_options = ["All monomers"] + [
-            f"Monomer {i + 1}: `{mols_list[i][:45]}{'…' if len(mols_list[i]) > 45 else ''}`"
-            if i < len(mols_list)
-            else f"Monomer {i + 1}"
+            (
+                f"Monomer {i + 1}: `{mols_list[i][:45]}{'…' if len(mols_list[i]) > 45 else ''}`"
+                if i < len(mols_list)
+                else f"Monomer {i + 1}"
+            )
             for i in range(n_monomers)
         ]
         monomer_sel = st.radio(
-            "View",
-            options=monomer_options,
-            horizontal=True,
-            key="graph_viz_monomer_filter",
+            "View", options=monomer_options, horizontal=True, key="graph_viz_monomer_filter"
         )
         if monomer_sel != "All monomers":
             # Parse the 1-based display index and convert back to 0-based internal index

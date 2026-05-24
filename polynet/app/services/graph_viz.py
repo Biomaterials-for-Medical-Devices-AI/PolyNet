@@ -32,30 +32,44 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import plotly.graph_objects as go
-import torch
 from rdkit import Chem
 from rdkit.Chem import AllChem
+import torch
 from torch_geometric.data import Data
 
 from polynet.config.enums import AtomBondDescriptorDictKey, AtomFeature, BondFeature
-
 
 # ---------------------------------------------------------------------------
 # Visual constants
 # ---------------------------------------------------------------------------
 
 _ATOM_COLORS: Dict[str, str] = {
-    "C": "#404040", "N": "#3050F8", "O": "#FF0D0D", "H": "#AAAAAA",
-    "F": "#90E050", "Cl": "#1FF01F", "Br": "#A62929", "I": "#940094",
-    "S": "#FFFF30", "P": "#FF8000", "Si": "#F0C8A0", "B": "#FFB5B5",
-    "*": "#888888",   # PSMILES wildcard / attachment-point placeholder
+    "C": "#404040",
+    "N": "#3050F8",
+    "O": "#FF0D0D",
+    "H": "#AAAAAA",
+    "F": "#90E050",
+    "Cl": "#1FF01F",
+    "Br": "#A62929",
+    "I": "#940094",
+    "S": "#FFFF30",
+    "P": "#FF8000",
+    "Si": "#F0C8A0",
+    "B": "#FFB5B5",
+    "*": "#888888",  # PSMILES wildcard / attachment-point placeholder
 }
 _DEFAULT_ATOM_COLOR = "#909090"
 
 # Border colours per monomer — makes sub-graphs visually distinct
 _MONOMER_BORDERS = [
-    "#1f77b4", "#ff7f0e", "#2ca02c", "#d62728",
-    "#9467bd", "#8c564b", "#e377c2", "#17becf",
+    "#1f77b4",
+    "#ff7f0e",
+    "#2ca02c",
+    "#d62728",
+    "#9467bd",
+    "#8c564b",
+    "#e377c2",
+    "#17becf",
 ]
 
 _BOND_WIDTH_BY_ORDER = {1.0: 2, 1.5: 3, 2.0: 4, 3.0: 5}
@@ -107,16 +121,13 @@ _ATOM_SCALARS = {
     AtomFeature.IsInRing,
     AtomFeature.IsAttachmentPoint,
 }
-_BOND_SCALARS = {
-    BondFeature.IsInRing,
-    BondFeature.GetIsConjugated,
-    BondFeature.GetIsAromatic,
-}
+_BOND_SCALARS = {BondFeature.IsInRing, BondFeature.GetIsConjugated, BondFeature.GetIsAromatic}
 
 
 # ---------------------------------------------------------------------------
 # Feature decoding
 # ---------------------------------------------------------------------------
+
 
 def _feature_width(feat, config: dict, scalar_set: set) -> int:
     """Number of tensor columns used by one feature."""
@@ -144,16 +155,9 @@ def _decode_one(feat, vec: torch.Tensor, config: dict, scalar_set: set) -> str:
     return "other" if wildcard else "—"
 
 
-def decode_node_features(
-    x: torch.Tensor,
-    node_feats_config: Dict,
-) -> List[Dict[str, str]]:
+def decode_node_features(x: torch.Tensor, node_feats_config: Dict) -> List[Dict[str, str]]:
     """Decode the node feature tensor to one display-dict per atom."""
-    active = [
-        (f, node_feats_config[f])
-        for f in _ATOM_FEATURE_ORDER
-        if f in node_feats_config
-    ]
+    active = [(f, node_feats_config[f]) for f in _ATOM_FEATURE_ORDER if f in node_feats_config]
     result: List[Dict[str, str]] = []
     for n in range(x.shape[0]):
         col = 0
@@ -162,22 +166,15 @@ def decode_node_features(
             w = _feature_width(feat, cfg, _ATOM_SCALARS)
             if w == 0:
                 continue  # feature contributed 0 columns (empty AllowableVals); skip
-            d[str(feat)] = _decode_one(feat, x[n, col: col + w], cfg, _ATOM_SCALARS)
+            d[str(feat)] = _decode_one(feat, x[n, col : col + w], cfg, _ATOM_SCALARS)
             col += w
         result.append(d)
     return result
 
 
-def decode_edge_features(
-    edge_attr: torch.Tensor,
-    edge_feats_config: Dict,
-) -> List[Dict[str, str]]:
+def decode_edge_features(edge_attr: torch.Tensor, edge_feats_config: Dict) -> List[Dict[str, str]]:
     """Decode the edge feature tensor to one display-dict per directed edge."""
-    active = [
-        (f, edge_feats_config[f])
-        for f in _BOND_FEATURE_ORDER
-        if f in edge_feats_config
-    ]
+    active = [(f, edge_feats_config[f]) for f in _BOND_FEATURE_ORDER if f in edge_feats_config]
     result: List[Dict[str, str]] = []
     for e in range(edge_attr.shape[0]):
         col = 0
@@ -186,7 +183,7 @@ def decode_edge_features(
             w = _feature_width(feat, cfg, _BOND_SCALARS)
             if w == 0:
                 continue  # feature contributed 0 columns (empty AllowableVals); skip
-            d[str(feat)] = _decode_one(feat, edge_attr[e, col: col + w], cfg, _BOND_SCALARS)
+            d[str(feat)] = _decode_one(feat, edge_attr[e, col : col + w], cfg, _BOND_SCALARS)
             col += w
         result.append(d)
     return result
@@ -195,6 +192,7 @@ def decode_edge_features(
 # ---------------------------------------------------------------------------
 # 2-D layout helpers
 # ---------------------------------------------------------------------------
+
 
 def _strip_dummy_atoms(mol: Chem.Mol) -> Chem.Mol:
     """Remove wildcard (atomic-num 0) atoms — mirrors _strip_wildcards logic."""
@@ -233,8 +231,7 @@ def _rdkit_2d_coords(smiles: str, expected_n: int) -> Optional[np.ndarray]:
     AllChem.Compute2DCoords(mol)
     conf = mol.GetConformer()
     return np.array(
-        [[conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y]
-         for i in range(mol.GetNumAtoms())]
+        [[conf.GetAtomPosition(i).x, conf.GetAtomPosition(i).y] for i in range(mol.GetNumAtoms())]
     )
 
 
@@ -273,11 +270,11 @@ def _build_positions(data: Data) -> np.ndarray:
         # Normalise to a fixed scale so all sub-graphs are comparably sized
         span = max((pos.max(axis=0) - pos.min(axis=0)).max(), 1e-6)
         pos = pos / span
-        pos -= pos.mean(axis=0)       # centre
-        pos[:, 0] += x_offset         # horizontal offset
+        pos -= pos.mean(axis=0)  # centre
+        pos[:, 0] += x_offset  # horizontal offset
 
         positions[mask] = pos
-        x_offset += (pos[:, 0].max() - pos[:, 0].min()) + 1.5   # gap between monomers
+        x_offset += (pos[:, 0].max() - pos[:, 0].min()) + 1.5  # gap between monomers
 
     return positions
 
@@ -314,6 +311,7 @@ def _atom_symbols(data: Data) -> List[str]:
 # Main figure builder
 # ---------------------------------------------------------------------------
 
+
 def build_graph_figure(
     data: Data,
     node_feats_config: Dict,
@@ -336,7 +334,7 @@ def build_graph_figure(
         (default) draws all monomers side-by-side.
     """
     n_atoms = data.x.shape[0]
-    edge_index = data.edge_index.numpy()   # (2, 2*n_bonds)
+    edge_index = data.edge_index.numpy()  # (2, 2*n_bonds)
     monomer_id = (
         data.monomer_id.numpy().flatten()
         if data.monomer_id is not None
@@ -403,22 +401,28 @@ def build_graph_figure(
         hover_lines += [f"&nbsp;&nbsp;{k}: {v}" for k, v in edge_decoded[e].items()]
 
         # Bond line (hover disabled — line targets are too thin to click reliably)
-        traces.append(go.Scatter(
-            x=[xi, xj, None], y=[yi, yj, None],
-            mode="lines",
-            line=dict(width=line_width, color="#555555"),
-            hoverinfo="skip",
-            showlegend=False,
-        ))
+        traces.append(
+            go.Scatter(
+                x=[xi, xj, None],
+                y=[yi, yj, None],
+                mode="lines",
+                line=dict(width=line_width, color="#555555"),
+                hoverinfo="skip",
+                showlegend=False,
+            )
+        )
 
         # Invisible midpoint marker that carries the hover tooltip
-        traces.append(go.Scatter(
-            x=[mid_x], y=[mid_y],
-            mode="markers",
-            marker=dict(size=12, color="rgba(0,0,0,0)"),
-            hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
-            showlegend=False,
-        ))
+        traces.append(
+            go.Scatter(
+                x=[mid_x],
+                y=[mid_y],
+                mode="markers",
+                marker=dict(size=12, color="rgba(0,0,0,0)"),
+                hovertemplate="<br>".join(hover_lines) + "<extra></extra>",
+                showlegend=False,
+            )
+        )
 
     # ------------------------------------------------------------------
     # Node traces — one per monomer for a clean legend
@@ -441,31 +445,34 @@ def build_graph_figure(
         for global_i in mask:
             lines = [f"<b>Atom {global_i}  ({symbols[global_i]})</b>"]
             if len(unique_monomers) > 1:
-                label = mols_smiles[mon_idx] if mon_idx < len(mols_smiles) else f"Monomer {display_idx}"
+                label = (
+                    mols_smiles[mon_idx] if mon_idx < len(mols_smiles) else f"Monomer {display_idx}"
+                )
                 lines.append(f"Monomer {display_idx}: {label[:45]}{'…' if len(label) > 45 else ''}")
             lines += [f"&nbsp;&nbsp;{k}: {v}" for k, v in node_decoded[global_i].items()]
             hover_texts.append("<br>".join(lines) + "<extra></extra>")
 
-        legend_smiles = mols_smiles[mon_idx] if mon_idx < len(mols_smiles) else f"Monomer {display_idx}"
+        legend_smiles = (
+            mols_smiles[mon_idx] if mon_idx < len(mols_smiles) else f"Monomer {display_idx}"
+        )
         legend_label = (
             f"Monomer {display_idx}: {legend_smiles[:35]}{'…' if len(legend_smiles) > 35 else ''}"
         )
 
-        traces.append(go.Scatter(
-            x=node_x, y=node_y,
-            mode="markers+text",
-            marker=dict(
-                size=32,
-                color=fill_colors,
-                line=dict(color=border_color, width=3),
-            ),
-            text=syms,
-            textposition="middle center",
-            textfont=dict(size=11, color="white", family="Arial Black"),
-            hovertemplate=hover_texts,
-            name=legend_label,
-            showlegend=show_legend,
-        ))
+        traces.append(
+            go.Scatter(
+                x=node_x,
+                y=node_y,
+                mode="markers+text",
+                marker=dict(size=32, color=fill_colors, line=dict(color=border_color, width=3)),
+                text=syms,
+                textposition="middle center",
+                textfont=dict(size=11, color="white", family="Arial Black"),
+                hovertemplate=hover_texts,
+                name=legend_label,
+                showlegend=show_legend,
+            )
+        )
 
     # Taller figure when a single monomer is isolated — gives more room
     # to spread out the atoms without them overlapping.

@@ -43,10 +43,10 @@ from polynet.config.enums import AtomBondDescriptorDictKey, AtomFeature, BondFea
 from polynet.featurizer.allowable_sets import atom_properties, bond_features
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 
-
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _encode_col_data(counts: dict, options: Optional[list]) -> dict:
     """Encode one (property, smiles_col) frequency dict into a JSON-safe format.
@@ -60,6 +60,7 @@ def _encode_col_data(counts: dict, options: Optional[list]) -> dict:
         Dict with keys ``"bar_data"`` (always) and ``"present_indices"``
         (only when *options* is not ``None``).
     """
+
     # Bar-chart data: list of [str_label, count] pairs, sorted so numeric keys
     # appear in ascending numeric order in the chart.
     def _sort_key(item):
@@ -85,10 +86,8 @@ def _encode_col_data(counts: dict, options: Optional[list]) -> dict:
 # Public API
 # ---------------------------------------------------------------------------
 
-def compute_graph_feature_analysis(
-    df: pd.DataFrame,
-    smiles_cols: List[str],
-) -> Dict:
+
+def compute_graph_feature_analysis(df: pd.DataFrame, smiles_cols: List[str]) -> Dict:
     """Scan *df* and build the full frequency analysis for every atom and bond
     property across every SMILES column.
 
@@ -107,9 +106,7 @@ def compute_graph_feature_analysis(
             # feature derived from PSMILES context, not an actual Atom method).  Skip
             # frequency analysis — the Representation page handles it separately.
             continue
-        options = (
-            prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
-        )
+        options = prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
         analysis["atom"][prop] = {}
         for smiles_col in smiles_cols:
             counts = count_atom_property_frequency(df, smiles_col, prop)
@@ -119,9 +116,7 @@ def compute_graph_feature_analysis(
         if not hasattr(Chem.Bond, prop):
             # Same guard for bond properties.
             continue
-        options = (
-            prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
-        )
+        options = prop_config[AtomBondDescriptorDictKey.Options] if prop_config else None
         analysis["bond"][prop] = {}
         for smiles_col in smiles_cols:
             counts = count_bond_property_frequency(df, smiles_col, prop)
@@ -158,11 +153,7 @@ def load_graph_feature_analysis(path: Path) -> Optional[Dict]:
         return json.load(fh)
 
 
-def get_atom_prop_defaults(
-    analysis: Dict,
-    prop: AtomFeature,
-    smiles_col: str,
-) -> set:
+def get_atom_prop_defaults(analysis: Dict, prop: AtomFeature, smiles_col: str) -> set:
     """Return the set of *Options* values present in the dataset for an atom property.
 
     Reconstructs typed values (including RDKit enums) by indexing back into the
@@ -187,11 +178,7 @@ def get_atom_prop_defaults(
     return {options[i] for i in indices if i < len(options)}
 
 
-def get_bond_prop_defaults(
-    analysis: Dict,
-    prop: BondFeature,
-    smiles_col: str,
-) -> set:
+def get_bond_prop_defaults(analysis: Dict, prop: BondFeature, smiles_col: str) -> set:
     """Return the set of *Options* values present in the dataset for a bond property.
 
     Args:
@@ -213,10 +200,7 @@ def get_bond_prop_defaults(
 
 
 def get_bar_data(
-    analysis: Dict,
-    feature_type: str,
-    prop,
-    smiles_col: str,
+    analysis: Dict, feature_type: str, prop, smiles_col: str
 ) -> Optional[pd.DataFrame]:
     """Return a single-column DataFrame suitable for ``st.bar_chart``.
 

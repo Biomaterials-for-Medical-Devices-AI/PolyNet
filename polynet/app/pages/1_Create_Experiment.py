@@ -74,8 +74,7 @@ def save_experiment(df: pd.DataFrame):
         smiles_cols = st.session_state[CreateExperimentStateKeys.SmilesCols]
         analysis = compute_graph_feature_analysis(df=df, smiles_cols=smiles_cols)
         save_graph_feature_analysis(
-            analysis=analysis,
-            path=graph_feature_analysis_path(experiment_path=experiment_path),
+            analysis=analysis, path=graph_feature_analysis_path(experiment_path=experiment_path)
         )
 
 

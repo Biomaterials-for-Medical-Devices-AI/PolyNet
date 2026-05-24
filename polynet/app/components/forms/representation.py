@@ -1,6 +1,7 @@
 from typing import Dict, List, Optional
 
 import pandas as pd
+from rdkit import Chem
 from rdkit.Chem import Descriptors
 import streamlit as st
 
@@ -22,7 +23,6 @@ from polynet.featurizer.pmx import (
     CHEMICAL_FEATURIZER_REGISTRY,
     SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
 )
-from rdkit import Chem
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 from polynet.utils.graph_analysis import (
     get_atom_prop_defaults,
@@ -324,9 +324,7 @@ def molecular_descriptor_representation(
 
 
 def graph_representation(
-    data_opts: DataConfig,
-    df: pd.DataFrame,
-    feature_analysis: Optional[Dict] = None,
+    data_opts: DataConfig, df: pd.DataFrame, feature_analysis: Optional[Dict] = None
 ) -> tuple[Dict[AtomFeature, List[str]], Dict[BondFeature, List[str]]]:
 
     atomic_properties = sorted(atom_properties.keys())
