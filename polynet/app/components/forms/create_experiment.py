@@ -151,9 +151,21 @@ def select_data_form():
             df = _canonicalise_df(df, tuple(smiles_cols), str_representation)
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
+        # Columns that are already spoken for — exclude from downstream selectors.
+        smiles_cols_set = set(smiles_cols)
+
+        # If a previously chosen ID/target column was since selected as a SMILES
+        # column, clear it so the selectbox doesn't hold an invalid value.
+        if st.session_state.get(CreateExperimentStateKeys.IDCol) in smiles_cols_set:
+            st.session_state[CreateExperimentStateKeys.IDCol] = None
+        if st.session_state.get(CreateExperimentStateKeys.TargetVariableCol) in smiles_cols_set:
+            st.session_state[CreateExperimentStateKeys.TargetVariableCol] = None
+
+        remaining_after_smiles = [col for col in df.columns if col not in smiles_cols_set]
+
         id_col = st.selectbox(
             "Select column with the ID of each molecule",
-            options=df.columns.tolist(),
+            options=remaining_after_smiles,
             index=None,
             key=CreateExperimentStateKeys.IDCol,
         )
@@ -167,9 +179,16 @@ def select_data_form():
             df = df.reset_index()
             # st.session_state[CreateExperimentStateKeys.IDCol] = ResultColumn.INDEX
 
+        # Exclude both SMILES columns and the chosen ID column from the target selector.
+        used_cols = smiles_cols_set | ({id_col} if id_col else set())
+        if st.session_state.get(CreateExperimentStateKeys.TargetVariableCol) in used_cols:
+            st.session_state[CreateExperimentStateKeys.TargetVariableCol] = None
+
+        remaining_after_id = [col for col in df.columns if col not in used_cols]
+
         target_col = st.selectbox(
             "Select target column",
-            options=df.columns.tolist(),
+            options=remaining_after_id,
             index=None,
             key=CreateExperimentStateKeys.TargetVariableCol,
             help="This column should contain the target variable you want to model.",
