@@ -23,7 +23,6 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
-from polynet.app.services.plot import plot_molecule_3d
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
