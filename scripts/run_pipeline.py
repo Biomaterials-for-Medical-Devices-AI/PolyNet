@@ -397,7 +397,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     dataset = None
     repr_cfg = _build_repr_config(cfg)
-
+    #TODO compare user selected graph representation with the analysis
     if gnn_enabled:
         t0 = announce("2. Build graph dataset")
         try:
