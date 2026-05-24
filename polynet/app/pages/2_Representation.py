@@ -11,6 +11,7 @@ from polynet.app.components.forms.representation import (
     select_polymer_descriptors,
     select_weight_factor,
 )
+from polynet.app.components.graph_display import show_graph_visualization
 from polynet.app.options.file_paths import (
     data_options_path,
     graph_feature_analysis_path,
@@ -90,25 +91,6 @@ def parse_representation_options(
             repr_cfg=representation_options,
             out_dir=experiment_path,
         )
-
-        # st.write(dataset[0])
-
-        # if st.selectbox(
-        #     "Select a molecule to display", options=data[data_options.id_col], key="mol_selection"
-        # ):
-        #     if len(data_options.smiles_cols) > 1:
-        #         mol = st.selectbox(
-        #             "Select which molecule to display",
-        #             options=data_options.smiles_cols,
-        #             key="smiles_selection",
-        #         )
-        #     else:
-        #         mol = data_options.smiles_cols[0]
-        #     smiles = data.loc[
-        #         data[data_options.id_col] == st.session_state["mol_selection"], mol
-        #     ].values[0]
-        #     st.write(f"Displaying molecule: {smiles}")
-        #     plot_molecule_3d(smiles=smiles)
 
 
 st.header("Representation of Polymers")
@@ -198,4 +180,17 @@ if experiment_name:
             data_options=data_opts,
             polymer_descriptors=polymer_descriptors,
             weights_col=weights,
+        )
+
+    # -----------------------------------------------------------------------
+    # Graph preview — rendered outside the button block so it persists across
+    # all reruns (molecule-selector changes, widget interactions, page revisits).
+    # show_graph_visualization is a no-op when no GNN .pt files exist yet,
+    # so it is safe to call unconditionally whenever the saved config exists.
+    # -----------------------------------------------------------------------
+    if representation_opts.exists():
+        show_graph_visualization(
+            experiment_path=experiment_path,
+            data_opts=data_opts,
+            repr_cfg=load_options(path=representation_opts, options_class=RepresentationConfig),
         )
