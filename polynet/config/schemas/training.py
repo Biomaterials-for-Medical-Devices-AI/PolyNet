@@ -108,11 +108,7 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         """
         strategy = self.hpo_split_strategy
 
-        _DEFAULTS = {
-            "hpo_n_folds": 5,
-            "hpo_val_fraction": 0.2,
-            "hpo_n_repeats": 3,
-        }
+        _DEFAULTS = {"hpo_n_folds": 5, "hpo_val_fraction": 0.2, "hpo_n_repeats": 3}
 
         if strategy == HpoSplitStrategy.CrossValidation:
             if self.hpo_val_fraction != _DEFAULTS["hpo_val_fraction"]:
