@@ -331,6 +331,10 @@ def train_gnn(
         random_seed=random_seed,
         target_transform=target_cfg.strategy,
         epochs=gnn_cfg.epochs,
+        hpo_split_strategy=gnn_cfg.hpo_split_strategy,
+        hpo_n_folds=gnn_cfg.hpo_n_folds,
+        hpo_val_fraction=gnn_cfg.hpo_val_fraction,
+        hpo_n_repeats=gnn_cfg.hpo_n_repeats,
     )
 
     for model_name, model in trained_models.items():
