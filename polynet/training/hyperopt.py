@@ -28,11 +28,18 @@ from ray import tune
 from ray.air import session
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 import torch
 from torch_geometric.loader import DataLoader
 
-from polynet.config.enums import Network, Optimizer, ProblemType, Scheduler, TrainingParam
+from polynet.config.enums import (
+    HpoSplitStrategy,
+    Network,
+    Optimizer,
+    ProblemType,
+    Scheduler,
+    TrainingParam,
+)
 from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
@@ -40,6 +47,73 @@ from polynet.factories.optimizer import create_optimizer, create_scheduler
 from polynet.training.gnn import eval_network, train_network
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Split helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_splits(
+    dataset: list,
+    problem_type: ProblemType,
+    strategy: HpoSplitStrategy,
+    random_seed: int,
+    n_folds: int = 5,
+    val_fraction: float = 0.2,
+    n_repeats: int = 3,
+) -> list[tuple[list[int], list[int]]]:
+    """
+    Build train/val index pairs for the HPO target function.
+
+    Parameters
+    ----------
+    dataset:
+        Full graph list passed to the HPO run.
+    problem_type:
+        Used to choose stratified vs plain splits for classification.
+    strategy:
+        Which split strategy to use.
+    random_seed:
+        Base random seed; repeated strategies offset this per repeat.
+    n_folds:
+        Number of folds for ``CrossValidation``.
+    val_fraction:
+        Fraction held out for validation in ``Holdout`` / ``RepeatedHoldout``.
+    n_repeats:
+        Number of independent splits for ``RepeatedHoldout``.
+
+    Returns
+    -------
+    list[tuple[list[int], list[int]]]
+        List of ``(train_indices, val_indices)`` pairs.
+    """
+    n = len(dataset)
+    y = [data.y.item() for data in dataset]
+    stratify = y if problem_type == ProblemType.Classification else None
+
+    if strategy == HpoSplitStrategy.CrossValidation:
+        cv = (
+            StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
+            if problem_type == ProblemType.Classification
+            else KFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
+        )
+        return [(tr.tolist(), va.tolist()) for tr, va in cv.split(np.zeros(n), y)]
+
+    if strategy == HpoSplitStrategy.Holdout:
+        tr, va = train_test_split(
+            range(n), test_size=val_fraction, random_state=random_seed, stratify=stratify
+        )
+        return [(list(tr), list(va))]
+
+    # RepeatedHoldout
+    splits = []
+    for i in range(n_repeats):
+        tr, va = train_test_split(
+            range(n), test_size=val_fraction, random_state=random_seed + i, stratify=stratify
+        )
+        splits.append((list(tr), list(va)))
+    return splits
 
 
 # ---------------------------------------------------------------------------
@@ -56,7 +130,10 @@ def gnn_hyp_opt(
     iteration: int,
     problem_type: ProblemType | str,
     random_seed: int,
+    hpo_split_strategy: HpoSplitStrategy = HpoSplitStrategy.CrossValidation,
     n_folds: int = 5,
+    val_fraction: float = 0.2,
+    n_repeats: int = 3,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
@@ -83,9 +160,20 @@ def gnn_hyp_opt(
     problem_type:
         Classification or regression.
     random_seed:
-        Random seed for cross-validation fold generation.
+        Random seed for split generation.
+    hpo_split_strategy:
+        How to split data for HPO trials. ``CrossValidation`` (default) keeps
+        the original K-fold behaviour with a single report per trial.
+        ``Holdout`` and ``RepeatedHoldout`` report per epoch, enabling ASHA
+        early stopping.
     n_folds:
-        Number of cross-validation folds used inside the target function.
+        Number of folds. Used only when ``hpo_split_strategy`` is
+        ``CrossValidation``.
+    val_fraction:
+        Fraction of data used for validation. Used by ``Holdout`` and
+        ``RepeatedHoldout``.
+    n_repeats:
+        Number of independent random splits. Used only by ``RepeatedHoldout``.
 
     Returns
     -------
@@ -104,28 +192,33 @@ def gnn_hyp_opt(
         logger.info(f"Found existing HPO results at {results_csv}. Loading best config.")
         return _load_best_config(hop_results_path, gnn_arch, config)
 
-    # --- Cross-validation fold indices ---
-    y = [data.y.item() for data in dataset]
-    cv = (
-        StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-        if problem_type == ProblemType.Classification
-        else KFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
+    # --- Split indices ---
+    splits = _build_splits(
+        dataset=dataset,
+        problem_type=problem_type,
+        strategy=hpo_split_strategy,
+        random_seed=random_seed,
+        n_folds=n_folds,
+        val_fraction=val_fraction,
+        n_repeats=n_repeats,
     )
-    train_fold_idxs, val_fold_idxs = [], []
-    for train_idx, val_idx in cv.split(np.zeros(len(y)), y):
-        train_fold_idxs.append(train_idx)
-        val_fold_idxs.append(val_idx)
 
     # --- Ray Tune configuration ---
     tune_config = {k: tune.choice(v) if isinstance(v, list) else v for k, v in config.items()}
 
-    asha = ASHAScheduler(
-        time_attr="epoch",
-        metric="val_loss",
-        mode="min",
-        max_t=250,
-        grace_period=50,
-        reduction_factor=2,
+    # ASHA is meaningful only for strategies that report per epoch.
+    use_asha = hpo_split_strategy != HpoSplitStrategy.CrossValidation
+    asha = (
+        ASHAScheduler(
+            time_attr="epoch",
+            metric="val_loss",
+            mode="min",
+            max_t=250,
+            grace_period=50,
+            reduction_factor=2,
+        )
+        if use_asha
+        else None
     )
 
     reporter = CLIReporter(
@@ -144,8 +237,8 @@ def gnn_hyp_opt(
             _gnn_target_function,
             dataset=dataset,
             num_classes=num_classes,
-            train_idxs=train_fold_idxs,
-            val_idxs=val_fold_idxs,
+            splits=splits,
+            strategy=hpo_split_strategy,
             network=gnn_arch,
             problem_type=problem_type,
         ),
@@ -177,14 +270,19 @@ def _gnn_target_function(
     config: dict,
     dataset: list,
     num_classes: int,
-    train_idxs: list[list[int]],
-    val_idxs: list[list[int]],
+    splits: list[tuple[list[int], list[int]]],
+    strategy: HpoSplitStrategy,
     network: Network,
     problem_type: ProblemType,
 ) -> None:
     """
-    Ray Tune objective function — trains a GNN over K folds and reports
-    mean and std validation loss.
+    Ray Tune objective function — trains a GNN and reports validation loss.
+
+    For ``CrossValidation``: trains each fold fully (250 epochs) and reports
+    once at the end with the mean/std across folds. ASHA is not active.
+
+    For ``Holdout`` / ``RepeatedHoldout``: trains all splits in epoch lockstep
+    and reports after every epoch so ASHA can prune unpromising trials.
 
     This function is called by Ray Tune for each sampled configuration.
     It is not intended for direct use.
@@ -196,52 +294,102 @@ def _gnn_target_function(
     batch_size = cfg.pop(TrainingParam.BatchSize)
     cfg.pop(TrainingParam.AsymmetricLossStrength, None)
 
-    fold_val_losses: list[float] = []
+    loss_fn = create_loss(problem_type)
 
-    for train_idx, val_idx in zip(train_idxs, val_idxs):
-        train_set = [dataset[i] for i in train_idx]
-        val_set = [dataset[i] for i in val_idx]
+    if strategy == HpoSplitStrategy.CrossValidation:
+        # Original behaviour: train each fold fully, report once at end.
+        fold_val_losses: list[float] = []
 
-        train_loader = DataLoader(
-            train_set,
-            batch_size=batch_size,
-            shuffle=True,
-            drop_last=len(train_set) % batch_size == 1,
+        for train_idx, val_idx in splits:
+            train_set = [dataset[i] for i in train_idx]
+            val_set = [dataset[i] for i in val_idx]
+
+            train_loader = DataLoader(
+                train_set,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=len(train_set) % batch_size == 1,
+            )
+            val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+
+            model = create_network(
+                network=network,
+                problem_type=problem_type,
+                n_node_features=dataset[0].num_node_features,
+                n_edge_features=dataset[0].num_edge_features,
+                n_classes=num_classes,
+                **cfg,
+            ).to(device)
+
+            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
+            scheduler = create_scheduler(
+                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            )
+
+            best_val_loss = float("inf")
+            for _ in range(1, 251):
+                train_network(model, train_loader, loss_fn, optimizer, device)
+                val_loss = eval_network(model, val_loader, loss_fn, device)
+                scheduler.step(val_loss)
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+
+            fold_val_losses.append(best_val_loss)
+
+        session.report(
+            {
+                "val_loss": float(np.mean(fold_val_losses)),
+                "val_loss_std": float(np.std(fold_val_losses)),
+            }
         )
-        val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 
-        model = create_network(
-            network=network,
-            problem_type=problem_type,
-            n_node_features=dataset[0].num_node_features,
-            n_edge_features=dataset[0].num_edge_features,
-            n_classes=num_classes,
-            **cfg,
-        ).to(device)
+    else:
+        # Holdout / RepeatedHoldout: epoch-lockstep with per-epoch reporting.
+        split_data = []
+        for train_idx, val_idx in splits:
+            train_set = [dataset[i] for i in train_idx]
+            val_set = [dataset[i] for i in val_idx]
 
-        optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-        scheduler = create_scheduler(
-            Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
-        )
-        loss_fn = create_loss(problem_type)
+            train_loader = DataLoader(
+                train_set,
+                batch_size=batch_size,
+                shuffle=True,
+                drop_last=len(train_set) % batch_size == 1,
+            )
+            val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
 
-        best_val_loss = float("inf")
+            model = create_network(
+                network=network,
+                problem_type=problem_type,
+                n_node_features=dataset[0].num_node_features,
+                n_edge_features=dataset[0].num_edge_features,
+                n_classes=num_classes,
+                **cfg,
+            ).to(device)
 
-        for _ in range(1, 251):
-            train_network(model, train_loader, loss_fn, optimizer, device)
-            val_loss = eval_network(model, val_loader, loss_fn, device)
-            scheduler.step(val_loss)
-            if val_loss < best_val_loss:
-                best_val_loss = val_loss
+            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
+            scheduler = create_scheduler(
+                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            )
+            split_data.append((model, train_loader, val_loader, optimizer, scheduler))
 
-        fold_val_losses.append(best_val_loss)
+        best_val_losses = [float("inf")] * len(split_data)
 
-    session.report(
-        {
-            "val_loss": float(np.mean(fold_val_losses)),
-            "val_loss_std": float(np.std(fold_val_losses)),
-        }
-    )
+        for epoch in range(1, 251):
+            for k, (model, train_loader, val_loader, optimizer, scheduler) in enumerate(split_data):
+                train_network(model, train_loader, loss_fn, optimizer, device)
+                val_loss = eval_network(model, val_loader, loss_fn, device)
+                scheduler.step(val_loss)
+                if val_loss < best_val_losses[k]:
+                    best_val_losses[k] = val_loss
+
+            session.report(
+                {
+                    "val_loss": float(np.mean(best_val_losses)),
+                    "val_loss_std": float(np.std(best_val_losses)),
+                    "epoch": epoch,
+                }
+            )
 
 
 # ---------------------------------------------------------------------------

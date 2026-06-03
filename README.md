@@ -42,7 +42,7 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **PSMILES attachment-point handling** — opt-in `IsAttachmentPoint` atom feature strips `*` (wildcard) atoms from the graph and flags the atoms that were attached to them, replacing dangling pseudo-element nodes with an explicit boolean marker
 - **Cross-monomer attention** — optional attention mechanism that models interactions between monomer subgraphs
 - **PolyMetriX descriptors** — polymer-aware chemical descriptors (molecular weight, ring counts, TPSA, etc.) computed on the full repeat unit, side chain, or backbone, with configurable aggregation; three modes — `side_chain`, `backbone`, and `polymer` — can be used in any combination
-- **Automatic HPO** — Ray Tune with ASHA early stopping when no hyperparameters are provided
+- **Automatic HPO** — Ray Tune with configurable split strategy (cross-validation, holdout, repeated holdout); ASHA early stopping active for holdout-based strategies
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
 - **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features
@@ -843,6 +843,12 @@ gnn_training:
 
     MPNN: {}                       # Empty → triggers automatic HPO
 
+  # HPO split strategy (optional — all fields below show their defaults)
+  hpo_split_strategy: "cross_validation"  # cross_validation | holdout | repeated_holdout
+  hpo_n_folds: 5                          # folds used by cross_validation
+  hpo_val_fraction: 0.2                   # val fraction used by holdout / repeated_holdout
+  hpo_n_repeats: 3                        # number of random splits for repeated_holdout
+
 training:
   epochs: 250
 ```
@@ -865,6 +871,65 @@ training:
 | `cross_att` | `false` | Enable cross-monomer attention |
 | `apply_weighting_to_graph` | `"PerMonomerPooling"` | One of: `PerMonomerPooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `BeforePooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), or `BeforeMPP` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs) |
 | `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Automatically explored by HPO over `[null, 0.25, 0.5, 0.75, 1.0]` for classification tasks. Ignored for regression. |
+
+### Automatic HPO configuration
+
+HPO is triggered automatically for any architecture whose parameter block is left empty (`{}`). Ray Tune samples 150 random configurations from the search grid and evaluates them using one of three **split strategies** that control how the train+val data is partitioned inside each trial.
+
+#### Split strategies
+
+| Strategy | `hpo_split_strategy` value | Speed | Reliability | ASHA pruning |
+|---|---|---|---|---|
+| **K-fold cross-validation** | `cross_validation` | Slowest (K × epochs per trial) | Highest — mean across all folds | ✗ (single report at end) |
+| **Holdout** | `holdout` | Fastest (1 split, reports per epoch) | Lower — single random split | ✓ |
+| **Repeated holdout** | `repeated_holdout` | Intermediate (N splits, reports per epoch) | Good — average across N repeats | ✓ |
+
+- **`cross_validation`** (default) — the dataset is split into `hpo_n_folds` folds. Each trial trains one model per fold for the full number of epochs and reports a single aggregated val loss at the end. This is the most statistically reliable option and the right choice for small datasets (< ~500 samples) where a single random split would have high variance.
+
+- **`holdout`** — a single stratified (classification) or random (regression) train/val split is created using `hpo_val_fraction`. Each trial reports val loss after every epoch, so Ray Tune's ASHA scheduler can prune underperforming trials early. This is 5× faster than 5-fold CV and is recommended for large datasets where a single well-sized validation set is sufficient.
+
+- **`repeated_holdout`** — `hpo_n_repeats` independent random splits are created. Trials train one model per split in epoch lockstep and report the mean val loss across all repeats after each epoch, enabling ASHA pruning. This offers a good balance between speed and reliability: 3 repeats are ~3× cheaper than 5-fold CV while averaging out the noise of a single holdout.
+
+#### HPO parameters
+
+| Parameter | Default | Applies to | Description |
+|---|---|---|---|
+| `hpo_split_strategy` | `cross_validation` | all | Split strategy for HPO trials |
+| `hpo_n_folds` | `5` | `cross_validation` | Number of CV folds |
+| `hpo_val_fraction` | `0.2` | `holdout`, `repeated_holdout` | Fraction of data held out for validation |
+| `hpo_n_repeats` | `3` | `repeated_holdout` | Number of independent random splits |
+
+#### Example configurations
+
+**Fast HPO for a large dataset (recommended starting point for > ~1 000 samples):**
+```yaml
+gnn_training:
+  gnn_convolutional_layers:
+    GCN: {}
+  hpo_split_strategy: "holdout"
+  hpo_val_fraction: 0.15
+```
+
+**Balanced speed/reliability with repeated holdout (300–1 000 samples):**
+```yaml
+gnn_training:
+  gnn_convolutional_layers:
+    GCN: {}
+  hpo_split_strategy: "repeated_holdout"
+  hpo_val_fraction: 0.2
+  hpo_n_repeats: 3
+```
+
+**Thorough cross-validation for small datasets (< ~300 samples, default):**
+```yaml
+gnn_training:
+  gnn_convolutional_layers:
+    GCN: {}
+  hpo_split_strategy: "cross_validation"
+  hpo_n_folds: 5
+```
+
+> **Note:** HPO results are cached to `{output_dir}/gnn_hyp_opt/iteration_{n}/{arch}/{arch}.csv`. If this file already exists when the pipeline is re-run, the cached best configuration is reloaded without repeating the search — delete the file to force a fresh run.
 
 ### `tml_models`
 
