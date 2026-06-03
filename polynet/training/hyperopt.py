@@ -32,7 +32,14 @@ from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 import torch
 from torch_geometric.loader import DataLoader
 
-from polynet.config.enums import HpoSplitStrategy, Network, Optimizer, ProblemType, Scheduler, TrainingParam
+from polynet.config.enums import (
+    HpoSplitStrategy,
+    Network,
+    Optimizer,
+    ProblemType,
+    Scheduler,
+    TrainingParam,
+)
 from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
@@ -201,14 +208,18 @@ def gnn_hyp_opt(
 
     # ASHA is meaningful only for strategies that report per epoch.
     use_asha = hpo_split_strategy != HpoSplitStrategy.CrossValidation
-    asha = ASHAScheduler(
-        time_attr="epoch",
-        metric="val_loss",
-        mode="min",
-        max_t=250,
-        grace_period=50,
-        reduction_factor=2,
-    ) if use_asha else None
+    asha = (
+        ASHAScheduler(
+            time_attr="epoch",
+            metric="val_loss",
+            mode="min",
+            max_t=250,
+            grace_period=50,
+            reduction_factor=2,
+        )
+        if use_asha
+        else None
+    )
 
     reporter = CLIReporter(
         parameter_columns=[
