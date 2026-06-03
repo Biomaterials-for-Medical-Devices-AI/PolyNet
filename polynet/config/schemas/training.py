@@ -7,6 +7,8 @@ Both schemas inherit from ``HyperparamOptimConfig`` for the shared
 hyperparameter optimisation flag. All other fields are model-family specific.
 """
 
+import warnings
+
 from pydantic import Field, model_validator
 
 from polynet.config.enums import HpoSplitStrategy, Network, TraditionalMLModel, TransformDescriptor
@@ -82,6 +84,84 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
                 "train_gnn is True but gnn_convolutional_layers is empty. "
                 "Define at least one GNN architecture to train."
             )
+        return self
+
+    @model_validator(mode="after")
+    def warn_on_unused_hpo_params(self) -> "TrainGNNConfig":
+        """
+        Warn when HPO parameters are set to non-default values that have no
+        effect under the chosen ``hpo_split_strategy``.
+
+        Each strategy uses only a subset of the four HPO parameters:
+
+        - ``cross_validation``  → only ``hpo_n_folds`` is used.
+          ``hpo_val_fraction`` and ``hpo_n_repeats`` are ignored.
+
+        - ``holdout``           → only ``hpo_val_fraction`` is used.
+          ``hpo_n_folds`` and ``hpo_n_repeats`` are ignored.
+
+        - ``repeated_holdout``  → ``hpo_val_fraction`` and ``hpo_n_repeats``
+          are used. ``hpo_n_folds`` is ignored.
+
+        Only non-default values trigger a warning, because a field left at its
+        default was almost certainly not intentionally set by the user.
+        """
+        strategy = self.hpo_split_strategy
+
+        _DEFAULTS = {
+            "hpo_n_folds": 5,
+            "hpo_val_fraction": 0.2,
+            "hpo_n_repeats": 3,
+        }
+
+        if strategy == HpoSplitStrategy.CrossValidation:
+            if self.hpo_val_fraction != _DEFAULTS["hpo_val_fraction"]:
+                warnings.warn(
+                    f"hpo_val_fraction={self.hpo_val_fraction!r} has no effect when "
+                    "hpo_split_strategy='cross_validation'. "
+                    "Expected: set hpo_n_folds to control the number of CV folds instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if self.hpo_n_repeats != _DEFAULTS["hpo_n_repeats"]:
+                warnings.warn(
+                    f"hpo_n_repeats={self.hpo_n_repeats!r} has no effect when "
+                    "hpo_split_strategy='cross_validation'. "
+                    "Expected: set hpo_n_folds to control the number of CV folds instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        elif strategy == HpoSplitStrategy.Holdout:
+            if self.hpo_n_folds != _DEFAULTS["hpo_n_folds"]:
+                warnings.warn(
+                    f"hpo_n_folds={self.hpo_n_folds!r} has no effect when "
+                    "hpo_split_strategy='holdout'. "
+                    "Expected: set hpo_val_fraction to control the validation split size instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+            if self.hpo_n_repeats != _DEFAULTS["hpo_n_repeats"]:
+                warnings.warn(
+                    f"hpo_n_repeats={self.hpo_n_repeats!r} has no effect when "
+                    "hpo_split_strategy='holdout'. "
+                    "Expected: use hpo_split_strategy='repeated_holdout' if you want "
+                    "multiple independent splits.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
+        elif strategy == HpoSplitStrategy.RepeatedHoldout:
+            if self.hpo_n_folds != _DEFAULTS["hpo_n_folds"]:
+                warnings.warn(
+                    f"hpo_n_folds={self.hpo_n_folds!r} has no effect when "
+                    "hpo_split_strategy='repeated_holdout'. "
+                    "Expected: set hpo_val_fraction and hpo_n_repeats to control the "
+                    "validation fraction and number of random splits instead.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+
         return self
 
 
