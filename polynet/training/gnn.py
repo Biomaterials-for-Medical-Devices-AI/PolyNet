@@ -32,6 +32,7 @@ from torch_geometric.data import Dataset
 from torch_geometric.loader import DataLoader
 
 from polynet.config.enums import (
+    HpoSplitStrategy,
     Network,
     Optimizer,
     ProblemType,
@@ -99,6 +100,10 @@ def train_gnn_ensemble(
     random_seed: int,
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
     epochs: int = 250,
+    hpo_split_strategy: HpoSplitStrategy = HpoSplitStrategy.CrossValidation,
+    hpo_n_folds: int = 5,
+    hpo_val_fraction: float = 0.2,
+    hpo_n_repeats: int = 3,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -132,6 +137,16 @@ def train_gnn_ensemble(
         ``y_true`` during inference is always in the original target range.
     epochs:
         Number of training epochs per model (default 250).
+    hpo_split_strategy:
+        Split strategy for HPO trials. ``CrossValidation`` (default) keeps
+        the original K-fold behaviour. ``Holdout`` and ``RepeatedHoldout``
+        enable ASHA early stopping during HPO.
+    hpo_n_folds:
+        Number of CV folds. Used only with ``CrossValidation``.
+    hpo_val_fraction:
+        Validation fraction for ``Holdout`` / ``RepeatedHoldout``.
+    hpo_n_repeats:
+        Number of independent splits for ``RepeatedHoldout``.
 
     Returns
     -------
@@ -217,6 +232,10 @@ def train_gnn_ensemble(
                     iteration=iteration,
                     problem_type=problem_type,
                     random_seed=seed,
+                    hpo_split_strategy=hpo_split_strategy,
+                    n_folds=hpo_n_folds,
+                    val_fraction=hpo_val_fraction,
+                    n_repeats=hpo_n_repeats,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")
