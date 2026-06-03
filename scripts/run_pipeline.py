@@ -178,6 +178,10 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
         gnn_convolutional_layers=layers,
         share_gnn_parameters=gnn_dict.get("share_gnn_parameters", True),
         epochs=epochs,
+        hpo_split_strategy=gnn_dict.get("hpo_split_strategy", "cross_validation"),
+        hpo_n_folds=gnn_dict.get("hpo_n_folds", 5),
+        hpo_val_fraction=gnn_dict.get("hpo_val_fraction", 0.2),
+        hpo_n_repeats=gnn_dict.get("hpo_n_repeats", 3),
     )
 
 
