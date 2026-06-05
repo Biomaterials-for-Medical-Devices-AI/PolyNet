@@ -135,7 +135,8 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         bad_cols = [
             col
             for col in Xdf.columns
-            if Xdf[col].isnull().any() or np.isinf(Xdf[col].to_numpy(dtype=float, na_value=np.nan)).any()
+            if Xdf[col].isnull().any()
+            or np.isinf(Xdf[col].to_numpy(dtype=float, na_value=np.nan)).any()
         ]
 
         if bad_cols:
