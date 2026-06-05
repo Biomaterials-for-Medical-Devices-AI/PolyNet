@@ -222,6 +222,14 @@ def train_tml_ensemble(
             X_train, y_train = train_df.iloc[:, :-1], train_df.iloc[:, -1]
             X_test, y_test = test_df.iloc[:, :-1], test_df.iloc[:, -1]
 
+            logger.info(
+                "[%s] iteration %d: fitting feature transformer on %d training samples, "
+                "%d features.",
+                df_name,
+                iteration,
+                len(X_train),
+                X_train.shape[1],
+            )
             transformer = FeatureTransformer(scaler=transform_type, selectors=feature_selection)
             transformer.fit(X_train)
 

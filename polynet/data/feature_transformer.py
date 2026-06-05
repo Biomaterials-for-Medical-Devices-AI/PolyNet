@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 import numpy as np
@@ -17,6 +18,8 @@ from sklearn.preprocessing import (
 
 from polynet.config.enums import FeatureSelection, ProblemType, TransformDescriptor
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
+
+logger = logging.getLogger(__name__)
 
 
 class FeatureTransformer(BaseEstimator, TransformerMixin):
@@ -71,6 +74,10 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         self.selected_mask_: Optional[np.ndarray] = None
         self.selected_features_: Optional[list[str]] = None
         self.feature_names_in_: Optional[list[str]] = None
+        # Per-column training means (raw space, post-sanitisation) used to
+        # impute NaN / ±inf values that appear in inference data for columns
+        # that were clean during training.
+        self.fill_values_: Optional[dict[str, float]] = None
         self._is_fit = False
 
     # -----------------------------
@@ -101,6 +108,111 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         raise ValueError(f"Unknown scaler: {s!r}")
 
     @staticmethod
+    def _drop_problematic_columns(Xdf: pd.DataFrame) -> pd.DataFrame:
+        """
+        Identify and drop columns that contain NaN or ±infinity values.
+
+        Called during ``fit()`` only. These values cannot be handled by any
+        sklearn scaler and would cause a ``ValueError`` at fit time. The
+        expected input is a fully numeric DataFrame where every column
+        represents a molecular descriptor.
+
+        Expected behaviour
+        ------------------
+        - Columns with at least one ``NaN``, ``+inf``, or ``-inf`` value are
+          dropped unconditionally and a ``WARNING`` is emitted listing every
+          affected column name.
+        - If *all* columns are problematic the resulting DataFrame will be
+          empty; downstream code will then raise a ``ValueError`` with a
+          descriptive message rather than a cryptic sklearn traceback.
+        - Columns that are entirely finite are returned unchanged.
+
+        Parameters
+        ----------
+        Xdf:
+            Numeric feature DataFrame as produced by ``_as_frame()``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Copy of ``Xdf`` with problematic columns removed.
+        """
+        bad_cols = [
+            col
+            for col in Xdf.columns
+            if Xdf[col].isnull().any()
+            or np.isinf(Xdf[col].to_numpy(dtype=float, na_value=np.nan)).any()
+        ]
+
+        if bad_cols:
+            logger.warning(
+                "%d feature column(s) contain NaN or ±infinity and will be dropped before "
+                "fitting: %s",
+                len(bad_cols),
+                bad_cols,
+            )
+            Xdf = Xdf.drop(columns=bad_cols)
+
+        return Xdf
+
+    def _impute_for_transform(self, Xdf: pd.DataFrame) -> pd.DataFrame:
+        """
+        Impute NaN and ±infinity values in inference data with training column means.
+
+        Called during ``transform()`` after the input has been aligned to
+        ``feature_names_in_``. A descriptor may be well-defined for all
+        training molecules yet undefined (NaN) or numerically unstable (±inf)
+        for molecules in an external prediction or SHAP explanation set — for
+        example, Gasteiger-charge-based RDKit descriptors such as
+        ``MaxPartialCharge`` and ``BCUT2D_*`` return ``NaN`` for atoms RDKit
+        cannot parametrise (PSMILES dummy atoms, unusual elements). Filling
+        with the training mean keeps the prediction path alive and is
+        equivalent to predicting "average behaviour" for the missing feature.
+
+        Expected behaviour
+        ------------------
+        - Any column containing at least one ``NaN``, ``+inf``, or ``-inf``
+          is replaced with the mean of that column computed on the **training**
+          data (stored in ``fill_values_`` during ``fit()``).
+        - A ``WARNING`` is emitted listing every affected column so the user
+          can investigate the descriptor computation for the affected molecules.
+        - Columns with entirely finite values are returned unchanged.
+
+        Parameters
+        ----------
+        Xdf:
+            Numeric feature DataFrame already aligned to ``feature_names_in_``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Copy of ``Xdf`` with NaN / ±inf replaced by training column means.
+        """
+        numeric_arr = Xdf.to_numpy(dtype=float, na_value=np.nan)
+        bad_mask = np.isnan(numeric_arr) | np.isinf(numeric_arr)
+
+        if not bad_mask.any():
+            return Xdf
+
+        Xdf = Xdf.copy()
+        bad_col_names = []
+
+        for j, col in enumerate(Xdf.columns):
+            if bad_mask[:, j].any():
+                bad_col_names.append(col)
+                fill = self.fill_values_.get(col, 0.0) if self.fill_values_ else 0.0
+                Xdf[col] = Xdf[col].replace([np.inf, -np.inf], np.nan).fillna(fill)
+
+        logger.warning(
+            "%d feature column(s) contain NaN or ±infinity in the inference data and "
+            "were imputed with the training mean: %s",
+            len(bad_col_names),
+            bad_col_names,
+        )
+
+        return Xdf
+
+    @staticmethod
     def _get_threshold(params: dict, *, default: float, name: str = "threshold") -> float:
         """Read a float threshold from params with a default."""
         val = params.get(name, default)
@@ -126,7 +238,22 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame | np.ndarray, y=None):  # y unused (kept for sklearn API)
         Xdf = self._as_frame(X)
+
+        # Drop columns containing NaN / ±inf before any scaler or selector sees the data.
+        # feature_names_in_ is set *after* sanitisation so that transform() only ever
+        # looks for the columns that were actually used during fitting.
+        Xdf = self._drop_problematic_columns(Xdf)
+        if Xdf.empty or Xdf.shape[1] == 0:
+            raise ValueError(
+                "All feature columns were dropped due to NaN or ±infinity values. "
+                "Check your descriptor computation for the affected representation."
+            )
+
         self.feature_names_in_ = list(Xdf.columns)
+
+        # Store per-column training means so transform() can impute NaN / ±inf
+        # values that appear in inference data for columns that were clean here.
+        self.fill_values_ = Xdf.mean().to_dict()
 
         # 1) fit scaler
         self.scaler_ = self._make_scaler()
@@ -191,7 +318,15 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         if missing:
             raise ValueError(f"Input is missing required columns: {sorted(missing)}")
 
+        # Select only the columns that were present and clean during fit().
+        # Columns that were dropped at fit time (NaN/±inf in training data) are
+        # silently ignored here — extra columns in X are simply not selected.
         Xdf = Xdf.loc[:, self.feature_names_in_]
+
+        # Impute any NaN / ±inf that appear in this data but were not present
+        # during training (e.g. a descriptor undefined for a new molecule).
+        # Uses per-column training means stored in fill_values_ during fit().
+        Xdf = self._impute_for_transform(Xdf)
 
         if self.scaler_ is None:
             X_scaled = Xdf.to_numpy()
