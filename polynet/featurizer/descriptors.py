@@ -41,6 +41,7 @@ import logging
 
 import pandas as pd
 from polymetrix.featurizers.polymer import Polymer
+from rdkit import Chem
 from rdkit.Chem import Descriptors, MolFromSmiles, rdFingerprintGenerator
 
 from polynet.config.column_names import get_fp_col_names
@@ -217,6 +218,55 @@ def build_vector_representation(
 # ---------------------------------------------------------------------------
 
 
+def _replace_dummy_atoms_with_hydrogens(mol: Chem.Mol) -> Chem.Mol:
+    """
+    Replace polymer attachment-point dummy atoms (``*``) with hydrogens.
+
+    PSMILES strings represent the polymer repeat unit with one or more dummy
+    atoms (``*``, atomic number 0) marking where the backbone continues. RDKit
+    descriptors are defined for *molecules*, and a dummy atom has no physical
+    mass, valence, or electronegativity — so leaving it in place corrupts many
+    descriptors. In particular the Gasteiger-charge-based descriptors
+    (``MaxPartialCharge``, ``BCUT2D_*``, …) return ``NaN`` because no charge can
+    be assigned to a dummy atom, which is the root cause of the NaN columns seen
+    downstream in the TML pipeline.
+
+    This helper caps every attachment point with a hydrogen, then removes those
+    hydrogens again so they are folded into the neighbouring atom's *implicit*
+    hydrogen count — keeping them consistent with every other hydrogen in the
+    molecule (which RDKit also represents implicitly after ``MolFromSmiles``).
+    For example ``[*]CC[*]`` becomes ethane (``CC``) rather than a two-radical
+    fragment, giving physically meaningful descriptor values.
+
+    Parameters
+    ----------
+    mol:
+        RDKit molecule parsed from a (P)SMILES string.
+
+    Returns
+    -------
+    Chem.Mol
+        A new molecule with all ``*`` atoms converted to implicit hydrogens.
+        If the molecule contains no dummy atoms it is returned unchanged.
+    """
+    if not any(atom.GetAtomicNum() == 0 for atom in mol.GetAtoms()):
+        return mol
+
+    rwmol = Chem.RWMol(mol)
+    for atom in rwmol.GetAtoms():
+        if atom.GetAtomicNum() == 0:
+            atom.SetAtomicNum(1)  # turn * into an explicit hydrogen cap
+            atom.SetIsotope(0)  # drop [1*]/[2*] copolymer isotope labels
+            atom.SetFormalCharge(0)
+            atom.SetNoImplicit(False)
+
+    capped = rwmol.GetMol()
+    Chem.SanitizeMol(capped)
+    # RemoveHs folds the explicit cap hydrogens into the implicit-H count of
+    # their neighbours, matching the rest of the molecule's H representation.
+    return Chem.RemoveHs(capped)
+
+
 def calculate_descriptors(
     smiles_list: list[str], descriptors_list: list[str] | str = "all"
 ) -> tuple[dict[str, list[float]], list[str]]:
@@ -267,6 +317,19 @@ def calculate_descriptors(
         if mol is None:
             logger.warning(f"Could not parse SMILES '{smiles}' — skipping.")
             continue
+        # Cap polymer attachment points (*) with hydrogens so descriptors are
+        # computed on a valid, fully-valenced molecule instead of being
+        # corrupted (or returning NaN) by the massless dummy atoms.
+        try:
+            mol = _replace_dummy_atoms_with_hydrogens(mol)
+        except Exception as e:
+            logger.warning(
+                "Failed to replace dummy atoms with hydrogens for SMILES '%s' (%s: %s). "
+                "Computing descriptors on the original molecule.",
+                smiles,
+                type(e).__name__,
+                e,
+            )
         descriptors[smiles] = [func(mol) for func in selected_descriptors.values()]
 
     return descriptors, list(selected_descriptors.keys())
