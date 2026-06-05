@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
+
+logger = logging.getLogger(__name__)
 from sklearn.feature_selection import VarianceThreshold
 from sklearn.preprocessing import (
     MinMaxScaler,
@@ -101,6 +104,52 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         raise ValueError(f"Unknown scaler: {s!r}")
 
     @staticmethod
+    def _drop_problematic_columns(Xdf: pd.DataFrame) -> pd.DataFrame:
+        """
+        Identify and drop columns that contain NaN or ±infinity values.
+
+        These values cannot be handled by any sklearn scaler and would cause a
+        ``ValueError`` at fit time. The expected input is a fully numeric
+        DataFrame where every column represents a molecular descriptor.
+
+        Expected behaviour
+        ------------------
+        - Columns with at least one ``NaN``, ``+inf``, or ``-inf`` value are
+          dropped unconditionally and a ``WARNING`` is emitted listing every
+          affected column name.
+        - If *all* columns are problematic the resulting DataFrame will be
+          empty; downstream code will then raise a ``ValueError`` with a
+          descriptive message rather than a cryptic sklearn traceback.
+        - Columns that are entirely finite are returned unchanged.
+
+        Parameters
+        ----------
+        Xdf:
+            Numeric feature DataFrame as produced by ``_as_frame()``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Copy of ``Xdf`` with problematic columns removed.
+        """
+        bad_cols = [
+            col
+            for col in Xdf.columns
+            if Xdf[col].isnull().any() or np.isinf(Xdf[col].to_numpy(dtype=float, na_value=np.nan)).any()
+        ]
+
+        if bad_cols:
+            logger.warning(
+                "%d feature column(s) contain NaN or ±infinity and will be dropped before "
+                "fitting: %s",
+                len(bad_cols),
+                bad_cols,
+            )
+            Xdf = Xdf.drop(columns=bad_cols)
+
+        return Xdf
+
+    @staticmethod
     def _get_threshold(params: dict, *, default: float, name: str = "threshold") -> float:
         """Read a float threshold from params with a default."""
         val = params.get(name, default)
@@ -126,6 +175,17 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
 
     def fit(self, X: pd.DataFrame | np.ndarray, y=None):  # y unused (kept for sklearn API)
         Xdf = self._as_frame(X)
+
+        # Drop columns containing NaN / ±inf before any scaler or selector sees the data.
+        # feature_names_in_ is set *after* sanitisation so that transform() only ever
+        # looks for the columns that were actually used during fitting.
+        Xdf = self._drop_problematic_columns(Xdf)
+        if Xdf.empty or Xdf.shape[1] == 0:
+            raise ValueError(
+                "All feature columns were dropped due to NaN or ±infinity values. "
+                "Check your descriptor computation for the affected representation."
+            )
+
         self.feature_names_in_ = list(Xdf.columns)
 
         # 1) fit scaler
