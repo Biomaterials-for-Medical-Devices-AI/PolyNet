@@ -391,11 +391,27 @@ class Plot(StrEnum):
 
 
 class AttributionPlotType(StrEnum):
-    """Plot types available for the global fragment attribution view."""
+    """Plot types available for the global fragment attribution view (GNN)."""
 
     Ridge = "ridge"
     Bar = "bar"
     Strip = "strip"
+
+
+class ShapGlobalPlotType(StrEnum):
+    """Native SHAP plot types for the global TML attribution view.
+
+    These map directly onto ``shap.summary_plot`` plot styles:
+
+    - ``Beeswarm``: one dot per sample per feature, coloured by feature value
+      (``plot_type="dot"``) — the canonical global SHAP summary.
+    - ``Bar``: mean absolute SHAP value per feature (``plot_type="bar"``).
+    - ``Violin``: per-feature SHAP distribution as a violin (``plot_type="violin"``).
+    """
+
+    Beeswarm = "beeswarm"
+    Bar = "bar"
+    Violin = "violin"
 
 
 class DimensionalityReduction(StrEnum):
