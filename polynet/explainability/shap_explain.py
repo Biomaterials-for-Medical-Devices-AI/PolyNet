@@ -42,7 +42,6 @@ import logging
 from pathlib import Path
 
 import joblib
-from matplotlib.patches import Polygon
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -50,7 +49,7 @@ import pandas as pd
 from polynet.config.enums import ImportanceNormalisationMethod, ProblemType, ShapGlobalPlotType
 from polynet.config.paths import explanation_parent_directory, model_dir
 from polynet.explainability.explain import GlobalAttributionResult
-from polynet.explainability.visualization import get_cmap, plot_attribution_bar
+from polynet.explainability.visualization import get_cmap
 
 logger = logging.getLogger(__name__)
 
@@ -567,316 +566,71 @@ def merge_shap_attributions(
 
 
 # ---------------------------------------------------------------------------
-# Local visualisation helpers — arrow-based plots
+# Local SHAP plotting (native shap package)
 # ---------------------------------------------------------------------------
 
 
-def _arrow_right(x_start, x_end, y, bar_h, tip, notch_left: bool) -> list:
-    """Polygon vertices for a rightward-pointing arrow (positive SHAP contribution)."""
-    t = min(tip, (x_end - x_start) * 0.49)
-    pts = [
-        (x_start, y - bar_h),
-        (x_end - t, y - bar_h),
-        (x_end, y),
-        (x_end - t, y + bar_h),
-        (x_start, y + bar_h),
-    ]
-    if notch_left:
-        pts.append((x_start + t, y))
-    return pts
-
-
-def _arrow_left(x_start, x_end, y, bar_h, tip, notch_right: bool) -> list:
-    """Polygon vertices for a leftward-pointing arrow (negative SHAP contribution)."""
-    t = min(tip, (x_start - x_end) * 0.49)
-    pts = [
-        (x_start, y + bar_h),
-        (x_end + t, y + bar_h),
-        (x_end, y),
-        (x_end + t, y - bar_h),
-        (x_start, y - bar_h),
-    ]
-    if notch_right:
-        pts.append((x_start - t, y))
-    return pts
-
-
-def _plot_shap_force(
-    values: np.ndarray, feature_names: list[str], base_value: float, neg_color: str, pos_color: str
-) -> plt.Figure:
-    """
-    Arrow-based force plot anchored at *base_value*.
-
-    Positive features expand as right-pointing arrows to the left of the base;
-    negative features expand as left-pointing arrows to the right.  Each arrow
-    segment is labelled with the feature name and its SHAP value.
-    """
-    df = pd.DataFrame({"feature": feature_names, "value": values})
-    df["label"] = [f"{f}\n({v:+.4f})" for f, v in zip(feature_names, values)]
-
-    pos_df = df[df["value"] > 0].sort_values("value", ascending=False)
-    neg_df = df[df["value"] < 0].sort_values("value")
-
-    pos_total = float(pos_df["value"].sum()) if len(pos_df) else 0.0
-    neg_total = float(neg_df["value"].sum()) if len(neg_df) else 0.0
-    x_range = max(abs(pos_total) + abs(neg_total), 1e-9)
-
-    n_labels = max(len(pos_df), len(neg_df), 1)
-    fig_w, fig_h = 12, max(2.5, 0.22 * n_labels + 1.8)
-    figsize = (fig_w, fig_h)
-
-    y = 0.0
-    BAR_H = 0.15
-    tip = (BAR_H / 0.6) * (fig_h / fig_w) * x_range
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=150)
-
-    # Positive segments — right-pointing, expand leftward from base_value
-    current = base_value
-    for i, (_, row) in enumerate(pos_df.iterrows()):
-        x_end = current
-        x_start = current - row["value"]
-        ax.add_patch(
-            Polygon(
-                _arrow_right(x_start, x_end, y, BAR_H, tip, notch_left=(i > 0)),
-                closed=True,
-                facecolor=pos_color,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
-        ax.text(
-            (x_start + x_end) / 2,
-            y - BAR_H - 0.03,
-            row["label"],
-            ha="center",
-            va="top",
-            fontsize=7,
-            color=pos_color,
-        )
-        current = x_start
-
-    # Negative segments — left-pointing, expand rightward from base_value
-    current = base_value
-    for i, (_, row) in enumerate(neg_df.iterrows()):
-        x_start = current
-        x_end = current - row["value"]  # value < 0 → x_end > x_start
-        ax.add_patch(
-            Polygon(
-                _arrow_left(x_end, x_start, y, BAR_H, tip, notch_right=(i > 0)),
-                closed=True,
-                facecolor=neg_color,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
-        ax.text(
-            (x_start + x_end) / 2,
-            y - BAR_H - 0.03,
-            row["label"],
-            ha="center",
-            va="top",
-            fontsize=7,
-            color=neg_color,
-        )
-        current = x_end
-
-    # Base value and prediction markers
-    ax.axvline(base_value, color="black", linewidth=1.0, zorder=3)
-    ax.text(
-        base_value,
-        y + BAR_H + 0.03,
-        f"base\n{base_value:.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=7,
-    )
-
-    pred = base_value + float(df["value"].sum())
-    ax.axvline(pred, color="dimgray", linewidth=1.0, linestyle="--", zorder=3)
-    ax.text(
-        pred,
-        y + BAR_H + 0.03,
-        f"pred\n{pred:.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=7,
-        color="dimgray",
-    )
-
-    left_ext = base_value - pos_total
-    right_ext = base_value - neg_total
-    margin = x_range * 0.08
-    ax.set_xlim(left_ext - margin, right_ext + margin)
-
-    label_drop = 0.03 + 0.22 * n_labels
-    ax.set_ylim(y - BAR_H - label_drop - 0.05, y + BAR_H + 0.35)
-
-    ax.set_yticks([])
-    ax.set_xticks([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.set_title("SHAP Force Plot", fontsize=9, pad=4)
-    plt.tight_layout()
-    return fig
-
-
-def _plot_shap_waterfall(
-    values: np.ndarray, feature_names: list[str], base_value: float, neg_color: str, pos_color: str
-) -> plt.Figure:
-    """
-    Arrow-based waterfall plot.
-
-    One horizontal arrow per feature, cascading from *base_value* to the final
-    prediction.  Features are sorted by |SHAP| ascending (smallest at top,
-    largest at bottom).  Arrow direction shows the sign of each contribution.
-    """
-    # Sort ascending by |shap| so the largest contributor is at the bottom
-    order = np.argsort(np.abs(values))
-    shap_sorted = values[order]
-    names_sorted = [feature_names[i] for i in order]
-
-    n = len(names_sorted)
-    x_range = max(float(np.sum(np.abs(shap_sorted))), 1e-9)
-    base_tip = x_range * 0.04
-
-    fig, ax = plt.subplots(figsize=(9, max(3.5, n * 0.40 + 1.5)), dpi=150)
-
-    BAR_H = 0.28
-    running = base_value
-    all_x = [base_value]
-
-    for i, (val, _) in enumerate(zip(shap_sorted, names_sorted)):
-        y = float(i)
-        x0, x1 = running, running + val
-        all_x += [x0, x1]
-
-        if val == 0.0:
-            running += val
-            continue
-
-        color = pos_color if val >= 0 else neg_color
-        width = abs(val)
-        tip = min(base_tip, width * 0.40)
-        has_prev = i > 0
-
-        if val > 0:
-            pts = _arrow_right(x0, x1, y, BAR_H, tip, notch_left=has_prev)
-        else:
-            pts = _arrow_left(x0, x1, y, BAR_H, tip, notch_right=has_prev)
-
-        ax.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor="none", zorder=2))
-
-        label = f"{val:+.4f}"
-        mid_x = (x0 + x1) / 2
-        if width > x_range * 0.07:
-            ax.text(
-                mid_x,
-                y,
-                label,
-                ha="center",
-                va="center",
-                fontsize=7,
-                color="white",
-                weight="bold",
-                zorder=3,
-            )
-        else:
-            offset = x_range * 0.012
-            ax.text(
-                x1 + offset * np.sign(val),
-                y,
-                label,
-                ha="left" if val > 0 else "right",
-                va="center",
-                fontsize=6,
-                color=color,
-                zorder=3,
-            )
-
-        running += val
-
-    ax.set_yticks(range(n))
-    ax.set_yticklabels(names_sorted, fontsize=8)
-
-    ax.axvline(
-        base_value,
-        color="black",
-        linewidth=0.8,
-        linestyle="--",
-        alpha=0.6,
-        zorder=1,
-        label=f"base = {base_value:.3f}",
-    )
-
-    final_pred = base_value + float(np.sum(shap_sorted))
-    ax.axvline(
-        final_pred,
-        color="dimgray",
-        linewidth=0.8,
-        linestyle=":",
-        alpha=0.8,
-        zorder=1,
-        label=f"pred = {final_pred:.3f}",
-    )
-
-    margin = x_range * 0.10
-    ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
-    ax.set_ylim(-0.7, n - 0.3)
-    ax.set_xlabel("SHAP value (contribution to prediction)", fontsize=8)
-    ax.set_title(f"SHAP Waterfall  (base = {base_value:.3f},  pred = {final_pred:.3f})", fontsize=9)
-    ax.legend(fontsize=7, loc="upper right")
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout()
-    return fig
-
-
-def plot_shap_waterfall(
-    shap_values: dict[str, float],
+def plot_local_shap(
+    values: np.ndarray,
+    feature_names: list[str],
     base_value: float = 0.0,
+    data: np.ndarray | None = None,
     plot_type: str = "waterfall",
-    neg_color: str = "#40bcde",
-    pos_color: str = "#e64747",
-    top_n: int = 15,
+    max_display: int = 15,
 ) -> plt.Figure:
     """
-    Render a per-instance SHAP explanation as a waterfall, force, or bar plot.
+    Render a single-instance SHAP explanation with the native ``shap`` package.
 
     Parameters
     ----------
-    shap_values:
-        ``{feature_name: shap_value}`` for one sample (ensemble-averaged).
+    values:
+        1-D array of SHAP values for one sample (ensemble-merged, possibly
+        normalised), one entry per feature in ``feature_names``.
+    feature_names:
+        Feature names, parallel to ``values``.
     base_value:
-        Expected model output used as the anchor for waterfall / force plots.
+        Anchor for the waterfall / force plot (``E[f(x)]``). The cache stores
+        only SHAP values, so this defaults to 0.0; with normalisation enabled
+        the additive reconstruction is not meaningful anyway.
+    data:
+        Optional raw feature values for the instance, used to label each row as
+        ``value = feature``. ``None`` shows feature names only.
     plot_type:
-        ``"waterfall"`` — cascading arrow waterfall (one arrow per feature).
-        ``"force"`` — horizontal stacked arrow force plot.
-        ``"bar"`` — ranked mean-attribution bar chart.
-    neg_color, pos_color:
-        Hex colours for negative / positive attributions.
-    top_n:
-        Maximum features to show (sorted by |SHAP| descending).
+        ``"waterfall"`` (default), ``"force"``, or ``"bar"`` — native
+        ``shap.plots`` styles.
+    max_display:
+        Maximum number of features to show (waterfall / bar).
+
+    Returns
+    -------
+    plt.Figure
     """
-    if not shap_values:
+    import shap
+
+    if values is None or len(values) == 0:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No SHAP values available", ha="center", va="center")
         ax.axis("off")
         return fig
 
-    items = sorted(shap_values.items(), key=lambda kv: abs(kv[1]), reverse=True)[:top_n]
-    feature_names = [k for k, _ in items]
-    values = np.array([v for _, v in items])
+    explanation = shap.Explanation(
+        values=np.asarray(values, dtype=float),
+        base_values=float(base_value),
+        data=(np.asarray(data, dtype=float) if data is not None else None),
+        feature_names=list(feature_names),
+    )
 
+    plt.figure()
     if plot_type == "bar":
-        return plot_attribution_bar(
-            {f: [v] for f, v in zip(feature_names, values)},
-            neg_color=neg_color,
-            pos_color=pos_color,
-        )
+        shap.plots.bar(explanation, max_display=max_display, show=False)
     elif plot_type == "force":
-        return _plot_shap_force(values, feature_names, base_value, neg_color, pos_color)
+        shap.plots.force(explanation, matplotlib=True, show=False)
     else:  # waterfall
-        return _plot_shap_waterfall(values, feature_names, base_value, neg_color, pos_color)
+        shap.plots.waterfall(explanation, max_display=max_display, show=False)
+
+    fig = plt.gcf()
+    fig.tight_layout()
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -1131,13 +885,14 @@ def compute_local_shap_attribution(
     problem_type:
         Regression or Classification.
     neg_color, pos_color:
-        Attribution colours.
+        Accepted for API compatibility; the native ``shap`` local plots use
+        their own colour scheme and ignore these.
     normalisation_type:
         Normalisation strategy applied to SHAP values before plotting.
     target_class:
         Class index for classification.
     local_plot_type:
-        ``"waterfall"``, ``"force"``, or ``"bar"``.
+        ``"waterfall"``, ``"force"``, or ``"bar"`` — native ``shap.plots`` styles.
     predictions:
         Optional ``{sample_id: {"true": ..., "predicted": ...}}`` for label
         display in the result.
@@ -1158,10 +913,14 @@ def compute_local_shap_attribution(
         target_col=target_col,
     )
 
+    # Raw descriptor values (per instance) are used to label native SHAP plots.
+    str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
+
     results: dict[str, list[InstanceAttributionResult]] = {}
 
     for descriptor, cache_df in cache_by_descriptor.items():
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
+        descriptor_df = str_dfs.get(descriptor)
 
         # Merge ensemble
         merged_df = merge_shap_attributions(
@@ -1227,13 +986,21 @@ def compute_local_shap_attribution(
             true_label = str(pred_info.get("true", "N/A"))
             predicted_label = str(pred_info.get("predicted", "N/A"))
 
-            # Figure
-            shap_dict = dict(zip(feature_cols, normed_vals.tolist()))
-            fig = plot_shap_waterfall(
-                shap_values=shap_dict,
+            # Figure — native shap local plot. Raw feature values (when available)
+            # label each row; SHAP magnitudes are the merged/normalised values.
+            feature_matrix = _aligned_feature_matrix(
+                sample_index=pd.Index([sid]),
+                feature_cols=feature_cols,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+            )
+            instance_data = feature_matrix[0] if feature_matrix is not None else None
+            fig = plot_local_shap(
+                values=normed_vals,
+                feature_names=feature_cols,
+                base_value=0.0,
+                data=instance_data,
                 plot_type=local_plot_type,
-                neg_color=neg_color,
-                pos_color=pos_color,
             )
             plt.close("all")
 
