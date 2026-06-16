@@ -19,6 +19,7 @@ from polynet.app.options.file_paths import (
     polynet_experiments_base_dir,
     representation_options_path,
     train_gnn_model_options_path,
+    train_tml_model_options_path,
 )
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
@@ -29,16 +30,19 @@ from polynet.config.schemas import (
     RepresentationConfig,
     SplitConfig,
     TrainGNNConfig,
+    TrainTMLConfig,
 )
 
-st.header("Representation of Polymers")
+st.header("Analyse Results")
 
 st.markdown(
     """
-    In this section, you can build the representation of your polymers. This representation will be the input for the ML models you will train. The representation is built using the SMILES strings of the monomers, which are the building blocks of the polymers.
-    We currently support two types of representations:
-    1. **Graph Representation**: This representation is built using the SMILES strings of the monomers. The graph representation is built using the RDKit library, which is a collection of cheminformatics and machine learning tools. For this representation, the SMILES strings are converted into a graph representation, where the atoms are the nodes and the bonds are the edges. This representation is used to build the graph neural networks (GNNs) that will be trained on your dataset.
-    2. **Molecular Descriptors**: This representation is built using the RDKit library. The molecular descriptors are a set of numerical values that describe the structure and properties of the molecule. This approach effectively transforms the molecule into a vector representation. You can also use descriptors from the dataset, which you can concatenate with the RDkit descriptors or use them as a separate input to the model.
+    In this section, you can analyse the results of the models you have trained, for both
+    graph neural network (GNN) and traditional machine learning (TML) frameworks. Select an
+    experiment to explore its predictions and metrics. Depending on the problem type, you can
+    inspect parity plots (regression) or confusion matrices (classification) per model, set,
+    and iteration, and statistically compare models against each other on their predictions
+    and metrics.
     """
 )
 
@@ -64,11 +68,21 @@ if experiment_name:
         path=path_to_representation_opts, options_class=RepresentationConfig
     )
 
-    path_to_train_gnn_options = train_gnn_model_options_path(
-        experiment_path=polynet_experiments_base_dir() / experiment_name
+    # GNN and TML training options are loaded only when present, so experiments
+    # that trained only one framework (or both) all work on this page.
+    path_to_train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
+    train_gnn_options = (
+        load_options(path=path_to_train_gnn_options, options_class=TrainGNNConfig)
+        if path_to_train_gnn_options.exists()
+        else None
     )
 
-    train_gnn_options = load_options(path=path_to_train_gnn_options, options_class=TrainGNNConfig)
+    path_to_train_tml_options = train_tml_model_options_path(experiment_path=experiment_path)
+    train_tml_options = (
+        load_options(path=path_to_train_tml_options, options_class=TrainTMLConfig)
+        if path_to_train_tml_options.exists()
+        else None
+    )
 
     path_to_general_opts = general_options_path(experiment_path=experiment_path)
     general_experiment_options = load_options(
@@ -79,10 +93,11 @@ if experiment_name:
     split_options = load_options(path=path_to_split_options, options_class=SplitConfig)
     split_type = split_options.split_type
 
-    if not path_to_train_gnn_options.exists() or not path_to_general_opts.exists():
-        st.error(
-            "No models have been trained yet. Please train a model first in the 'Train GNN' section."
-        )
+    if (
+        not (path_to_train_gnn_options.exists() or path_to_train_tml_options.exists())
+        or not path_to_general_opts.exists()
+    ):
+        st.error("No models have been trained yet. Please train a GNN or TML model first.")
         st.stop()
 
     display_model_results(experiment_path=experiment_path, expanded=False)
@@ -103,7 +118,6 @@ if experiment_name:
         parity_plot = parity_plot_form(
             predictions_df=predictions,
             split_type=split_type,
-            gnn_training_options=train_gnn_options,
             data_options=data_options,
         )
 
@@ -122,7 +136,6 @@ if experiment_name:
         confusion_matrix_plot = confusion_matrix_plot_form(
             predictions_df=predictions,
             split_type=split_type,
-            gnn_training_options=train_gnn_options,
             data_options=data_options,
         )
 
