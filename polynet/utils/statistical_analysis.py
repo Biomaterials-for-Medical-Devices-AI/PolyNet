@@ -1,6 +1,62 @@
 import numpy as np
 from scipy.stats import ttest_rel, wilcoxon
 from statsmodels.stats.contingency_tables import mcnemar
+from statsmodels.stats.multitest import multipletests
+
+# User-facing label -> statsmodels ``multipletests`` method name.
+# ``None`` leaves the raw (uncorrected) p-values untouched.
+MULTIPLE_COMPARISON_METHODS: dict[str, str | None] = {
+    "Holm-Bonferroni": "holm",
+    "Bonferroni": "bonferroni",
+    "Benjamini-Hochberg (FDR)": "fdr_bh",
+    "None (raw p-values)": None,
+}
+
+
+def correct_pvalue_matrix(p_matrix: np.ndarray, method: str | None = "holm") -> np.ndarray:
+    """
+    Apply a multiple-comparison correction to a symmetric pairwise p-value matrix.
+
+    Pairwise model comparison produces ``k·(k - 1)/2`` simultaneous hypotheses,
+    so the raw p-values must be adjusted to control the family-wise error rate
+    (or the false discovery rate) before significance is judged.
+
+    Only the unique upper-triangle (``i < j``) finite entries are treated as the
+    family of hypotheses. Corrected values are mirrored back into the lower
+    triangle so the matrix stays symmetric; the diagonal is left untouched.
+
+    Parameters
+    ----------
+    p_matrix:
+        Symmetric ``(n_models, n_models)`` matrix of raw p-values.
+    method:
+        Any ``statsmodels.stats.multitest.multipletests`` method name
+        (e.g. ``"holm"``, ``"bonferroni"``, ``"fdr_bh"``). ``None`` returns the
+        matrix unchanged.
+
+    Returns
+    -------
+    np.ndarray
+        A new matrix with corrected p-values (the input is not modified).
+    """
+    if method is None:
+        return p_matrix
+
+    corrected_matrix = np.array(p_matrix, dtype=float)
+    n = corrected_matrix.shape[0]
+    upper = np.triu_indices(n, k=1)
+    pvals = corrected_matrix[upper]
+
+    finite = np.isfinite(pvals)
+    if finite.sum() == 0:
+        return corrected_matrix
+
+    adjusted = pvals.copy()
+    adjusted[finite] = multipletests(pvals[finite], method=method)[1]
+
+    corrected_matrix[upper] = adjusted
+    corrected_matrix[(upper[1], upper[0])] = adjusted  # mirror to lower triangle
+    return corrected_matrix
 
 
 def metrics_pvalue_matrix(metrics_dict, test="wilcoxon"):
