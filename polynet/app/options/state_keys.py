@@ -286,3 +286,4 @@ class PlotCustomiserStateKeys(StrEnum):
     CMap = "CMap"
     PlotLabelFontSize = "PlotLabelFontSize"
     LabelNames = "LabelNames"
+    AbbreviateLabels = "AbbreviateLabels"
