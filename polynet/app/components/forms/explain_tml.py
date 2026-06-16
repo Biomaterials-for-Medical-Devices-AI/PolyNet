@@ -19,7 +19,7 @@ from polynet.app.components.forms.explain_model import explain_mols_widget
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
-from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod, ProblemType
+from polynet.config.enums import ImportanceNormalisationMethod, ProblemType, ShapGlobalPlotType
 from polynet.config.schemas import DataConfig
 
 # ---------------------------------------------------------------------------
@@ -152,9 +152,9 @@ def _tml_global_tab(
 ) -> None:
     st.markdown(
         "**Which molecular features drive predictions across the population?**  \n"
-        "Select a set of samples and run to see a distribution of SHAP attributions "
-        "across all selected models. Each data point represents one real model prediction, "
-        "preserving the full ensemble spread."
+        "Select a set of samples and run to see a native SHAP summary "
+        "(beeswarm / bar / violin). SHAP values are averaged across the selected "
+        "ensemble models, giving one attribution per sample per feature."
     )
 
     explain_samples = explain_mols_widget(
@@ -168,11 +168,15 @@ def _tml_global_tab(
     with cols[0]:
         plot_type = st.radio(
             "Plot type",
-            options=[AttributionPlotType.Ridge, AttributionPlotType.Bar, AttributionPlotType.Strip],
+            options=[
+                ShapGlobalPlotType.Beeswarm,
+                ShapGlobalPlotType.Bar,
+                ShapGlobalPlotType.Violin,
+            ],
             format_func=lambda x: {
-                AttributionPlotType.Ridge: "Ridge (full distribution)",
-                AttributionPlotType.Bar: "Bar (mean ± 95 % CI)",
-                AttributionPlotType.Strip: "Strip (individual scores + mean)",
+                ShapGlobalPlotType.Beeswarm: "Beeswarm (per-sample, coloured by feature value)",
+                ShapGlobalPlotType.Bar: "Bar (mean |SHAP|)",
+                ShapGlobalPlotType.Violin: "Violin (per-feature distribution)",
             }[x],
             key=TMLExplainStateKeys.GlobalTMLPlotType,
             horizontal=False,
