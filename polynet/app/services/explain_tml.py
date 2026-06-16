@@ -14,7 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
-from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod, ProblemType
+from polynet.config.enums import ImportanceNormalisationMethod, ProblemType, ShapGlobalPlotType
 from polynet.explainability.shap_explain import (
     GlobalAttributionResult,
     InstanceAttributionResult,
@@ -34,11 +34,11 @@ def explain_tml_global(
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
     target_class: int | None = None,
     top_n: int | None = 10,
-    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
     cache_root: Path | None = None,
     target_col: str | None = None,
 ) -> None:
-    """Compute and render the global SHAP attribution distribution (one section per descriptor)."""
+    """Compute and render the global SHAP summary (one section per descriptor)."""
     results: dict[str, GlobalAttributionResult] = compute_global_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,
