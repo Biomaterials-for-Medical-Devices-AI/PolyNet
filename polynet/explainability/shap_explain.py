@@ -5,9 +5,11 @@ SHAP-based explainability pipeline for traditional ML (TML) models.
 
 Mirrors the GNN chemistry-masking pipeline in structure but uses SHAP values as
 attributions and a flat CSV cache (one per descriptor) instead of nested JSON.
-All three distribution plots are shared with the GNN pipeline via
-``polynet.explainability.visualization`` — they only require a
-``dict[str, list[float]]`` input.
+
+Global attribution plots are rendered with the native ``shap`` package
+(``shap.summary_plot`` — beeswarm / bar / violin) so they match the look and
+conventions users expect from SHAP. Per-instance (local) plots remain custom
+arrow-based waterfall / force charts.
 
 Cache format
 ------------
@@ -35,25 +37,26 @@ High-level API::
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 from pathlib import Path
 
 import joblib
-from matplotlib.patches import Polygon
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod, ProblemType
+from polynet.config.display_names import prettify_label
+from polynet.config.enums import (
+    ExplanationAggregation,
+    ImportanceNormalisationMethod,
+    ProblemType,
+    ShapGlobalPlotType,
+)
 from polynet.config.paths import explanation_parent_directory, model_dir
 from polynet.explainability.explain import GlobalAttributionResult
-from polynet.explainability.visualization import (
-    get_cmap,
-    plot_attribution_bar,
-    plot_attribution_distribution,
-    plot_attribution_strip,
-)
+from polynet.explainability.visualization import get_cmap
 
 logger = logging.getLogger(__name__)
 
@@ -90,6 +93,10 @@ class InstanceAttributionResult:
         ``warning`` is set.
     warning:
         Non-empty string when no SHAP values could be computed; ``None`` otherwise.
+    model_label:
+        Display label of the model this result belongs to (e.g.
+        ``"Random Forest polyBERT — bootstrap 1"``) when explanations are shown
+        per model (``Separate`` aggregation). ``None`` for the averaged ensemble.
     """
 
     sample_idx: str | int
@@ -99,6 +106,7 @@ class InstanceAttributionResult:
     attribution_df: pd.DataFrame
     figure: plt.Figure | None
     warning: str | None = None
+    model_label: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -432,144 +440,93 @@ def compute_and_cache_shap(
 
 
 # ---------------------------------------------------------------------------
-# Distribution & normalisation
+# Global SHAP matrix assembly & normalisation
 # ---------------------------------------------------------------------------
 
 
-def shap_cache_to_distribution(
-    cache_df: pd.DataFrame,
-    model_log_names: list[str],
-    sample_ids: list[str],
-    normalisation_type: ImportanceNormalisationMethod,
-    descriptor_df: pd.DataFrame | None = None,
-    target_col: str | None = None,
-) -> tuple[dict[str, list[float]], dict[str, list[float]] | None]:
+def _normalise_cache_attributions(
+    cache_df: pd.DataFrame, normalisation_type: ImportanceNormalisationMethod
+) -> pd.DataFrame:
     """
-    Flatten a SHAP cache DataFrame into ``{feature_name: [scores]}`` for plotting.
+    Normalise per-row SHAP values in a cache **before** ensemble averaging.
 
-    Applies the same four normalisation strategies as the GNN masking pipeline:
+    Each row is one ``(model_type, iteration, sample)`` SHAP vector. Because the
+    cache is per-descriptor, ``(model_type, iteration)`` identifies one trained
+    model instance (representation × model × bootstrap). Normalisation is applied
+    at the grain implied by the strategy; the caller then averages across
+    bootstraps/models per sample for display:
 
-    - ``Global``: all scores divided by the global max-absolute value
-    - ``PerModel``: each model type's scores divided by that model's max-absolute value
-    - ``Local``: each (model × sample) unit divided by its own max-absolute value
-    - ``NoNormalisation``: raw scores
+    - ``NoNormalisation``: rows unchanged.
+    - ``Local``: each row divided by its own max-absolute value, so every
+      (model × bootstrap × instance) row has a ±1.
+    - ``PerModel``: each row divided by the max-absolute value across all rows of
+      its ``(model_type, iteration)`` — one (instance, feature) within that
+      trained model reaches ±1.
+    - ``Global``: every row divided by the single global max-absolute value.
 
-    Parameters
-    ----------
-    cache_df:
-        Filtered cache DataFrame (output of :func:`compute_and_cache_shap`).
-    model_log_names:
-        Model log names to include (parsed for model_type + iteration).
-    sample_ids:
-        Sample IDs to include.
-    normalisation_type:
-        Normalisation strategy.
-    descriptor_df:
-        Optional raw descriptor DataFrame (samples × features, target last).
-        When provided, raw feature values are collected in parallel with
-        attribution scores so they can be used for strip-plot colouring.
+    Returns a copy with the feature columns scaled; meta columns are untouched.
+    A zero divisor is replaced with 1.0 so all-zero blocks pass through unchanged.
 
-    Returns
-    -------
-    tuple[dict[str, list[float]], dict[str, list[float]] | None]
-        ``(attribution_distribution, feature_values_dict)``.
-        ``feature_values_dict`` mirrors the structure and order of
-        ``attribution_distribution`` but holds raw feature values instead of
-        SHAP scores.  Returns ``None`` as the second element when
-        ``descriptor_df`` is not supplied.
+    Dividing by a constant commutes with averaging, so ``Global`` and
+    ``NoNormalisation`` are unaffected by doing this before vs. after the merge;
+    only ``Local`` and ``PerModel`` depend on the pre-merge grain.
     """
-    if cache_df.empty:
-        return {}, None
+    if normalisation_type == ImportanceNormalisationMethod.NoNormalisation:
+        return cache_df
 
     feature_cols = [c for c in cache_df.columns if c not in _META_COLS]
-    sample_ids_set = set(str(s) for s in sample_ids)
+    if not feature_cols:
+        return cache_df
 
-    # Prepare descriptor index as strings for fast lookup
-    if descriptor_df is not None:
-        desc_index_str = descriptor_df.index.astype(str)
-        desc_str_df = descriptor_df.copy()
-        desc_str_df.index = desc_index_str
+    out = cache_df.copy()
+    vals = out[feature_cols].to_numpy(dtype=float)
 
-        desc_feature_cols = set(desc_str_df.drop(columns=[target_col], errors="ignore").columns)
+    if normalisation_type == ImportanceNormalisationMethod.Local:
+        row_max = np.nanmax(np.abs(vals), axis=1, keepdims=True)
+        row_max[row_max == 0] = 1.0
+        out[feature_cols] = vals / row_max
 
-    else:
-        desc_str_df = None
-        desc_feature_cols = set()
+    elif normalisation_type == ImportanceNormalisationMethod.PerModel:
+        for _, idx in out.groupby(["model_type", "iteration"]).groups.items():
+            block = out.loc[idx, feature_cols].to_numpy(dtype=float)
+            max_abs = np.nanmax(np.abs(block)) if block.size else 0.0
+            divisor = float(max_abs) if max_abs > 0 else 1.0
+            out.loc[idx, feature_cols] = block / divisor
 
-    # Build lookup sets for filtering
-    model_specs: list[tuple[str, str]] = []
-    for key in model_log_names:
-        mt, _, it = _parse_model_log_name(key)
-        model_specs.append((mt, str(it)))
+    else:  # Global
+        max_abs = np.nanmax(np.abs(vals)) if vals.size else 0.0
+        divisor = float(max_abs) if max_abs > 0 else 1.0
+        out[feature_cols] = vals / divisor
 
-    distribution: dict[str, list[float]] = {f: [] for f in feature_cols}
-    feature_values: dict[str, list[float]] = {f: [] for f in feature_cols}
+    return out
 
-    # ---- Global divisor pre-computation ----
-    global_divisor = 1.0
-    if normalisation_type == ImportanceNormalisationMethod.Global:
-        all_vals = cache_df[feature_cols].to_numpy(dtype=float)
-        max_abs = np.nanmax(np.abs(all_vals))
-        global_divisor = float(max_abs) if max_abs > 0 else 1.0
 
-    # ---- Per-model divisors ----
-    per_model_divisors: dict[str, float] = {}
-    if normalisation_type == ImportanceNormalisationMethod.PerModel:
-        for mt, it in model_specs:
-            key = f"{mt}_{it}"
-            mask = (cache_df["model_type"] == mt) & (cache_df["iteration"] == it)
-            vals = cache_df.loc[mask, feature_cols].to_numpy(dtype=float)
-            max_abs = np.nanmax(np.abs(vals)) if vals.size > 0 else 1.0
-            per_model_divisors[key] = float(max_abs) if max_abs > 0 else 1.0
+def _aligned_feature_matrix(
+    sample_index: pd.Index,
+    feature_cols: list[str],
+    descriptor_df: pd.DataFrame | None,
+    target_col: str | None,
+) -> np.ndarray | None:
+    """
+    Build a raw feature-value matrix aligned to the SHAP matrix for colouring.
 
-    # ---- Collect scores ----
-    for mt, it in model_specs:
-        mask = (
-            (cache_df["model_type"] == mt)
-            & (cache_df["iteration"] == it)
-            & cache_df["sample_id"].isin(sample_ids_set)
-        )
-        subset = cache_df.loc[mask]
+    Returns an array of shape ``(len(sample_index), len(feature_cols))`` whose
+    rows match ``sample_index`` (sample IDs) and whose columns match
+    ``feature_cols``. Features absent from ``descriptor_df`` (or missing samples)
+    are filled with ``NaN``, which SHAP renders as grey points.
 
-        for _, row in subset.iterrows():
-            unit_vals = row[feature_cols].to_numpy(dtype=float)
-            sid = str(row["sample_id"])
+    Returns ``None`` when ``descriptor_df`` is not supplied.
+    """
+    if descriptor_df is None:
+        return None
 
-            if normalisation_type == ImportanceNormalisationMethod.Local:
-                max_abs = np.nanmax(np.abs(unit_vals))
-                divisor = float(max_abs) if max_abs > 0 else 1.0
-            elif normalisation_type == ImportanceNormalisationMethod.PerModel:
-                divisor = per_model_divisors.get(f"{mt}_{it}", 1.0)
-            elif normalisation_type == ImportanceNormalisationMethod.Global:
-                divisor = global_divisor
-            else:
-                divisor = 1.0
+    desc = descriptor_df.copy()
+    desc.index = desc.index.astype(str)
+    desc = desc.drop(columns=[target_col], errors="ignore")
 
-            for feat, val in zip(feature_cols, unit_vals / divisor):
-                distribution[feat].append(float(val))
-
-            # Raw feature value lookup (same iteration order as attribution)
-            if desc_str_df is not None and sid in desc_str_df.index:
-                for feat in feature_cols:
-                    fv = (
-                        float(desc_str_df.at[sid, feat])
-                        if feat in desc_feature_cols
-                        else float("nan")
-                    )
-                    feature_values[feat].append(fv)
-            elif desc_str_df is not None:
-                for feat in feature_cols:
-                    feature_values[feat].append(float("nan"))
-
-    # Drop features with no attribution scores
-    populated = {f for f, v in distribution.items() if v}
-    clean_dist = {f: v for f, v in distribution.items() if f in populated}
-    clean_fv = (
-        {f: v for f, v in feature_values.items() if f in populated}
-        if desc_str_df is not None
-        else None
-    )
-    return clean_dist, clean_fv
+    # reindex to the exact rows/cols we need; missing entries become NaN
+    aligned = desc.reindex(index=sample_index, columns=feature_cols)
+    return aligned.to_numpy(dtype=float)
 
 
 def merge_shap_attributions(
@@ -621,316 +578,248 @@ def merge_shap_attributions(
 
 
 # ---------------------------------------------------------------------------
-# Local visualisation helpers — arrow-based plots
+# Local SHAP plotting (native shap package)
 # ---------------------------------------------------------------------------
 
 
-def _arrow_right(x_start, x_end, y, bar_h, tip, notch_left: bool) -> list:
-    """Polygon vertices for a rightward-pointing arrow (positive SHAP contribution)."""
-    t = min(tip, (x_end - x_start) * 0.49)
-    pts = [
-        (x_start, y - bar_h),
-        (x_end - t, y - bar_h),
-        (x_end, y),
-        (x_end - t, y + bar_h),
-        (x_start, y + bar_h),
-    ]
-    if notch_left:
-        pts.append((x_start + t, y))
-    return pts
+def _lighten(color: str, amount: float = 0.6) -> tuple[float, float, float]:
+    """Blend a colour towards white by ``amount`` (0 = unchanged, 1 = white)."""
+    import matplotlib.colors as mcolors
+
+    r, g, b = mcolors.to_rgb(color)
+    return (r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount)
 
 
-def _arrow_left(x_start, x_end, y, bar_h, tip, notch_right: bool) -> list:
-    """Polygon vertices for a leftward-pointing arrow (negative SHAP contribution)."""
-    t = min(tip, (x_start - x_end) * 0.49)
-    pts = [
-        (x_start, y + bar_h),
-        (x_end + t, y + bar_h),
-        (x_end, y),
-        (x_end + t, y - bar_h),
-        (x_start, y - bar_h),
-    ]
-    if notch_right:
-        pts.append((x_start - t, y))
-    return pts
-
-
-def _plot_shap_force(
-    values: np.ndarray, feature_names: list[str], base_value: float, neg_color: str, pos_color: str
-) -> plt.Figure:
+@contextmanager
+def _shap_local_colours(neg_color: str, pos_color: str):
     """
-    Arrow-based force plot anchored at *base_value*.
+    Temporarily set shap's style colours so waterfall / bar honour user colours.
 
-    Positive features expand as right-pointing arrows to the left of the base;
-    negative features expand as left-pointing arrows to the right.  Each arrow
-    segment is labelled with the feature name and its SHAP value.
+    shap >= 0.46 styles its plots via ``shap.plots._style``. Waterfall and bar
+    have no per-call colour argument, but the style colours can be overridden in
+    a context. Falls back to a no-op on shap builds without the style system.
     """
-    df = pd.DataFrame({"feature": feature_names, "value": values})
-    df["label"] = [f"{f}\n({v:+.4f})" for f, v in zip(feature_names, values)]
+    try:
+        from shap.plots import _style as shap_style
+    except Exception:
+        yield
+        return
 
-    pos_df = df[df["value"] > 0].sort_values("value", ascending=False)
-    neg_df = df[df["value"] < 0].sort_values("value")
-
-    pos_total = float(pos_df["value"].sum()) if len(pos_df) else 0.0
-    neg_total = float(neg_df["value"].sum()) if len(neg_df) else 0.0
-    x_range = max(abs(pos_total) + abs(neg_total), 1e-9)
-
-    n_labels = max(len(pos_df), len(neg_df), 1)
-    fig_w, fig_h = 12, max(2.5, 0.22 * n_labels + 1.8)
-    figsize = (fig_w, fig_h)
-
-    y = 0.0
-    BAR_H = 0.15
-    tip = (BAR_H / 0.6) * (fig_h / fig_w) * x_range
-
-    fig, ax = plt.subplots(figsize=figsize, dpi=150)
-
-    # Positive segments — right-pointing, expand leftward from base_value
-    current = base_value
-    for i, (_, row) in enumerate(pos_df.iterrows()):
-        x_end = current
-        x_start = current - row["value"]
-        ax.add_patch(
-            Polygon(
-                _arrow_right(x_start, x_end, y, BAR_H, tip, notch_left=(i > 0)),
-                closed=True,
-                facecolor=pos_color,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
-        ax.text(
-            (x_start + x_end) / 2,
-            y - BAR_H - 0.03,
-            row["label"],
-            ha="center",
-            va="top",
-            fontsize=7,
-            color=pos_color,
-        )
-        current = x_start
-
-    # Negative segments — left-pointing, expand rightward from base_value
-    current = base_value
-    for i, (_, row) in enumerate(neg_df.iterrows()):
-        x_start = current
-        x_end = current - row["value"]  # value < 0 → x_end > x_start
-        ax.add_patch(
-            Polygon(
-                _arrow_left(x_end, x_start, y, BAR_H, tip, notch_right=(i > 0)),
-                closed=True,
-                facecolor=neg_color,
-                edgecolor="none",
-                zorder=2,
-            )
-        )
-        ax.text(
-            (x_start + x_end) / 2,
-            y - BAR_H - 0.03,
-            row["label"],
-            ha="center",
-            va="top",
-            fontsize=7,
-            color=neg_color,
-        )
-        current = x_end
-
-    # Base value and prediction markers
-    ax.axvline(base_value, color="black", linewidth=1.0, zorder=3)
-    ax.text(
-        base_value,
-        y + BAR_H + 0.03,
-        f"base\n{base_value:.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=7,
-    )
-
-    pred = base_value + float(df["value"].sum())
-    ax.axvline(pred, color="dimgray", linewidth=1.0, linestyle="--", zorder=3)
-    ax.text(
-        pred,
-        y + BAR_H + 0.03,
-        f"pred\n{pred:.3f}",
-        ha="center",
-        va="bottom",
-        fontsize=7,
-        color="dimgray",
-    )
-
-    left_ext = base_value - pos_total
-    right_ext = base_value - neg_total
-    margin = x_range * 0.08
-    ax.set_xlim(left_ext - margin, right_ext + margin)
-
-    label_drop = 0.03 + 0.22 * n_labels
-    ax.set_ylim(y - BAR_H - label_drop - 0.05, y + BAR_H + 0.35)
-
-    ax.set_yticks([])
-    ax.set_xticks([])
-    for spine in ax.spines.values():
-        spine.set_visible(False)
-    ax.set_title("SHAP Force Plot", fontsize=9, pad=4)
-    plt.tight_layout()
-    return fig
+    with shap_style.style_context(
+        primary_color_positive=pos_color,
+        primary_color_negative=neg_color,
+        secondary_color_positive=_lighten(pos_color),
+        secondary_color_negative=_lighten(neg_color),
+    ):
+        yield
 
 
-def _plot_shap_waterfall(
-    values: np.ndarray, feature_names: list[str], base_value: float, neg_color: str, pos_color: str
-) -> plt.Figure:
+def _recolour_force_figure(fig: plt.Figure, neg_color: str, pos_color: str) -> None:
     """
-    Arrow-based waterfall plot.
+    Recolour a shap matplotlib force plot to the user's colours.
 
-    One horizontal arrow per feature, cascading from *base_value* to the final
-    prediction.  Features are sorted by |SHAP| ascending (smallest at top,
-    largest at bottom).  Arrow direction shows the sign of each contribution.
+    ``shap.plots.force(..., matplotlib=True)`` hardcodes its colours and ignores
+    ``plot_cmap``, so the only way to honour user colours is to remap the known
+    constants after drawing. Unmatched colours are left untouched, so this is a
+    safe best-effort that degrades gracefully if shap changes its palette.
     """
-    # Sort ascending by |shap| so the largest contributor is at the bottom
-    order = np.argsort(np.abs(values))
-    shap_sorted = values[order]
-    names_sorted = [feature_names[i] for i in order]
+    import matplotlib.colors as mcolors
 
-    n = len(names_sorted)
-    x_range = max(float(np.sum(np.abs(shap_sorted))), 1e-9)
-    base_tip = x_range * 0.04
+    # shap force constants (positive primary/secondary, negative primary/secondary).
+    remap = {
+        (1.0, 0.051, 0.341): mcolors.to_rgb(pos_color),  # #FF0D57
+        (1.0, 0.765, 0.835): _lighten(pos_color),  # #FFC3D5
+        (0.118, 0.533, 0.898): mcolors.to_rgb(neg_color),  # #1E88E5
+        (0.82, 0.902, 0.98): _lighten(neg_color),  # #D1E6FA
+    }
 
-    fig, ax = plt.subplots(figsize=(9, max(3.5, n * 0.40 + 1.5)), dpi=150)
+    def _mapped(color) -> tuple | None:
+        try:
+            key = tuple(round(c, 3) for c in mcolors.to_rgb(color))
+        except (ValueError, TypeError):
+            return None
+        return remap.get(key)
 
-    BAR_H = 0.28
-    running = base_value
-    all_x = [base_value]
-
-    for i, (val, _) in enumerate(zip(shap_sorted, names_sorted)):
-        y = float(i)
-        x0, x1 = running, running + val
-        all_x += [x0, x1]
-
-        if val == 0.0:
-            running += val
-            continue
-
-        color = pos_color if val >= 0 else neg_color
-        width = abs(val)
-        tip = min(base_tip, width * 0.40)
-        has_prev = i > 0
-
-        if val > 0:
-            pts = _arrow_right(x0, x1, y, BAR_H, tip, notch_left=has_prev)
-        else:
-            pts = _arrow_left(x0, x1, y, BAR_H, tip, notch_right=has_prev)
-
-        ax.add_patch(Polygon(pts, closed=True, facecolor=color, edgecolor="none", zorder=2))
-
-        label = f"{val:+.4f}"
-        mid_x = (x0 + x1) / 2
-        if width > x_range * 0.07:
-            ax.text(
-                mid_x,
-                y,
-                label,
-                ha="center",
-                va="center",
-                fontsize=7,
-                color="white",
-                weight="bold",
-                zorder=3,
-            )
-        else:
-            offset = x_range * 0.012
-            ax.text(
-                x1 + offset * np.sign(val),
-                y,
-                label,
-                ha="left" if val > 0 else "right",
-                va="center",
-                fontsize=6,
-                color=color,
-                zorder=3,
-            )
-
-        running += val
-
-    ax.set_yticks(range(n))
-    ax.set_yticklabels(names_sorted, fontsize=8)
-
-    ax.axvline(
-        base_value,
-        color="black",
-        linewidth=0.8,
-        linestyle="--",
-        alpha=0.6,
-        zorder=1,
-        label=f"base = {base_value:.3f}",
-    )
-
-    final_pred = base_value + float(np.sum(shap_sorted))
-    ax.axvline(
-        final_pred,
-        color="dimgray",
-        linewidth=0.8,
-        linestyle=":",
-        alpha=0.8,
-        zorder=1,
-        label=f"pred = {final_pred:.3f}",
-    )
-
-    margin = x_range * 0.10
-    ax.set_xlim(min(all_x) - margin, max(all_x) + margin)
-    ax.set_ylim(-0.7, n - 0.3)
-    ax.set_xlabel("SHAP value (contribution to prediction)", fontsize=8)
-    ax.set_title(f"SHAP Waterfall  (base = {base_value:.3f},  pred = {final_pred:.3f})", fontsize=9)
-    ax.legend(fontsize=7, loc="upper right")
-    ax.spines[["top", "right"]].set_visible(False)
-    plt.tight_layout()
-    return fig
+    for ax in fig.axes:
+        for patch in ax.patches:
+            new_fc = _mapped(patch.get_facecolor())
+            if new_fc is not None:
+                patch.set_facecolor(new_fc)
+            new_ec = _mapped(patch.get_edgecolor())
+            if new_ec is not None:
+                patch.set_edgecolor(new_ec)
+        for line in ax.get_lines():
+            new_c = _mapped(line.get_color())
+            if new_c is not None:
+                line.set_color(new_c)
+        for text in ax.texts:
+            new_c = _mapped(text.get_color())
+            if new_c is not None:
+                text.set_color(new_c)
 
 
-def plot_shap_waterfall(
-    shap_values: dict[str, float],
+def plot_local_shap(
+    values: np.ndarray,
+    feature_names: list[str],
     base_value: float = 0.0,
+    data: np.ndarray | None = None,
     plot_type: str = "waterfall",
+    max_display: int = 15,
     neg_color: str = "#40bcde",
     pos_color: str = "#e64747",
-    top_n: int = 15,
 ) -> plt.Figure:
     """
-    Render a per-instance SHAP explanation as a waterfall, force, or bar plot.
+    Render a single-instance SHAP explanation with the native ``shap`` package.
 
     Parameters
     ----------
-    shap_values:
-        ``{feature_name: shap_value}`` for one sample (ensemble-averaged).
+    values:
+        1-D array of SHAP values for one sample (ensemble-merged, possibly
+        normalised), one entry per feature in ``feature_names``.
+    feature_names:
+        Feature names, parallel to ``values``.
     base_value:
-        Expected model output used as the anchor for waterfall / force plots.
+        Anchor for the waterfall / force plot (``E[f(x)]``). The cache stores
+        only SHAP values, so this defaults to 0.0; with normalisation enabled
+        the additive reconstruction is not meaningful anyway.
+    data:
+        Optional raw feature values for the instance, used to label each row as
+        ``value = feature``. ``None`` shows feature names only.
     plot_type:
-        ``"waterfall"`` — cascading arrow waterfall (one arrow per feature).
-        ``"force"`` — horizontal stacked arrow force plot.
-        ``"bar"`` — ranked mean-attribution bar chart.
+        ``"waterfall"`` (default), ``"force"``, or ``"bar"`` — native
+        ``shap.plots`` styles.
+    max_display:
+        Maximum number of features (by ``|SHAP|``) to show. Waterfall and bar
+        use shap's own ``max_display``; the force plot has none, so it is
+        truncated to the top ``max_display`` features here.
     neg_color, pos_color:
-        Hex colours for negative / positive attributions.
-    top_n:
-        Maximum features to show (sorted by |SHAP| descending).
+        Hex colours for negative / positive contributions. Waterfall and bar
+        honour them exactly via shap's style context; the force plot is recoloured
+        post-hoc since shap hardcodes its force palette.
+
+    Returns
+    -------
+    plt.Figure
     """
-    if not shap_values:
+    import shap
+
+    if values is None or len(values) == 0:
         fig, ax = plt.subplots()
         ax.text(0.5, 0.5, "No SHAP values available", ha="center", va="center")
         ax.axis("off")
         return fig
 
-    items = sorted(shap_values.items(), key=lambda kv: abs(kv[1]), reverse=True)[:top_n]
-    feature_names = [k for k, _ in items]
-    values = np.array([v for _, v in items])
+    explanation = shap.Explanation(
+        values=np.asarray(values, dtype=float),
+        base_values=float(base_value),
+        data=(np.asarray(data, dtype=float) if data is not None else None),
+        feature_names=list(feature_names),
+    )
 
-    if plot_type == "bar":
-        return plot_attribution_bar(
-            {f: [v] for f, v in zip(feature_names, values)},
-            neg_color=neg_color,
-            pos_color=pos_color,
+    plt.figure()
+    if plot_type == "force":
+        # shap's force plot has no max_display and shows every feature, so
+        # truncate to the top-N by |SHAP| ourselves before drawing.
+        force_expl = explanation
+        vals = np.asarray(explanation.values, dtype=float)
+        if max_display is not None and len(vals) > max_display:
+            top = np.sort(np.argsort(np.abs(vals))[::-1][:max_display])
+            force_expl = shap.Explanation(
+                values=vals[top],
+                base_values=explanation.base_values,
+                data=(explanation.data[top] if explanation.data is not None else None),
+                feature_names=[explanation.feature_names[i] for i in top],
+            )
+        shap.plots.force(force_expl, matplotlib=True, show=False)
+        fig = plt.gcf()
+        _recolour_force_figure(fig, neg_color, pos_color)
+    else:
+        with _shap_local_colours(neg_color, pos_color):
+            if plot_type == "bar":
+                shap.plots.bar(explanation, max_display=max_display, show=False)
+            else:  # waterfall
+                shap.plots.waterfall(explanation, max_display=max_display, show=False)
+        fig = plt.gcf()
+
+    fig.tight_layout()
+    return fig
+
+
+# ---------------------------------------------------------------------------
+# Global SHAP plotting (native shap package)
+# ---------------------------------------------------------------------------
+
+
+def plot_global_shap(
+    shap_matrix: np.ndarray,
+    feature_matrix: np.ndarray | None,
+    feature_names: list[str],
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
+    max_display: int | None = 10,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+) -> plt.Figure:
+    """
+    Render a global SHAP summary using the native ``shap`` package.
+
+    Parameters
+    ----------
+    shap_matrix:
+        Ensemble-averaged SHAP values, shape ``(n_samples, n_features)``.
+    feature_matrix:
+        Raw feature values aligned to ``shap_matrix`` (same shape), used to
+        colour beeswarm / violin points. ``None`` falls back to no colouring.
+    feature_names:
+        Column names, length ``n_features``.
+    plot_type:
+        ``Beeswarm`` (dot), ``Bar`` (mean |SHAP|), or ``Violin``.
+    max_display:
+        Maximum number of features to display, ranked by mean |SHAP|.
+        ``None`` shows all features.
+    neg_color, pos_color:
+        Hex colours for the low→high feature-value colourmap (beeswarm/violin)
+        and the bar colour.
+
+    Returns
+    -------
+    plt.Figure
+    """
+    import shap
+
+    n_features = len(feature_names)
+    display = n_features if max_display is None else int(min(max_display, n_features))
+
+    # Fresh figure so summary_plot (which draws on the current axes) doesn't
+    # overwrite an unrelated figure.
+    fig = plt.figure()
+
+    if plot_type == ShapGlobalPlotType.Bar:
+        # Bar summary needs no feature values — it's mean |SHAP| per feature.
+        shap.summary_plot(
+            shap_matrix,
+            features=feature_matrix,
+            feature_names=feature_names,
+            plot_type="bar",
+            max_display=display,
+            color=pos_color,
+            show=False,
         )
-    elif plot_type == "force":
-        return _plot_shap_force(values, feature_names, base_value, neg_color, pos_color)
-    else:  # waterfall
-        return _plot_shap_waterfall(values, feature_names, base_value, neg_color, pos_color)
+    else:
+        shap_plot_type = "violin" if plot_type == ShapGlobalPlotType.Violin else "dot"
+        shap.summary_plot(
+            shap_matrix,
+            features=feature_matrix,
+            feature_names=feature_names,
+            plot_type=shap_plot_type,
+            max_display=display,
+            cmap=get_cmap(neg_color, pos_color),
+            color_bar=feature_matrix is not None,
+            show=False,
+        )
+
+    fig = plt.gcf()
+    fig.tight_layout()
+    return fig
 
 
 # ---------------------------------------------------------------------------
@@ -949,7 +838,7 @@ def compute_global_shap_attribution(
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
     target_class: int | None = None,
     top_n: int | None = 10,
-    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
     cache_root: Path | None = None,
     target_col: str | None = None,
 ) -> dict[str, GlobalAttributionResult]:
@@ -957,7 +846,8 @@ def compute_global_shap_attribution(
     Compute global SHAP feature attribution across the selected population.
 
     One :class:`~polynet.explainability.explain.GlobalAttributionResult` is
-    returned per descriptor (e.g. one for Morgan, one for RDKit).
+    returned per descriptor (e.g. one for Morgan, one for RDKit). Plots are
+    rendered with the native ``shap`` package (beeswarm / bar / violin).
 
     Parameters
     ----------
@@ -978,9 +868,10 @@ def compute_global_shap_attribution(
     target_class:
         Class index for classification.
     top_n:
-        Show only top-N and bottom-N features by mean SHAP.  ``None`` shows all.
+        Maximum number of features to display, ranked by mean |SHAP|.
+        ``None`` shows all features.
     plot_type:
-        ``Ridge``, ``Bar``, or ``Strip``.
+        ``Beeswarm``, ``Bar``, or ``Violin`` (native ``shap`` summary styles).
 
     Returns
     -------
@@ -1006,20 +897,19 @@ def compute_global_shap_attribution(
     for descriptor, cache_df in cache_by_descriptor.items():
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
         n_models = len({_parse_model_log_name(k)[0] for k in model_log_names})
-        n_samples = cache_df["sample_id"].nunique()
 
-        # Pass the raw descriptor DataFrame so feature values can be collected
-        # in the same iteration order as SHAP scores (used for strip-plot colouring).
-        attribution_dict, feature_values_dict = shap_cache_to_distribution(
-            cache_df=cache_df,
+        # Normalise per trained instance (representation × model × bootstrap)
+        # FIRST, then average across the ensemble → one row per sample. Doing the
+        # normalisation before the merge is what makes PerModel/Local meaningful
+        # (see _normalise_cache_attributions).
+        normalised_cache = _normalise_cache_attributions(cache_df, normalisation_type)
+        merged_df = merge_shap_attributions(
+            cache_df=normalised_cache,
             model_log_names=model_log_names,
             sample_ids=explain_sample_ids,
-            normalisation_type=normalisation_type,
-            descriptor_df=str_dfs.get(descriptor),
-            target_col=target_col,
         )
 
-        if not attribution_dict:
+        if merged_df.empty:
             results[descriptor] = GlobalAttributionResult(
                 figure=None,
                 attribution_dict={},
@@ -1033,35 +923,34 @@ def compute_global_shap_attribution(
             )
             continue
 
-        n_frags_total = len(attribution_dict)
+        feature_names = list(merged_df.columns)
+        # Already normalised at the per-instance grain before merging.
+        shap_matrix = merged_df.to_numpy(dtype=float)
+        feature_matrix = _aligned_feature_matrix(
+            sample_index=merged_df.index,
+            feature_cols=feature_names,
+            descriptor_df=str_dfs.get(descriptor),
+            target_col=target_col,
+        )
 
-        # Apply top_n filtering by mean attribution; keep feature_values in sync
-        if top_n is not None and n_frags_total > top_n * 2:
-            means = {f: float(np.mean(v)) for f, v in attribution_dict.items()}
-            sorted_feats = sorted(means, key=lambda f: means[f])
-            top_feats = set(sorted_feats[:top_n] + sorted_feats[-top_n:])
-            attribution_dict = {f: v for f, v in attribution_dict.items() if f in top_feats}
-            if feature_values_dict is not None:
-                feature_values_dict = {
-                    f: v for f, v in feature_values_dict.items() if f in top_feats
-                }
-        n_shown = len(attribution_dict)
+        n_samples = merged_df.shape[0]
+        n_frags_total = len(feature_names)
+        n_shown = n_frags_total if top_n is None else min(top_n, n_frags_total)
 
-        if plot_type == AttributionPlotType.Bar:
-            fig = plot_attribution_bar(attribution_dict, neg_color=neg_color, pos_color=pos_color)
-        elif plot_type == AttributionPlotType.Strip:
-            # TML: colour points by raw feature value; GNN path never reaches here
-            # (it calls compute_global_attribution in explain.py, not this function)
-            fig = plot_attribution_strip(
-                attribution_dict,
-                neg_color=neg_color,
-                pos_color=pos_color,
-                feature_values_dict=feature_values_dict,
-            )
-        else:
-            fig = plot_attribution_distribution(
-                attribution_dict, neg_color=neg_color, pos_color=pos_color
-            )
+        fig = plot_global_shap(
+            shap_matrix=shap_matrix,
+            feature_matrix=feature_matrix,
+            feature_names=feature_names,
+            plot_type=plot_type,
+            max_display=top_n,
+            neg_color=neg_color,
+            pos_color=pos_color,
+        )
+
+        # attribution_dict kept for back-compat: {feature: [per-sample SHAP]}.
+        attribution_dict = {
+            feat: shap_matrix[:, j].tolist() for j, feat in enumerate(feature_names)
+        }
 
         results[descriptor] = GlobalAttributionResult(
             figure=fig,
@@ -1077,6 +966,136 @@ def compute_global_shap_attribution(
     return results
 
 
+def _separate_local_results(
+    cache_df: pd.DataFrame,
+    descriptor: str,
+    model_log_names: list[str],
+    explain_sample_ids: list[str],
+    normalisation_type: ImportanceNormalisationMethod,
+    problem_type: ProblemType,
+    target_class: int | None,
+    descriptor_df: pd.DataFrame | None,
+    target_col: str | None,
+    local_plot_type: str,
+    max_display: int,
+    neg_color: str,
+    pos_color: str,
+) -> list[InstanceAttributionResult]:
+    """
+    Build one :class:`InstanceAttributionResult` per model × sample (Separate).
+
+    Mirrors the per-sample normalisation of the Average path (``Local`` → each
+    row by its own max-abs, ``Global`` → a single divisor over the displayed
+    rows, otherwise raw), but keeps each model's explanation distinct and tags it
+    with ``model_label``. Results are ordered by sample, then by model.
+    """
+    feature_cols = [c for c in cache_df.columns if c not in _META_COLS]
+    results: list[InstanceAttributionResult] = []
+
+    if not feature_cols or cache_df.empty:
+        return results
+
+    sample_ids_set = {str(s) for s in explain_sample_ids}
+
+    # Global divisor over all displayed (model × sample) rows for this descriptor.
+    global_divisor = 1.0
+    if normalisation_type == ImportanceNormalisationMethod.Global:
+        sel = cache_df[cache_df["sample_id"].isin(sample_ids_set)]
+        if not sel.empty:
+            max_abs = np.nanmax(np.abs(sel[feature_cols].to_numpy(dtype=float)))
+            global_divisor = float(max_abs) if max_abs > 0 else 1.0
+
+    cls_str = "" if problem_type == ProblemType.Regression else f", class {target_class}"
+
+    for sample_id in explain_sample_ids:
+        sid = str(sample_id)
+        for key in sorted(model_log_names):
+            model_type, _, iteration = _parse_model_log_name(key)
+            model_label = f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
+
+            mask = (
+                (cache_df["model_type"] == model_type)
+                & (cache_df["iteration"] == str(iteration))
+                & (cache_df["sample_id"] == sid)
+            )
+            row = cache_df.loc[mask]
+            if row.empty:
+                results.append(
+                    InstanceAttributionResult(
+                        sample_idx=sid,
+                        info_msg="",
+                        true_label="N/A",
+                        predicted_label="N/A",
+                        attribution_df=pd.DataFrame(),
+                        figure=None,
+                        warning=f"No SHAP values found for sample '{sid}' / {model_label}.",
+                        model_label=model_label,
+                    )
+                )
+                continue
+
+            raw_vals = row.iloc[0][feature_cols].to_numpy(dtype=float)
+
+            if normalisation_type == ImportanceNormalisationMethod.Local:
+                max_abs = np.nanmax(np.abs(raw_vals))
+                divisor = float(max_abs) if max_abs > 0 else 1.0
+            elif normalisation_type == ImportanceNormalisationMethod.Global:
+                divisor = global_divisor
+            else:
+                divisor = 1.0
+
+            normed_vals = raw_vals / divisor if divisor != 1.0 else raw_vals.copy()
+
+            attr_df = (
+                pd.DataFrame(
+                    {
+                        "Feature": feature_cols,
+                        "SHAP Value": raw_vals,
+                        "Normalised SHAP": normed_vals,
+                    }
+                )
+                .sort_values("SHAP Value", key=abs, ascending=False)
+                .reset_index(drop=True)
+            )
+
+            feature_matrix = _aligned_feature_matrix(
+                sample_index=pd.Index([sid]),
+                feature_cols=feature_cols,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+            )
+            instance_data = feature_matrix[0] if feature_matrix is not None else None
+            fig = plot_local_shap(
+                values=normed_vals,
+                feature_names=feature_cols,
+                base_value=0.0,
+                data=instance_data,
+                plot_type=local_plot_type,
+                max_display=max_display,
+                neg_color=neg_color,
+                pos_color=pos_color,
+            )
+            plt.close("all")
+
+            info_msg = (
+                f"SHAP attribution for `{sid}` | {descriptor}"
+                f"{cls_str} | normalisation: `{normalisation_type}`"
+            )
+            results.append(
+                InstanceAttributionResult(
+                    sample_idx=sid,
+                    info_msg=info_msg,
+                    true_label="N/A",
+                    predicted_label="N/A",
+                    attribution_df=attr_df,
+                    figure=fig,
+                    model_label=model_label,
+                )
+            )
+
+    return results
+
+
 def compute_local_shap_attribution(
     models: dict,
     descriptor_dfs: dict,
@@ -1088,9 +1107,11 @@ def compute_local_shap_attribution(
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
     target_class: int | None = None,
     local_plot_type: str = "waterfall",
+    max_display: int = 15,
     predictions: dict | None = None,
     cache_root: Path | None = None,
     target_col: str | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
 ) -> dict[str, list[InstanceAttributionResult]]:
     """
     Compute per-instance SHAP attribution with waterfall / force / bar plots.
@@ -1108,21 +1129,30 @@ def compute_local_shap_attribution(
     problem_type:
         Regression or Classification.
     neg_color, pos_color:
-        Attribution colours.
+        Hex colours for negative / positive contributions, applied to the native
+        ``shap`` local plots (see :func:`plot_local_shap`).
     normalisation_type:
         Normalisation strategy applied to SHAP values before plotting.
     target_class:
         Class index for classification.
     local_plot_type:
-        ``"waterfall"``, ``"force"``, or ``"bar"``.
+        ``"waterfall"``, ``"force"``, or ``"bar"`` — native ``shap.plots`` styles.
+    max_display:
+        Maximum number of features (by ``|SHAP|``) shown in the waterfall and
+        bar plots. The force plot displays all features and ignores this.
     predictions:
         Optional ``{sample_id: {"true": ..., "predicted": ...}}`` for label
         display in the result.
+    aggregation:
+        ``Average`` (default) merges the selected models into a single
+        explanation per sample. ``Separate`` keeps one explanation per
+        model × sample, each tagged with ``model_label``.
 
     Returns
     -------
     dict[str, list[InstanceAttributionResult]]
-        Keyed by descriptor name; each value is a list with one result per sample.
+        Keyed by descriptor name. For ``Average`` there is one result per
+        sample; for ``Separate`` there is one result per model × sample.
     """
     cache_by_descriptor = compute_and_cache_shap(
         models=models,
@@ -1135,11 +1165,35 @@ def compute_local_shap_attribution(
         target_col=target_col,
     )
 
+    # Raw descriptor values (per instance) are used to label native SHAP plots.
+    str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
+
     results: dict[str, list[InstanceAttributionResult]] = {}
 
     for descriptor, cache_df in cache_by_descriptor.items():
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
+        descriptor_df = str_dfs.get(descriptor)
 
+        # Separate aggregation: one explanation per model × sample (no merge).
+        if aggregation == ExplanationAggregation.Separate:
+            results[descriptor] = _separate_local_results(
+                cache_df=cache_df,
+                descriptor=descriptor,
+                model_log_names=model_log_names,
+                explain_sample_ids=explain_sample_ids,
+                normalisation_type=normalisation_type,
+                problem_type=problem_type,
+                target_class=target_class,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+                local_plot_type=local_plot_type,
+                max_display=max_display,
+                neg_color=neg_color,
+                pos_color=pos_color,
+            )
+            continue
+
+        # ----- Average aggregation (default, historical behaviour) -----
         # Merge ensemble
         merged_df = merge_shap_attributions(
             cache_df=cache_df, model_log_names=model_log_names, sample_ids=explain_sample_ids
@@ -1204,11 +1258,22 @@ def compute_local_shap_attribution(
             true_label = str(pred_info.get("true", "N/A"))
             predicted_label = str(pred_info.get("predicted", "N/A"))
 
-            # Figure
-            shap_dict = dict(zip(feature_cols, normed_vals.tolist()))
-            fig = plot_shap_waterfall(
-                shap_values=shap_dict,
+            # Figure — native shap local plot. Raw feature values (when available)
+            # label each row; SHAP magnitudes are the merged/normalised values.
+            feature_matrix = _aligned_feature_matrix(
+                sample_index=pd.Index([sid]),
+                feature_cols=feature_cols,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+            )
+            instance_data = feature_matrix[0] if feature_matrix is not None else None
+            fig = plot_local_shap(
+                values=normed_vals,
+                feature_names=feature_cols,
+                base_value=0.0,
+                data=instance_data,
                 plot_type=local_plot_type,
+                max_display=max_display,
                 neg_color=neg_color,
                 pos_color=pos_color,
             )

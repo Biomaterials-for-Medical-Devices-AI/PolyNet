@@ -29,8 +29,8 @@ YAML layout::
       # For classification: which class index to attribute (null for regression).
       target_class: null
 
-      # Attribution distribution plot style.
-      plot_type: "ridge"               # ridge | bar | strip
+      # Global SHAP summary plot style (native shap package).
+      plot_type: "beeswarm"            # beeswarm | bar | violin
 
       # Show only the top-N features by mean |SHAP|.
       # null shows all features.
@@ -50,7 +50,7 @@ from __future__ import annotations
 
 from typing import Literal, Union
 
-from polynet.config.enums import AttributionPlotType, ImportanceNormalisationMethod
+from polynet.config.enums import ImportanceNormalisationMethod, ShapGlobalPlotType
 from polynet.config.schemas.base import PolynetBaseModel
 
 
@@ -81,7 +81,8 @@ class TMLExplainabilityConfig(PolynetBaseModel):
         For classification: the class index whose SHAP values are attributed.
         Pass ``null`` / ``None`` for regression.
     plot_type:
-        Visual style for the global attribution distribution plot.
+        Native SHAP summary style for the global attribution plot
+        (``beeswarm``, ``bar``, or ``violin``).
     top_n:
         Number of top features shown in the global plot by mean |SHAP|.
         ``null`` shows every feature.
@@ -101,7 +102,7 @@ class TMLExplainabilityConfig(PolynetBaseModel):
     explain_set: Literal["train", "validation", "test", "all"] = "test"
     normalisation: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel
     target_class: int | None = None
-    plot_type: AttributionPlotType = AttributionPlotType.Ridge
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm
     top_n: int | None = 10
     local_explain_sample_ids: list[str] | None = None
     local_plot_type: Literal["waterfall", "force", "bar"] = "waterfall"

@@ -268,8 +268,8 @@ tml_explainability:
   # For classification: which class to attribute (null for regression).
   target_class: null
 
-  # SHAP attribution distribution plot style.
-  plot_type: "ridge"               # ridge | bar | strip
+  # Global SHAP summary plot style (native shap package).
+  plot_type: "beeswarm"            # beeswarm | bar | violin
 
   # Show only the top-N features by mean |SHAP|.
   # null shows all features.

@@ -10,9 +10,12 @@ from polynet.config.column_names import (
     get_true_label_column_name,
 )
 from polynet.config.constants import DataSet, ResultColumn
+from polynet.config.display_names import prettify_label, prettify_metric
 from polynet.config.enums import Plot, ProblemType, SplitType
-from polynet.config.schemas import DataConfig, TrainGNNConfig
+from polynet.config.schemas import DataConfig
 from polynet.utils.statistical_analysis import (
+    MULTIPLE_COMPARISON_METHODS,
+    correct_pvalue_matrix,
     mcnemar_pvalue_matrix,
     metrics_pvalue_matrix,
     regression_pvalue_matrix,
@@ -23,6 +26,40 @@ from polynet.visualization import (
     plot_parity,
     plot_pvalue_matrix,
 )
+
+
+def _prettify_series(series: pd.Series, column_name: str, abbreviate: bool) -> pd.Series:
+    """Map model identifiers in a hue/style series to display labels.
+
+    Only the model column is translated (its values are raw model ids like
+    ``"random_forest-polybert"``); other grouping columns (set, iteration) are
+    returned unchanged so their legends keep their original values.
+    """
+    if column_name == ResultColumn.MODEL:
+        return series.map(lambda v: prettify_label(v, abbreviate=abbreviate))
+    return series
+
+
+def _multiple_comparison_selector(key: str) -> str | None:
+    """Render a correction-method selectbox and return the ``multipletests`` name.
+
+    Pairwise comparisons across many models inflate the family-wise error rate,
+    so a correction is applied by default (Holm-Bonferroni). The user can switch
+    to Bonferroni, Benjamini-Hochberg (FDR), or disable correction.
+    """
+    labels = list(MULTIPLE_COMPARISON_METHODS.keys())
+    choice = st.selectbox(
+        "Multiple-comparison correction",
+        options=labels,
+        index=0,  # Holm-Bonferroni
+        key=key,
+        help=(
+            "Adjusts the pairwise p-values for the number of simultaneous model "
+            "comparisons. Holm-Bonferroni and Bonferroni control the family-wise "
+            "error rate; Benjamini-Hochberg controls the false discovery rate."
+        ),
+    )
+    return MULTIPLE_COMPARISON_METHODS[choice]
 
 
 def compare_predictions_form(
@@ -48,7 +85,9 @@ def compare_predictions_form(
         col.split(" ")[0] for col in predictions_df.columns if ResultColumn.PREDICTED in col
     ]
     compare_models = st.multiselect(
-        "Select models to test statistically difference in predictions", options=trained_models
+        "Select models to test statistically difference in predictions",
+        options=trained_models,
+        format_func=prettify_label,
     )
 
     if len(compare_models) > 1:
@@ -66,6 +105,9 @@ def compare_predictions_form(
         elif data_options.problem_type == ProblemType.Regression:
             p_matrix = regression_pvalue_matrix(y_true=true_vals, predictions=predictions_array)
 
+        correction = _multiple_comparison_selector(key="predictions_pvalue_correction")
+        p_matrix = correct_pvalue_matrix(p_matrix, method=correction)
+
         config = get_plot_customisation_form(
             plot_type=Plot.MatrixPlot,
             data=None,
@@ -74,7 +116,9 @@ def compare_predictions_form(
             model_pred_col=None,
             model_true_cols=None,
         )
-        plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=compare_models, **config)
+        abbreviate = config.pop("abbreviate_labels", False)
+        model_labels = [prettify_label(m, abbreviate=abbreviate) for m in compare_models]
+        plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=model_labels, **config)
 
         return plot
 
@@ -102,11 +146,17 @@ def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
                 metrics_name.add(metric_name)
 
     models = st.multiselect(
-        "Select models to compare", options=list(data_dict.keys()), key="comparemodelmetrics"
+        "Select models to compare",
+        options=list(data_dict.keys()),
+        key="comparemodelmetrics",
+        format_func=prettify_label,
     )
 
     metric_choice = st.selectbox(
-        "Select a metric to compare", options=sorted(metrics_name), key="metriccomparemetric"
+        "Select a metric to compare",
+        options=sorted(metrics_name),
+        key="metriccomparemetric",
+        format_func=prettify_metric,
     )
 
     selected = {m: data_dict[m][metric_choice] for m in models if m in data_dict}
@@ -125,7 +175,11 @@ def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
                 model_true_cols=None,
             )
             p_matrix, order = metrics_pvalue_matrix(selected, test="wilcoxon")
-            plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=order, **config)
+            correction = _multiple_comparison_selector(key="metrics_pvalue_correction")
+            p_matrix = correct_pvalue_matrix(p_matrix, method=correction)
+            abbreviate = config.pop("abbreviate_labels", False)
+            order_labels = [prettify_label(m, abbreviate=abbreviate) for m in order]
+            plot = plot_pvalue_matrix(p_matrix=p_matrix, model_names=order_labels, **config)
         elif plot_type == "Box Plot":
             config = get_plot_customisation_form(
                 plot_type=Plot.MetricsBoxPlot,
@@ -135,8 +189,12 @@ def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
                 model_pred_col=None,
                 model_true_cols=None,
             )
+            abbreviate = config.pop("abbreviate_labels", False)
+            selected = {
+                prettify_label(m, abbreviate=abbreviate): vals for m, vals in selected.items()
+            }
             plot = plot_bootstrap_boxplots(
-                metrics_dict=selected, metric_name=metric_choice, **config
+                metrics_dict=selected, metric_name=prettify_metric(metric_choice), **config
             )
         return plot
 
@@ -156,6 +214,17 @@ def get_plot_customisation_form(
     config = {}
 
     with st.expander("Customise Plot", expanded=False):
+
+        # Display-only label style. Affects model/descriptor labels shown on the
+        # plot (legend, axis ticks); the underlying data keeps its raw names.
+        abbreviate_labels = st.checkbox(
+            "Use abbreviated labels",
+            value=False,
+            key=PlotCustomiserStateKeys.AbbreviateLabels + plot_type,
+            help="Show short model/descriptor names (e.g. 'RF polyBERT') instead of "
+            "full names (e.g. 'Random Forest polyBERT').",
+        )
+        config["abbreviate_labels"] = abbreviate_labels
 
         config["title"] = st.text_input(
             "Plot Title",
@@ -291,7 +360,7 @@ def get_plot_customisation_form(
                     index=1,
                     help="Select a column to color the points in the plot.",
                 )
-                config["hue"] = data[hue] if hue else None
+                config["hue"] = _prettify_series(data[hue], hue, abbreviate_labels) if hue else None
 
                 style_by = st.selectbox(
                     "Style by",
@@ -300,7 +369,11 @@ def get_plot_customisation_form(
                     index=0,
                     help="Select a column to style the points in the plot.",
                 )
-                config["style_by"] = data[style_by] if style_by else None
+                config["style_by"] = (
+                    _prettify_series(data[style_by], style_by, abbreviate_labels)
+                    if style_by
+                    else None
+                )
             else:
                 config["hue"] = None
                 config["style_by"] = None
@@ -420,10 +493,7 @@ def get_plot_customisation_form(
 
 
 def confusion_matrix_plot_form(
-    predictions_df: pd.DataFrame,
-    split_type: SplitType | str,
-    gnn_training_options: TrainGNNConfig,
-    data_options: DataConfig,
+    predictions_df: pd.DataFrame, split_type: SplitType | str, data_options: DataConfig
 ):
     """
     Renders a Streamlit form for customizing and displaying a parity plot based on model predictions.
@@ -440,13 +510,20 @@ def confusion_matrix_plot_form(
         help="Select the iteration or fold for which you want to display the parity plot.",
     )
 
-    trained_gnns = gnn_training_options.gnn_convolutional_layers.keys()
+    # Derive the available models from the prediction columns so both GNN and
+    # TML models are listed (predictions.csv merges both frameworks).
+    models = [
+        col_name.split(" ")[0]
+        for col_name in predictions_df.columns
+        if ResultColumn.PREDICTED in col_name
+    ]
     model_name = st.multiselect(
         "Select the model to display the confusion matrix",
-        options=trained_gnns,
-        default=list(trained_gnns)[0],
+        options=models,
+        default=models[0],
         key=AnalyseResultsStateKeys.PlotModels,
-        help="Select the model for which you want to display the parity plot.",
+        format_func=prettify_label,
+        help="Select the model for which you want to display the confusion matrix.",
     )
 
     model_pred_cols = [
@@ -501,6 +578,8 @@ def confusion_matrix_plot_form(
         model_pred_col=model_pred_col,
         model_true_cols=model_true_cols,
     )
+    # Not a label surface for this single-model plot; drop so it isn't splatted.
+    plot_config.pop("abbreviate_labels", None)
 
     if not plot_data.empty:
 
@@ -513,10 +592,7 @@ def confusion_matrix_plot_form(
 
 
 def parity_plot_form(
-    predictions_df: pd.DataFrame,
-    split_type: SplitType | str,
-    gnn_training_options: TrainGNNConfig,
-    data_options: DataConfig,
+    predictions_df: pd.DataFrame, split_type: SplitType | str, data_options: DataConfig
 ):
 
     color_by_opts = [None]
@@ -534,7 +610,8 @@ def parity_plot_form(
     if len(iteration) > 1:
         color_by_opts.append(iterator)
 
-    trained_gnns = gnn_training_options.GNNConvolutionalLayers.keys()
+    # Derive the available models from the prediction columns so both GNN and
+    # TML models are listed (predictions.csv merges both frameworks).
     models = [
         col_name.split(" ")[0]
         for col_name in predictions_df.columns
@@ -546,6 +623,7 @@ def parity_plot_form(
         options=models,
         default=models[0],
         key=AnalyseResultsStateKeys.PlotModels,
+        format_func=prettify_label,
         help="Select the model for which you want to display the parity plot.",
     )
 
@@ -607,6 +685,9 @@ def parity_plot_form(
         model_pred_col=model_pred_col,
         model_true_cols=model_true_cols,
     )
+    # Already applied to the hue/style legend inside the customiser; drop the
+    # flag so it isn't splatted into plot_parity.
+    plot_config.pop("abbreviate_labels", None)
 
     if not plot_data.empty:
 

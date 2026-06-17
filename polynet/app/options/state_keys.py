@@ -194,6 +194,7 @@ class ExplainModelStateKeys(StrEnum):
     # Local explanation tab
     LocalExplainIDSelector = "LocalExplainIDSelector"
     LocalSetMolName = "LocalSetMolName"
+    LocalAggregation = "LocalAggregation"
     LocalKeepRunning = "LocalKeepRunning"
 
     # Deprecated — kept for session-state compatibility
@@ -224,6 +225,8 @@ class TMLExplainStateKeys(StrEnum):
     # Local explanation tab
     LocalTMLIDSelector = "LocalTMLIDSelector"
     LocalTMLPlotType = "LocalTMLPlotType"
+    LocalTMLTopN = "LocalTMLTopN"
+    LocalTMLAggregation = "LocalTMLAggregation"
     LocalTMLKeepRunning = "LocalTMLKeepRunning"
 
 
@@ -286,3 +289,4 @@ class PlotCustomiserStateKeys(StrEnum):
     CMap = "CMap"
     PlotLabelFontSize = "PlotLabelFontSize"
     LabelNames = "LabelNames"
+    AbbreviateLabels = "AbbreviateLabels"
