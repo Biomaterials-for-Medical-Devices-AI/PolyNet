@@ -493,9 +493,7 @@ def get_plot_customisation_form(
 
 
 def confusion_matrix_plot_form(
-    predictions_df: pd.DataFrame,
-    split_type: SplitType | str,
-    data_options: DataConfig,
+    predictions_df: pd.DataFrame, split_type: SplitType | str, data_options: DataConfig
 ):
     """
     Renders a Streamlit form for customizing and displaying a parity plot based on model predictions.
@@ -594,9 +592,7 @@ def confusion_matrix_plot_form(
 
 
 def parity_plot_form(
-    predictions_df: pd.DataFrame,
-    split_type: SplitType | str,
-    data_options: DataConfig,
+    predictions_df: pd.DataFrame, split_type: SplitType | str, data_options: DataConfig
 ):
 
     color_by_opts = [None]

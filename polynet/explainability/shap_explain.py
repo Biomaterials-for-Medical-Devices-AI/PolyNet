@@ -1011,9 +1011,7 @@ def _separate_local_results(
         sid = str(sample_id)
         for key in sorted(model_log_names):
             model_type, _, iteration = _parse_model_log_name(key)
-            model_label = (
-                f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
-            )
+            model_label = f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
 
             mask = (
                 (cache_df["model_type"] == model_type)

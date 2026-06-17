@@ -213,9 +213,7 @@ def explain_model_local(
             container.write(f"True label: `{breakdown['true']}`")
             if breakdown["rows"]:
                 container.dataframe(
-                    pd.DataFrame(breakdown["rows"]),
-                    use_container_width=True,
-                    hide_index=True,
+                    pd.DataFrame(breakdown["rows"]), use_container_width=True, hide_index=True
                 )
         else:
             container.write(f"True label: `{mol_group[0].true_label}`")

@@ -304,9 +304,7 @@ def _build_prediction_breakdowns(
                         else "N/A"
                     ),
                     "Predicted": (
-                        _fmt(row[pred_col])
-                        if row is not None and pred_col in row.index
-                        else "N/A"
+                        _fmt(row[pred_col]) if row is not None and pred_col in row.index else "N/A"
                     ),
                 }
             )

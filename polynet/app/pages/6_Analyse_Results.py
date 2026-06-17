@@ -116,9 +116,7 @@ if experiment_name:
         st.subheader("Parity Plot")
 
         parity_plot = parity_plot_form(
-            predictions_df=predictions,
-            split_type=split_type,
-            data_options=data_options,
+            predictions_df=predictions, split_type=split_type, data_options=data_options
         )
 
         if parity_plot:
@@ -134,9 +132,7 @@ if experiment_name:
         st.subheader("Confusion Matrix")
 
         confusion_matrix_plot = confusion_matrix_plot_form(
-            predictions_df=predictions,
-            split_type=split_type,
-            data_options=data_options,
+            predictions_df=predictions, split_type=split_type, data_options=data_options
         )
 
         if confusion_matrix_plot:

@@ -139,9 +139,7 @@ def explain_tml_local(
                 container.write(f"True label: `{breakdown['true']}`")
                 if breakdown["rows"]:
                     container.dataframe(
-                        pd.DataFrame(breakdown["rows"]),
-                        use_container_width=True,
-                        hide_index=True,
+                        pd.DataFrame(breakdown["rows"]), use_container_width=True, hide_index=True
                     )
             else:
                 container.write(f"True label: `{insts[0].true_label}`")
