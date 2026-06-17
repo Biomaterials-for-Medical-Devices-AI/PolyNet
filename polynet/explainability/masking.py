@@ -400,18 +400,55 @@ def _compute_masking_attributions(
         # batch_index required by PyG pooling functions; single graph → all zeros
         batch_idx = torch.zeros(h.shape[0], dtype=torch.long)
 
+        # Per-node monomer ids let us locate each monomer's graph nodes exactly,
+        # even when wildcard ('*') atoms were stripped during featurisation
+        # (IsAttachmentPoint), so the graph has fewer nodes than the RDKit mol.
+        monomer_id_attr = getattr(mol, "monomer_id", None)
+        node_monomer_ids = (
+            monomer_id_attr.view(-1).tolist() if monomer_id_attr is not None else None
+        )
+
         # Result keyed by monomer SMILES, then by fragment SMILES → list of
         # per-occurrence attributions (one entry per structural match)
         frag_attributions: dict[str, dict[str, list[float]]] = {}
-        atom_offset = 0
-        old_smiles = ""
-        for smiles in mol.mols:
-            if smiles == old_smiles:
-                continue
 
+        for monomer_idx, smiles in enumerate(mol.mols):
             rdkit_mol = Chem.MolFromSmiles(smiles)
             if rdkit_mol is None:
                 logger.warning(f"Could not parse SMILES '{smiles}' in mol '{mol.idx}'. Skipping.")
+                continue
+
+            # Graph node positions for this monomer (contiguous in graph order).
+            if node_monomer_ids is not None:
+                node_positions = [i for i, mid in enumerate(node_monomer_ids) if mid == monomer_idx]
+            else:
+                # Fallback for graphs without monomer_id: assume monomers are laid
+                # out by full RDKit atom count (no wildcard stripping).
+                start = sum(Chem.MolFromSmiles(s).GetNumAtoms() for s in mol.mols[:monomer_idx])
+                node_positions = list(range(start, start + rdkit_mol.GetNumAtoms()))
+
+            if not node_positions:
+                continue
+
+            atom_offset = node_positions[0]
+            n_graph_nodes = len(node_positions)
+
+            # Map RDKit atom index (with dummies) → graph-local node index. Detect
+            # whether wildcards were stripped by comparing the node and atom counts.
+            full_n = rdkit_mol.GetNumAtoms()
+            dummy_idxs = {a.GetIdx() for a in rdkit_mol.GetAtoms() if a.GetAtomicNum() == 0}
+            if n_graph_nodes == full_n - len(dummy_idxs):
+                # Wildcards stripped: non-dummy atoms kept in original order.
+                kept = [i for i in range(full_n) if i not in dummy_idxs]
+                atom_to_node = {orig: new for new, orig in enumerate(kept)}
+            elif n_graph_nodes == full_n:
+                atom_to_node = {i: i for i in range(full_n)}
+            else:
+                logger.warning(
+                    f"Atom/graph-node count mismatch for monomer '{smiles}' in mol "
+                    f"'{mol.idx}' ({n_graph_nodes} graph nodes vs {full_n} atoms, "
+                    f"{len(dummy_idxs)} wildcard(s)). Skipping this monomer."
+                )
                 continue
 
             frags = fragment_and_match(smiles, fragmentation_method)
@@ -421,14 +458,31 @@ def _compute_masking_attributions(
                 occurrence_scores: list[float] = []
 
                 for atom_indices in atom_indices_list:
+                    # Translate to graph-local node indices, dropping wildcard atoms
+                    # that have no corresponding graph node.
+                    local_nodes = [atom_to_node[i] for i in atom_indices if i in atom_to_node]
+                    if not local_nodes:
+                        continue
+
                     # Remove this occurrence's nodes from the pooling operation.
                     # Zeroing would dilute mean pooling by keeping the node count
                     # unchanged; deletion ensures the pooling denominator (for
                     # mean) and the candidate set (for max) reflect only the
                     # nodes that remain.
-                    global_indices = [atom_offset + i for i in atom_indices]
+                    global_indices = [atom_offset + j for j in local_nodes]
                     keep = torch.ones(h.shape[0], dtype=torch.bool)
                     keep[global_indices] = False
+
+                    # If the fragment spans every node in the graph (e.g. a small
+                    # monomer with no breakable bonds is returned whole), masking
+                    # it leaves nothing to pool and the masked prediction is
+                    # undefined. Skip this occurrence rather than crash.
+                    if not bool(keep.any()):
+                        logger.debug(
+                            f"Fragment '{frag_smiles}' covers all graph nodes of mol "
+                            f"'{mol.idx}'; skipping (no nodes left to pool)."
+                        )
+                        continue
 
                     pooled = model.pooling_fn(h[keep], batch_idx[keep])
 
@@ -445,13 +499,11 @@ def _compute_masking_attributions(
 
                     occurrence_scores.append(float(y_full - y_masked))
 
-                monomer_frags[frag_smiles] = occurrence_scores
+                if occurrence_scores:
+                    monomer_frags[frag_smiles] = occurrence_scores
 
             if monomer_frags:
                 frag_attributions[smiles] = monomer_frags
-
-            atom_offset += rdkit_mol.GetNumAtoms()
-            old_smiles = smiles
 
     return frag_attributions
 
