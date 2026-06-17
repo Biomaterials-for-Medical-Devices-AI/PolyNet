@@ -224,6 +224,7 @@ class TMLExplainStateKeys(StrEnum):
     # Local explanation tab
     LocalTMLIDSelector = "LocalTMLIDSelector"
     LocalTMLPlotType = "LocalTMLPlotType"
+    LocalTMLTopN = "LocalTMLTopN"
     LocalTMLKeepRunning = "LocalTMLKeepRunning"
 
 
