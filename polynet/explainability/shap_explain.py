@@ -678,7 +678,9 @@ def plot_local_shap(
         ``"waterfall"`` (default), ``"force"``, or ``"bar"`` — native
         ``shap.plots`` styles.
     max_display:
-        Maximum number of features to show (waterfall / bar).
+        Maximum number of features (by ``|SHAP|``) to show. Waterfall and bar
+        use shap's own ``max_display``; the force plot has none, so it is
+        truncated to the top ``max_display`` features here.
     neg_color, pos_color:
         Hex colours for negative / positive contributions. Waterfall and bar
         honour them exactly via shap's style context; the force plot is recoloured
@@ -705,7 +707,19 @@ def plot_local_shap(
 
     plt.figure()
     if plot_type == "force":
-        shap.plots.force(explanation, matplotlib=True, show=False)
+        # shap's force plot has no max_display and shows every feature, so
+        # truncate to the top-N by |SHAP| ourselves before drawing.
+        force_expl = explanation
+        vals = np.asarray(explanation.values, dtype=float)
+        if max_display is not None and len(vals) > max_display:
+            top = np.sort(np.argsort(np.abs(vals))[::-1][:max_display])
+            force_expl = shap.Explanation(
+                values=vals[top],
+                base_values=explanation.base_values,
+                data=(explanation.data[top] if explanation.data is not None else None),
+                feature_names=[explanation.feature_names[i] for i in top],
+            )
+        shap.plots.force(force_expl, matplotlib=True, show=False)
         fig = plt.gcf()
         _recolour_force_figure(fig, neg_color, pos_color)
     else:
