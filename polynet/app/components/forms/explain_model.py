@@ -15,11 +15,13 @@ from polynet.app.services.model_training import load_gnn_model
 from polynet.app.utils import extract_number
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import DataSet, ResultColumn
+from polynet.config.display_names import prettify_label
 from polynet.config.enums import (
     AttributionPlotType,
     DescriptorMergingMethod,
     DimensionalityReduction,
     ExplainAlgorithm,
+    ExplanationAggregation,
     FragmentationMethod,
     ImportanceNormalisationMethod,
     ProblemType,
@@ -391,6 +393,8 @@ def _shared_params_section(
         "predicted_col_name": predicted_col_name,
         "true_col_name": true_col_name,
         "preds_filtered": preds_filtered,
+        "preds": preds,
+        "iterator_col": iterator_col,
     }
 
 
@@ -469,6 +473,91 @@ def _global_tab_section(
 # ---------------------------------------------------------------------------
 
 
+def _build_gnn_prediction_breakdowns(
+    preds: pd.DataFrame,
+    model_log_names: list[str],
+    sample_ids: list,
+    data_options: DataConfig,
+    iterator_col: str | None,
+) -> dict[str, dict]:
+    """
+    Build a per-molecule prediction breakdown for the GNN local panels.
+
+    Predictions hold one row per (molecule × bootstrap iteration); each selected
+    model is a specific ``(architecture, bootstrap)``. For every selected model ×
+    bootstrap this records the predicted value and the set (train/val/test) the
+    molecule belonged to in *that* bootstrap, plus the molecule's true label.
+
+    Returns ``{str(mol_id): {"true": str, "rows": [
+        {"Model": str, "Bootstrap": int, "Set": str, "Predicted": str}, ...]}}``.
+    """
+    target = data_options.target_variable_name
+    true_col = get_true_label_column_name(target)
+    class_names = data_options.class_names
+    is_regression = data_options.problem_type == ProblemType.Regression
+
+    def _fmt(value) -> str:
+        if value is None or pd.isna(value):
+            return "N/A"
+        if is_regression:
+            try:
+                return f"{float(value):.4g}"
+            except (TypeError, ValueError):
+                return str(value)
+        key = str(int(value))
+        return class_names[key] if class_names else key
+
+    has_iter = bool(iterator_col) and iterator_col in preds.columns
+    by_iter_lookup: dict = {}
+    by_sid_lookup: dict = {}
+    if has_iter:
+        tmp = preds.copy()
+        tmp["_sid"] = tmp.index
+        for (sid_k, it_k), sub in tmp.groupby(["_sid", iterator_col]):
+            by_iter_lookup[(sid_k, int(it_k))] = sub.iloc[0]
+    else:
+        dedup = preds[~preds.index.duplicated(keep="first")]
+        by_sid_lookup = {sid: row for sid, row in dedup.iterrows()}
+
+    breakdowns: dict[str, dict] = {str(s): {"true": "N/A", "rows": []} for s in sample_ids}
+    for key in model_log_names:
+        # key format: "{architecture}_{bootstrap}"
+        arch, num = key.rsplit("_", 1)
+        iteration = int(num)
+        pred_col = get_predicted_label_column_name(target, arch)
+        model_label = prettify_label(arch)
+
+        for sid in sample_ids:
+            entry = breakdowns[str(sid)]
+            row = by_iter_lookup.get((sid, iteration)) if has_iter else by_sid_lookup.get(sid)
+            # Always emit a row per selected model × bootstrap. When the molecule
+            # was not part of this bootstrap's data there is no stored prediction,
+            # so Set/Predicted show "N/A" rather than the row being dropped.
+            if row is not None and true_col in row.index:
+                entry["true"] = _fmt(row[true_col])
+            entry["rows"].append(
+                {
+                    "Model": model_label,
+                    "Bootstrap": iteration,
+                    "Set": (
+                        row[ResultColumn.SET]
+                        if row is not None and ResultColumn.SET in row.index
+                        else "N/A"
+                    ),
+                    "Predicted": (
+                        _fmt(row[pred_col])
+                        if row is not None and pred_col in row.index
+                        else "N/A"
+                    ),
+                }
+            )
+
+    for entry in breakdowns.values():
+        entry["rows"].sort(key=lambda r: (r["Model"], r["Bootstrap"]))
+
+    return breakdowns
+
+
 def _local_tab_section(
     shared: dict,
     experiment_path: Path,
@@ -492,6 +581,18 @@ def _local_tab_section(
     if not local_mols:
         st.info("Select at least one molecule above to generate local explanations.")
         return
+
+    aggregation = st.radio(
+        "Models display",
+        options=[ExplanationAggregation.Average, ExplanationAggregation.Separate],
+        format_func=lambda x: {
+            ExplanationAggregation.Average: "Average across models (one plot per molecule)",
+            ExplanationAggregation.Separate: "Show each model separately (one plot per model)",
+        }[x],
+        key=ExplainModelStateKeys.LocalAggregation,
+        horizontal=True,
+        help="How to combine explanations from the selected models for the same molecule.",
+    )
 
     # Optional monomer name labels
     mol_names: dict = {}
@@ -527,6 +628,16 @@ def _local_tab_section(
         except (KeyError, TypeError):
             pass  # predictions unavailable for this mol
 
+    # Per-molecule breakdown: true label + each selected model × bootstrap's
+    # predicted value and set membership in that bootstrap.
+    prediction_breakdowns = _build_gnn_prediction_breakdowns(
+        preds=shared["preds"],
+        model_log_names=list(shared["models_dict"].keys()),
+        sample_ids=local_mols,
+        data_options=data_options,
+        iterator_col=shared["iterator_col"],
+    )
+
     if st.button("Run Local Explanation") or st.toggle(
         "Keep running automatically", key=ExplainModelStateKeys.LocalKeepRunning
     ):
@@ -543,8 +654,10 @@ def _local_tab_section(
             target_class=shared["target_class"],
             mol_names=mol_names,
             predictions=preds_dict,
+            prediction_breakdowns=prediction_breakdowns,
             class_labels=data_options.class_names,
             cache_root=cache_root,
+            aggregation=aggregation,
         )
 
 
