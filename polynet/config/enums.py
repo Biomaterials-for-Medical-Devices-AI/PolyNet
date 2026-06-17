@@ -398,6 +398,18 @@ class AttributionPlotType(StrEnum):
     Strip = "strip"
 
 
+class ExplanationAggregation(StrEnum):
+    """How to combine local explanations from multiple models for one molecule.
+
+    - ``Average``: merge across the selected models into a single explanation /
+      plot per molecule (historical behaviour).
+    - ``Separate``: keep one explanation / plot per model × molecule.
+    """
+
+    Average = "average"
+    Separate = "separate"
+
+
 class ShapGlobalPlotType(StrEnum):
     """Native SHAP plot types for the global TML attribution view.
 
