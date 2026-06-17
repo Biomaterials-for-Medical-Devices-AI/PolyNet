@@ -54,20 +54,25 @@ def explain_mols_widget(
         "Select a set to explain", options=options, key=SetStateKey, default=default
     )
 
+    # Predictions hold one row per (molecule × bootstrap iteration), so the index
+    # repeats. Deduplicate so each molecule is offered/selected exactly once.
     if mols_to_explain == DataSet.Training:
-        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Training].index
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Training].index.unique()
     elif mols_to_explain == DataSet.Validation:
-        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Validation].index
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Validation].index.unique()
     elif mols_to_explain == DataSet.Test:
-        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Test].index
+        explain_mols = data.loc[data[ResultColumn.SET] == DataSet.Test].index.unique()
     elif mols_to_explain in ("All", "External"):
-        explain_mols = data.index
+        explain_mols = data.index.unique()
     else:
         explain_mols = None
 
     if not mols_to_explain or st.checkbox("Manually refine selection", key=ManuallySelectStateKey):
         mols_to_plot = st.multiselect(
-            "Select molecules", options=data.index, default=explain_mols, key=MolsStateKey
+            "Select molecules",
+            options=sorted(data.index.unique()),
+            default=explain_mols,
+            key=MolsStateKey,
         )
     else:
         mols_to_plot = explain_mols.tolist()
