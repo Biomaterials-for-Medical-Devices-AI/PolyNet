@@ -243,17 +243,30 @@ def _tml_local_tab(
         st.info("Select at least one sample above to generate local SHAP explanations.")
         return
 
-    local_plot_type = st.radio(
-        "Local plot style",
-        options=["waterfall", "force", "bar"],
-        key=TMLExplainStateKeys.LocalTMLPlotType,
-        horizontal=True,
-        help=(
-            "**Waterfall** — cumulative contribution chart.  \n"
-            "**Force** — stacked horizontal force plot.  \n"
-            "**Bar** — simple ranked horizontal bar chart."
-        ),
-    )
+    cols = st.columns(2)
+    with cols[0]:
+        local_plot_type = st.radio(
+            "Local plot style",
+            options=["waterfall", "force", "bar"],
+            key=TMLExplainStateKeys.LocalTMLPlotType,
+            horizontal=True,
+            help=(
+                "**Waterfall** — cumulative contribution chart.  \n"
+                "**Force** — stacked horizontal force plot.  \n"
+                "**Bar** — simple ranked horizontal bar chart."
+            ),
+        )
+    with cols[1]:
+        local_top_n = st.number_input(
+            "Features to show (top N)",
+            min_value=1,
+            max_value=100,
+            value=15,
+            step=1,
+            key=TMLExplainStateKeys.LocalTMLTopN,
+            help="Maximum number of features (by |SHAP|) to display. "
+            "Applies to the waterfall and bar plots; the force plot shows all.",
+        )
 
     # Build predictions dict for true / predicted label display
     true_col = get_true_label_column_name(data_options.target_variable_name)
@@ -304,6 +317,7 @@ def _tml_local_tab(
             normalisation_type=shared["normalisation_type"],
             target_class=shared["target_class"],
             local_plot_type=local_plot_type,
+            max_display=int(local_top_n),
             predictions=preds_dict,
             cache_root=cache_root,
             target_col=data_options.target_variable_col,
