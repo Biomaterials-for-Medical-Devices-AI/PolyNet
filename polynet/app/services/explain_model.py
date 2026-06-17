@@ -14,6 +14,7 @@ from polynet.config.enums import (
     AttributionPlotType,
     DimensionalityReduction,
     ExplainAlgorithm,
+    ExplanationAggregation,
     FragmentationMethod,
     ImportanceNormalisationMethod,
     ProblemType,
@@ -166,8 +167,19 @@ def explain_model_local(
     predictions: dict | None = None,
     class_labels: dict | None = None,
     cache_root: Path | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+    prediction_breakdowns: dict | None = None,
 ) -> None:
-    """Compute and render per-molecule attribution panels (table + atom heatmap)."""
+    """Compute and render per-molecule attribution panels (table + atom heatmap).
+
+    ``aggregation`` controls whether the selected models are merged into one
+    plot per molecule (``Average``) or shown as one plot per model × molecule
+    (``Separate``).
+
+    ``prediction_breakdowns`` (optional) holds, per molecule, the true label and
+    one row per selected model × bootstrap with that bootstrap's predicted value
+    and set membership. When provided it replaces the single true/predicted lines.
+    """
     mol_results: list[MolAttributionResult] = compute_local_attribution(
         models=models,
         experiment_path=experiment_path,
@@ -183,17 +195,37 @@ def explain_model_local(
         predictions=predictions,
         class_labels=class_labels,
         cache_root=cache_root,
+        aggregation=aggregation,
     )
 
+    # Group by molecule (preserving order). In Average mode each molecule has one
+    # result (model_label is None); in Separate mode it has one per model.
+    by_mol: dict[str, list[MolAttributionResult]] = {}
     for result in mol_results:
-        container = st.container(border=True, key=f"local_mol_{result.mol_idx}_container")
-        container.info(result.info_msg)
-        container.write(f"True label: `{result.true_label}`")
-        container.write(f"Predicted label: `{result.predicted_label}`")
+        by_mol.setdefault(str(result.mol_idx), []).append(result)
 
-        if result.warning:
-            container.warning(result.warning)
-            continue
+    for mid, mol_group in by_mol.items():
+        container = st.container(border=True, key=f"local_mol_{mid}_container")
+        container.info(mol_group[0].info_msg)
 
-        container.dataframe(result.attribution_df, use_container_width=True)
-        container.pyplot(result.mol_figure, use_container_width=True)
+        breakdown = (prediction_breakdowns or {}).get(mid)
+        if breakdown is not None:
+            container.write(f"True label: `{breakdown['true']}`")
+            if breakdown["rows"]:
+                container.dataframe(
+                    pd.DataFrame(breakdown["rows"]),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+        else:
+            container.write(f"True label: `{mol_group[0].true_label}`")
+            container.write(f"Predicted label: `{mol_group[0].predicted_label}`")
+
+        for result in mol_group:
+            if result.model_label:
+                container.markdown(f"**{result.model_label}**")
+            if result.warning:
+                container.warning(result.warning)
+                continue
+            container.dataframe(result.attribution_df, use_container_width=True)
+            container.pyplot(result.mol_figure, use_container_width=True)

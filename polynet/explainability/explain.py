@@ -51,9 +51,11 @@ import pandas as pd
 from rdkit import Chem
 
 from polynet.config.constants import ResultColumn
+from polynet.config.display_names import prettify_label
 from polynet.config.enums import (
     AttributionPlotType,
     ExplainAlgorithm,
+    ExplanationAggregation,
     FragmentationMethod,
     ImportanceNormalisationMethod,
     ProblemType,
@@ -145,6 +147,10 @@ class MolAttributionResult:
         Atom-level heatmap figure.  ``None`` if ``warning`` is set.
     warning:
         Non-empty string if no fragments were matched; ``None`` otherwise.
+    model_label:
+        Display label of the model this result belongs to (e.g. ``"GCN — bootstrap 1"``)
+        when explanations are shown per model (``Separate`` aggregation). ``None``
+        for the averaged ensemble.
     """
 
     mol_idx: str | int
@@ -154,6 +160,7 @@ class MolAttributionResult:
     attribution_df: pd.DataFrame
     mol_figure: plt.Figure | None
     warning: str | None = None
+    model_label: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -477,6 +484,111 @@ def compute_global_attribution(
 # ---------------------------------------------------------------------------
 
 
+def _build_mol_attribution_result(
+    mol,
+    monomer_dict: dict,
+    fk: str,
+    fragmentation_approach,
+    normalisation_type: ImportanceNormalisationMethod,
+    global_divisor: float | None,
+    neg_color: str,
+    pos_color: str,
+    info_msg: str,
+    true_label: str,
+    predicted_label: str,
+    mol_names: dict,
+    model_label: str | None = None,
+) -> MolAttributionResult:
+    """
+    Build a single molecule's attribution table + atom-heatmap figure.
+
+    Shared by the Average and Separate aggregation paths — the only differences
+    are which ``monomer_dict`` is passed (merged across models, or one model's)
+    and the ``model_label`` tag. Normalisation is identical to the historical
+    behaviour: ``Local``/``PerModel`` scale by the unit's own max-abs, ``Global``
+    by the supplied ``global_divisor``, ``NoNormalisation`` leaves raw scores.
+    """
+    if not monomer_dict:
+        return MolAttributionResult(
+            mol_idx=mol.idx,
+            info_msg=info_msg,
+            true_label=true_label,
+            predicted_label=predicted_label,
+            attribution_df=pd.DataFrame(),
+            mol_figure=None,
+            warning="No fragments matched for this molecule.",
+            model_label=model_label,
+        )
+
+    mol_raw_scores = [
+        s
+        for mon_data in monomer_dict.values()
+        for scores in mon_data.get(fk, {}).values()
+        for s in scores
+    ]
+
+    if normalisation_type in (
+        ImportanceNormalisationMethod.Local,
+        ImportanceNormalisationMethod.PerModel,
+    ):
+        mol_divisor = max((abs(s) for s in mol_raw_scores), default=1.0) or 1.0
+    elif normalisation_type == ImportanceNormalisationMethod.Global:
+        mol_divisor = global_divisor
+    else:
+        mol_divisor = None
+
+    attr_col = "Attribution (Y − Y_masked)"
+    norm_col = "Normalised Attribution" if mol_divisor is not None else attr_col
+    rows = [
+        {
+            "Monomer (SMILES)": monomer_smiles,
+            "Fragment (SMILES)": frag_smiles,
+            "Occurrence": occ + 1,
+            attr_col: score,
+        }
+        for monomer_smiles, fk_dict in monomer_dict.items()
+        for frag_smiles, scores in fk_dict.get(fk, {}).items()
+        for occ, score in enumerate(scores)
+    ]
+    df = pd.DataFrame(rows).sort_values(attr_col, ascending=False)
+    if mol_divisor is not None:
+        df[norm_col] = df[attr_col] / mol_divisor
+
+    weights_list = fragment_attributions_to_atom_weights(
+        mol=mol,
+        monomer_dict=monomer_dict,
+        frag_key=fk,
+        fragmentation_approach=fragmentation_approach,
+    )
+
+    if mol_divisor is not None:
+        weights_list = [[w / mol_divisor for w in wlist] for wlist in weights_list]
+        cmap_min, cmap_max = -1.0, 1.0
+    else:
+        cmap_min, cmap_max = None, None
+
+    names = mol_names.get(mol.idx, None)
+    cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
+    fig = plot_mols_with_weights(
+        smiles_list=mol.mols,
+        weights_list=weights_list,
+        colormap=cmap,
+        legend=names,
+        min_weight=cmap_min,
+        max_weight=cmap_max,
+    )
+
+    return MolAttributionResult(
+        mol_idx=mol.idx,
+        info_msg=info_msg,
+        true_label=true_label,
+        predicted_label=predicted_label,
+        attribution_df=df,
+        mol_figure=fig,
+        model_label=model_label,
+    )
+
+
 def compute_local_attribution(
     models: dict,
     experiment_path: Path,
@@ -492,6 +604,7 @@ def compute_local_attribution(
     predictions: dict | None = None,
     class_labels: dict | None = None,
     cache_root: Path | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
 ) -> list[MolAttributionResult]:
     """
     Compute per-molecule attribution tables and atom heatmap figures.
@@ -552,6 +665,68 @@ def compute_local_attribution(
     fk = _frag_key(fragmentation_approach)
     ck = _class_key(target_class)
 
+    mols_filtered = filter_dataset_by_ids(dataset, explain_mols)
+    results: list[MolAttributionResult] = []
+
+    def _mol_info(mol):
+        info_msg = (
+            f"Fragment attributions for `{mol.idx}` — Chemistry Masking ({fk})"
+            + (f", class `{target_class}`" if target_class is not None else "")
+            + f" | normalisation: `{normalisation_type}`"
+        )
+        true_label = str(predictions.get(mol.idx, {}).get(ResultColumn.LABEL, "N/A"))
+        predicted_label = str(predictions.get(mol.idx, {}).get(ResultColumn.PREDICTED, "N/A"))
+        return info_msg, true_label, predicted_label
+
+    # ----- Separate aggregation: one explanation per model × molecule -----
+    if aggregation == ExplanationAggregation.Separate:
+        if normalisation_type == ImportanceNormalisationMethod.Global:
+            global_divisor = (
+                max(
+                    (
+                        abs(s)
+                        for num_dict in display_data.values()
+                        for mol_dict in num_dict.values()
+                        for mol_entry in mol_dict.values()
+                        for mon_data in mol_entry.get(_ALG_KEY, {}).get(ck, {}).values()
+                        for scores in mon_data.get(fk, {}).values()
+                        for s in scores
+                    ),
+                    default=1.0,
+                )
+                or 1.0
+            )
+        else:
+            global_divisor = None
+
+        for mol in mols_filtered:
+            info_msg, true_label, predicted_label = _mol_info(mol)
+            for log_name in sorted(models.keys()):
+                model_name, number = log_name.split("_", 1)
+                model_label = f"{prettify_label(model_name)} — bootstrap {number}"
+                mol_dict = display_data.get(model_name, {}).get(number, {})
+                mol_entry = mol_dict.get(mol.idx, mol_dict.get(str(mol.idx), {}))
+                monomer_dict = mol_entry.get(_ALG_KEY, {}).get(ck, {})
+                results.append(
+                    _build_mol_attribution_result(
+                        mol=mol,
+                        monomer_dict=monomer_dict,
+                        fk=fk,
+                        fragmentation_approach=fragmentation_approach,
+                        normalisation_type=normalisation_type,
+                        global_divisor=global_divisor,
+                        neg_color=neg_color,
+                        pos_color=pos_color,
+                        info_msg=info_msg,
+                        true_label=true_label,
+                        predicted_label=predicted_label,
+                        mol_names=mol_names,
+                        model_label=model_label,
+                    )
+                )
+        return results
+
+    # ----- Average aggregation (default, historical behaviour) -----
     merged = merge_fragment_attributions(display_data, list(models.keys()))
 
     # Global divisor derived from the averaged merged data
@@ -572,100 +747,24 @@ def compute_local_attribution(
     else:
         global_divisor = None
 
-    mols_filtered = filter_dataset_by_ids(dataset, explain_mols)
-    cmap = get_cmap(neg_color=neg_color, pos_color=pos_color)
-
-    results: list[MolAttributionResult] = []
-
     for mol in mols_filtered:
-        info_msg = (
-            f"Fragment attributions for `{mol.idx}` — Chemistry Masking ({fk})"
-            + (f", class `{target_class}`" if target_class is not None else "")
-            + f" | normalisation: `{normalisation_type}`"
-        )
-        true_label = str(predictions.get(mol.idx, {}).get(ResultColumn.LABEL, "N/A"))
-        predicted_label = str(predictions.get(mol.idx, {}).get(ResultColumn.PREDICTED, "N/A"))
-
+        info_msg, true_label, predicted_label = _mol_info(mol)
         monomer_dict = merged.get(mol.idx, {}).get(_ALG_KEY, {}).get(ck, {})
-        if not monomer_dict:
-            results.append(
-                MolAttributionResult(
-                    mol_idx=mol.idx,
-                    info_msg=info_msg,
-                    true_label=true_label,
-                    predicted_label=predicted_label,
-                    attribution_df=pd.DataFrame(),
-                    mol_figure=None,
-                    warning="No fragments matched for this molecule.",
-                )
-            )
-            continue
-
-        mol_raw_scores = [
-            s
-            for mon_data in monomer_dict.values()
-            for scores in mon_data.get(fk, {}).values()
-            for s in scores
-        ]
-
-        if normalisation_type in (
-            ImportanceNormalisationMethod.Local,
-            ImportanceNormalisationMethod.PerModel,
-        ):
-            mol_divisor = max((abs(s) for s in mol_raw_scores), default=1.0) or 1.0
-        elif normalisation_type == ImportanceNormalisationMethod.Global:
-            mol_divisor = global_divisor
-        else:
-            mol_divisor = None
-
-        attr_col = "Attribution (Y − Y_masked)"
-        norm_col = "Normalised Attribution" if mol_divisor is not None else attr_col
-        rows = [
-            {
-                "Monomer (SMILES)": monomer_smiles,
-                "Fragment (SMILES)": frag_smiles,
-                "Occurrence": occ + 1,
-                attr_col: score,
-            }
-            for monomer_smiles, fk_dict in monomer_dict.items()
-            for frag_smiles, scores in fk_dict.get(fk, {}).items()
-            for occ, score in enumerate(scores)
-        ]
-        df = pd.DataFrame(rows).sort_values(attr_col, ascending=False)
-        if mol_divisor is not None:
-            df[norm_col] = df[attr_col] / mol_divisor
-
-        weights_list = fragment_attributions_to_atom_weights(
-            mol=mol,
-            monomer_dict=monomer_dict,
-            frag_key=fk,
-            fragmentation_approach=fragmentation_approach,
-        )
-
-        if mol_divisor is not None:
-            weights_list = [[w / mol_divisor for w in wlist] for wlist in weights_list]
-            cmap_min, cmap_max = -1.0, 1.0
-        else:
-            cmap_min, cmap_max = None, None
-
-        names = mol_names.get(mol.idx, None)
-        fig = plot_mols_with_weights(
-            smiles_list=mol.mols,
-            weights_list=weights_list,
-            colormap=cmap,
-            legend=names,
-            min_weight=cmap_min,
-            max_weight=cmap_max,
-        )
-
         results.append(
-            MolAttributionResult(
-                mol_idx=mol.idx,
+            _build_mol_attribution_result(
+                mol=mol,
+                monomer_dict=monomer_dict,
+                fk=fk,
+                fragmentation_approach=fragmentation_approach,
+                normalisation_type=normalisation_type,
+                global_divisor=global_divisor,
+                neg_color=neg_color,
+                pos_color=pos_color,
                 info_msg=info_msg,
                 true_label=true_label,
                 predicted_label=predicted_label,
-                attribution_df=df,
-                mol_figure=fig,
+                mol_names=mol_names,
+                model_label=None,
             )
         )
 
