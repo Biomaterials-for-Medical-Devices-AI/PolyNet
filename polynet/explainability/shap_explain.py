@@ -47,7 +47,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from polynet.config.enums import ImportanceNormalisationMethod, ProblemType, ShapGlobalPlotType
+from polynet.config.display_names import prettify_label
+from polynet.config.enums import (
+    ExplanationAggregation,
+    ImportanceNormalisationMethod,
+    ProblemType,
+    ShapGlobalPlotType,
+)
 from polynet.config.paths import explanation_parent_directory, model_dir
 from polynet.explainability.explain import GlobalAttributionResult
 from polynet.explainability.visualization import get_cmap
@@ -87,6 +93,10 @@ class InstanceAttributionResult:
         ``warning`` is set.
     warning:
         Non-empty string when no SHAP values could be computed; ``None`` otherwise.
+    model_label:
+        Display label of the model this result belongs to (e.g.
+        ``"Random Forest polyBERT — bootstrap 1"``) when explanations are shown
+        per model (``Separate`` aggregation). ``None`` for the averaged ensemble.
     """
 
     sample_idx: str | int
@@ -96,6 +106,7 @@ class InstanceAttributionResult:
     attribution_df: pd.DataFrame
     figure: plt.Figure | None
     warning: str | None = None
+    model_label: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -955,6 +966,138 @@ def compute_global_shap_attribution(
     return results
 
 
+def _separate_local_results(
+    cache_df: pd.DataFrame,
+    descriptor: str,
+    model_log_names: list[str],
+    explain_sample_ids: list[str],
+    normalisation_type: ImportanceNormalisationMethod,
+    problem_type: ProblemType,
+    target_class: int | None,
+    descriptor_df: pd.DataFrame | None,
+    target_col: str | None,
+    local_plot_type: str,
+    max_display: int,
+    neg_color: str,
+    pos_color: str,
+) -> list[InstanceAttributionResult]:
+    """
+    Build one :class:`InstanceAttributionResult` per model × sample (Separate).
+
+    Mirrors the per-sample normalisation of the Average path (``Local`` → each
+    row by its own max-abs, ``Global`` → a single divisor over the displayed
+    rows, otherwise raw), but keeps each model's explanation distinct and tags it
+    with ``model_label``. Results are ordered by sample, then by model.
+    """
+    feature_cols = [c for c in cache_df.columns if c not in _META_COLS]
+    results: list[InstanceAttributionResult] = []
+
+    if not feature_cols or cache_df.empty:
+        return results
+
+    sample_ids_set = {str(s) for s in explain_sample_ids}
+
+    # Global divisor over all displayed (model × sample) rows for this descriptor.
+    global_divisor = 1.0
+    if normalisation_type == ImportanceNormalisationMethod.Global:
+        sel = cache_df[cache_df["sample_id"].isin(sample_ids_set)]
+        if not sel.empty:
+            max_abs = np.nanmax(np.abs(sel[feature_cols].to_numpy(dtype=float)))
+            global_divisor = float(max_abs) if max_abs > 0 else 1.0
+
+    cls_str = "" if problem_type == ProblemType.Regression else f", class {target_class}"
+
+    for sample_id in explain_sample_ids:
+        sid = str(sample_id)
+        for key in sorted(model_log_names):
+            model_type, _, iteration = _parse_model_log_name(key)
+            model_label = (
+                f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
+            )
+
+            mask = (
+                (cache_df["model_type"] == model_type)
+                & (cache_df["iteration"] == str(iteration))
+                & (cache_df["sample_id"] == sid)
+            )
+            row = cache_df.loc[mask]
+            if row.empty:
+                results.append(
+                    InstanceAttributionResult(
+                        sample_idx=sid,
+                        info_msg="",
+                        true_label="N/A",
+                        predicted_label="N/A",
+                        attribution_df=pd.DataFrame(),
+                        figure=None,
+                        warning=f"No SHAP values found for sample '{sid}' / {model_label}.",
+                        model_label=model_label,
+                    )
+                )
+                continue
+
+            raw_vals = row.iloc[0][feature_cols].to_numpy(dtype=float)
+
+            if normalisation_type == ImportanceNormalisationMethod.Local:
+                max_abs = np.nanmax(np.abs(raw_vals))
+                divisor = float(max_abs) if max_abs > 0 else 1.0
+            elif normalisation_type == ImportanceNormalisationMethod.Global:
+                divisor = global_divisor
+            else:
+                divisor = 1.0
+
+            normed_vals = raw_vals / divisor if divisor != 1.0 else raw_vals.copy()
+
+            attr_df = (
+                pd.DataFrame(
+                    {
+                        "Feature": feature_cols,
+                        "SHAP Value": raw_vals,
+                        "Normalised SHAP": normed_vals,
+                    }
+                )
+                .sort_values("SHAP Value", key=abs, ascending=False)
+                .reset_index(drop=True)
+            )
+
+            feature_matrix = _aligned_feature_matrix(
+                sample_index=pd.Index([sid]),
+                feature_cols=feature_cols,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+            )
+            instance_data = feature_matrix[0] if feature_matrix is not None else None
+            fig = plot_local_shap(
+                values=normed_vals,
+                feature_names=feature_cols,
+                base_value=0.0,
+                data=instance_data,
+                plot_type=local_plot_type,
+                max_display=max_display,
+                neg_color=neg_color,
+                pos_color=pos_color,
+            )
+            plt.close("all")
+
+            info_msg = (
+                f"SHAP attribution for `{sid}` | {descriptor}"
+                f"{cls_str} | normalisation: `{normalisation_type}`"
+            )
+            results.append(
+                InstanceAttributionResult(
+                    sample_idx=sid,
+                    info_msg=info_msg,
+                    true_label="N/A",
+                    predicted_label="N/A",
+                    attribution_df=attr_df,
+                    figure=fig,
+                    model_label=model_label,
+                )
+            )
+
+    return results
+
+
 def compute_local_shap_attribution(
     models: dict,
     descriptor_dfs: dict,
@@ -970,6 +1113,7 @@ def compute_local_shap_attribution(
     predictions: dict | None = None,
     cache_root: Path | None = None,
     target_col: str | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
 ) -> dict[str, list[InstanceAttributionResult]]:
     """
     Compute per-instance SHAP attribution with waterfall / force / bar plots.
@@ -1001,11 +1145,16 @@ def compute_local_shap_attribution(
     predictions:
         Optional ``{sample_id: {"true": ..., "predicted": ...}}`` for label
         display in the result.
+    aggregation:
+        ``Average`` (default) merges the selected models into a single
+        explanation per sample. ``Separate`` keeps one explanation per
+        model × sample, each tagged with ``model_label``.
 
     Returns
     -------
     dict[str, list[InstanceAttributionResult]]
-        Keyed by descriptor name; each value is a list with one result per sample.
+        Keyed by descriptor name. For ``Average`` there is one result per
+        sample; for ``Separate`` there is one result per model × sample.
     """
     cache_by_descriptor = compute_and_cache_shap(
         models=models,
@@ -1027,6 +1176,26 @@ def compute_local_shap_attribution(
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
         descriptor_df = str_dfs.get(descriptor)
 
+        # Separate aggregation: one explanation per model × sample (no merge).
+        if aggregation == ExplanationAggregation.Separate:
+            results[descriptor] = _separate_local_results(
+                cache_df=cache_df,
+                descriptor=descriptor,
+                model_log_names=model_log_names,
+                explain_sample_ids=explain_sample_ids,
+                normalisation_type=normalisation_type,
+                problem_type=problem_type,
+                target_class=target_class,
+                descriptor_df=descriptor_df,
+                target_col=target_col,
+                local_plot_type=local_plot_type,
+                max_display=max_display,
+                neg_color=neg_color,
+                pos_color=pos_color,
+            )
+            continue
+
+        # ----- Average aggregation (default, historical behaviour) -----
         # Merge ensemble
         merged_df = merge_shap_attributions(
             cache_df=cache_df, model_log_names=model_log_names, sample_ids=explain_sample_ids
