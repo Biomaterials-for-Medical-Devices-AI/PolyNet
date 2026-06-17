@@ -37,6 +37,7 @@ High-level API::
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 import logging
 from pathlib import Path
@@ -570,6 +571,82 @@ def merge_shap_attributions(
 # ---------------------------------------------------------------------------
 
 
+def _lighten(color: str, amount: float = 0.6) -> tuple[float, float, float]:
+    """Blend a colour towards white by ``amount`` (0 = unchanged, 1 = white)."""
+    import matplotlib.colors as mcolors
+
+    r, g, b = mcolors.to_rgb(color)
+    return (r + (1.0 - r) * amount, g + (1.0 - g) * amount, b + (1.0 - b) * amount)
+
+
+@contextmanager
+def _shap_local_colours(neg_color: str, pos_color: str):
+    """
+    Temporarily set shap's style colours so waterfall / bar honour user colours.
+
+    shap >= 0.46 styles its plots via ``shap.plots._style``. Waterfall and bar
+    have no per-call colour argument, but the style colours can be overridden in
+    a context. Falls back to a no-op on shap builds without the style system.
+    """
+    try:
+        from shap.plots import _style as shap_style
+    except Exception:
+        yield
+        return
+
+    with shap_style.style_context(
+        primary_color_positive=pos_color,
+        primary_color_negative=neg_color,
+        secondary_color_positive=_lighten(pos_color),
+        secondary_color_negative=_lighten(neg_color),
+    ):
+        yield
+
+
+def _recolour_force_figure(fig: plt.Figure, neg_color: str, pos_color: str) -> None:
+    """
+    Recolour a shap matplotlib force plot to the user's colours.
+
+    ``shap.plots.force(..., matplotlib=True)`` hardcodes its colours and ignores
+    ``plot_cmap``, so the only way to honour user colours is to remap the known
+    constants after drawing. Unmatched colours are left untouched, so this is a
+    safe best-effort that degrades gracefully if shap changes its palette.
+    """
+    import matplotlib.colors as mcolors
+
+    # shap force constants (positive primary/secondary, negative primary/secondary).
+    remap = {
+        (1.0, 0.051, 0.341): mcolors.to_rgb(pos_color),  # #FF0D57
+        (1.0, 0.765, 0.835): _lighten(pos_color),  # #FFC3D5
+        (0.118, 0.533, 0.898): mcolors.to_rgb(neg_color),  # #1E88E5
+        (0.82, 0.902, 0.98): _lighten(neg_color),  # #D1E6FA
+    }
+
+    def _mapped(color) -> tuple | None:
+        try:
+            key = tuple(round(c, 3) for c in mcolors.to_rgb(color))
+        except (ValueError, TypeError):
+            return None
+        return remap.get(key)
+
+    for ax in fig.axes:
+        for patch in ax.patches:
+            new_fc = _mapped(patch.get_facecolor())
+            if new_fc is not None:
+                patch.set_facecolor(new_fc)
+            new_ec = _mapped(patch.get_edgecolor())
+            if new_ec is not None:
+                patch.set_edgecolor(new_ec)
+        for line in ax.get_lines():
+            new_c = _mapped(line.get_color())
+            if new_c is not None:
+                line.set_color(new_c)
+        for text in ax.texts:
+            new_c = _mapped(text.get_color())
+            if new_c is not None:
+                text.set_color(new_c)
+
+
 def plot_local_shap(
     values: np.ndarray,
     feature_names: list[str],
@@ -577,6 +654,8 @@ def plot_local_shap(
     data: np.ndarray | None = None,
     plot_type: str = "waterfall",
     max_display: int = 15,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
 ) -> plt.Figure:
     """
     Render a single-instance SHAP explanation with the native ``shap`` package.
@@ -600,6 +679,10 @@ def plot_local_shap(
         ``shap.plots`` styles.
     max_display:
         Maximum number of features to show (waterfall / bar).
+    neg_color, pos_color:
+        Hex colours for negative / positive contributions. Waterfall and bar
+        honour them exactly via shap's style context; the force plot is recoloured
+        post-hoc since shap hardcodes its force palette.
 
     Returns
     -------
@@ -621,14 +704,18 @@ def plot_local_shap(
     )
 
     plt.figure()
-    if plot_type == "bar":
-        shap.plots.bar(explanation, max_display=max_display, show=False)
-    elif plot_type == "force":
+    if plot_type == "force":
         shap.plots.force(explanation, matplotlib=True, show=False)
-    else:  # waterfall
-        shap.plots.waterfall(explanation, max_display=max_display, show=False)
+        fig = plt.gcf()
+        _recolour_force_figure(fig, neg_color, pos_color)
+    else:
+        with _shap_local_colours(neg_color, pos_color):
+            if plot_type == "bar":
+                shap.plots.bar(explanation, max_display=max_display, show=False)
+            else:  # waterfall
+                shap.plots.waterfall(explanation, max_display=max_display, show=False)
+        fig = plt.gcf()
 
-    fig = plt.gcf()
     fig.tight_layout()
     return fig
 
@@ -865,6 +952,7 @@ def compute_local_shap_attribution(
     normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
     target_class: int | None = None,
     local_plot_type: str = "waterfall",
+    max_display: int = 15,
     predictions: dict | None = None,
     cache_root: Path | None = None,
     target_col: str | None = None,
@@ -885,14 +973,17 @@ def compute_local_shap_attribution(
     problem_type:
         Regression or Classification.
     neg_color, pos_color:
-        Accepted for API compatibility; the native ``shap`` local plots use
-        their own colour scheme and ignore these.
+        Hex colours for negative / positive contributions, applied to the native
+        ``shap`` local plots (see :func:`plot_local_shap`).
     normalisation_type:
         Normalisation strategy applied to SHAP values before plotting.
     target_class:
         Class index for classification.
     local_plot_type:
         ``"waterfall"``, ``"force"``, or ``"bar"`` — native ``shap.plots`` styles.
+    max_display:
+        Maximum number of features (by ``|SHAP|``) shown in the waterfall and
+        bar plots. The force plot displays all features and ignores this.
     predictions:
         Optional ``{sample_id: {"true": ..., "predicted": ...}}`` for label
         display in the result.
@@ -1001,6 +1092,9 @@ def compute_local_shap_attribution(
                 base_value=0.0,
                 data=instance_data,
                 plot_type=local_plot_type,
+                max_display=max_display,
+                neg_color=neg_color,
+                pos_color=pos_color,
             )
             plt.close("all")
 
