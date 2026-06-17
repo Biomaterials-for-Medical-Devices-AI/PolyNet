@@ -19,7 +19,15 @@ from polynet.app.components.forms.explain_model import explain_mols_widget
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
-from polynet.config.enums import ImportanceNormalisationMethod, ProblemType, ShapGlobalPlotType
+from polynet.config.constants import ResultColumn
+from polynet.config.display_names import prettify_label
+from polynet.config.enums import (
+    ExplanationAggregation,
+    ImportanceNormalisationMethod,
+    IteratorType,
+    ProblemType,
+    ShapGlobalPlotType,
+)
 from polynet.config.schemas import DataConfig
 
 # ---------------------------------------------------------------------------
@@ -217,6 +225,100 @@ def _tml_global_tab(
 # ---------------------------------------------------------------------------
 
 
+def _build_prediction_breakdowns(
+    preds: pd.DataFrame,
+    model_log_names: list[str],
+    sample_ids: list,
+    data_options: DataConfig,
+    iterator_col: str | None,
+    selected_iterations,
+) -> dict[str, dict[str, dict]]:
+    """
+    Build a per (descriptor, sample) prediction breakdown for the local panels.
+
+    Predictions hold one row per (sample × bootstrap iteration), and each
+    selected model is a specific ``(algorithm, representation, bootstrap)``. For
+    every selected model × bootstrap this records the predicted value and the
+    set (train/val/test) the sample belonged to in *that* bootstrap, plus the
+    sample's true label.
+
+    Returns
+    -------
+    dict
+        ``{descriptor: {str(sample_id): {"true": str, "rows": [
+            {"Model": str, "Bootstrap": int, "Set": str, "Predicted": str}, ...
+        ]}}}``
+    """
+    target = data_options.target_variable_name
+    true_col = get_true_label_column_name(target)
+    class_names = data_options.class_names
+    is_regression = data_options.problem_type == ProblemType.Regression
+
+    def _fmt(value) -> str:
+        if value is None or pd.isna(value):
+            return "N/A"
+        if is_regression:
+            try:
+                return f"{float(value):.4g}"
+            except (TypeError, ValueError):
+                return str(value)
+        key = str(int(value))
+        return class_names[key] if class_names else key
+
+    # (sample_id, iteration) -> row, for O(1) lookup.
+    row_lookup: dict = {}
+    if iterator_col and iterator_col in preds.columns:
+        tmp = preds.copy()
+        tmp["_sid"] = tmp.index
+        for (sid_k, it_k), sub in tmp.groupby(["_sid", iterator_col]):
+            row_lookup[(sid_k, int(it_k))] = sub.iloc[0]
+
+    breakdowns: dict[str, dict[str, dict]] = {}
+    for key in model_log_names:
+        # key format: "{algo}-{descriptor}_{iteration}"
+        algo_descr, it_str = key.rsplit("_", 1)
+        descriptor = algo_descr.split("-", 1)[1]
+        iteration = int(it_str)
+        if selected_iterations and iteration not in selected_iterations:
+            continue
+
+        pred_col = get_predicted_label_column_name(target, algo_descr)
+        model_label = prettify_label(algo_descr)
+        desc_map = breakdowns.setdefault(descriptor, {})
+
+        for sid in sample_ids:
+            entry = desc_map.setdefault(str(sid), {"true": "N/A", "rows": []})
+            row = row_lookup.get((sid, iteration))
+            # Always emit a row per selected model × bootstrap. When the sample
+            # was not part of this bootstrap's data there is no stored prediction,
+            # so Set/Predicted show "N/A" rather than the row being dropped.
+            if row is not None and true_col in row.index:
+                entry["true"] = _fmt(row[true_col])
+            entry["rows"].append(
+                {
+                    "Model": model_label,
+                    "Bootstrap": iteration,
+                    "Set": (
+                        row[ResultColumn.SET]
+                        if row is not None and ResultColumn.SET in row.index
+                        else "N/A"
+                    ),
+                    "Predicted": (
+                        _fmt(row[pred_col])
+                        if row is not None and pred_col in row.index
+                        else "N/A"
+                    ),
+                }
+            )
+
+    # Stable ordering for display.
+    for desc_map in breakdowns.values():
+        for entry in desc_map.values():
+            entry["rows"].sort(key=lambda r: (r["Model"], r["Bootstrap"]))
+
+    return breakdowns
+
+
 def _tml_local_tab(
     shared: dict,
     models: dict,
@@ -232,9 +334,19 @@ def _tml_local_tab(
         "SHAP values are averaged across the selected ensemble models."
     )
 
+    # Predictions hold one row per (sample × bootstrap iteration), so the index
+    # repeats. Restrict to the selected iterations and drop duplicate sample ids
+    # so each sample is offered exactly once (mirrors the GNN local selector).
+    iterator_cols = [c for c in preds.columns if c in {it.value for it in IteratorType}]
+    selected_iterations = shared.get("selected_iterations")
+    preds_unique = preds
+    if iterator_cols and selected_iterations:
+        preds_unique = preds_unique[preds_unique[iterator_cols[0]].isin(selected_iterations)]
+    preds_unique = preds_unique[~preds_unique.index.duplicated(keep="first")]
+
     local_samples = st.multiselect(
         "Select samples to explain",
-        options=sorted(preds.index.tolist()),
+        options=sorted(preds_unique.index.tolist()),
         key=TMLExplainStateKeys.LocalTMLIDSelector,
         default=None,
     )
@@ -268,40 +380,28 @@ def _tml_local_tab(
             "Applies to the waterfall and bar plots; the force plot shows all.",
         )
 
-    # Build predictions dict for true / predicted label display
-    true_col = get_true_label_column_name(data_options.target_variable_name)
-    pred_col = None
-    for key in models:
-        # key format: "{algo}-{descriptor}_{iteration}" → ml_model = "{algo}-{descriptor}"
-        ml_model = key.rsplit("_", 1)[0]
-        candidate = get_predicted_label_column_name(data_options.target_variable_name, ml_model)
-        if candidate in preds.columns:
-            pred_col = candidate
-            break
+    aggregation = st.radio(
+        "Models display",
+        options=[ExplanationAggregation.Average, ExplanationAggregation.Separate],
+        format_func=lambda x: {
+            ExplanationAggregation.Average: "Average across models (one plot per sample)",
+            ExplanationAggregation.Separate: "Show each model separately (one plot per model)",
+        }[x],
+        key=TMLExplainStateKeys.LocalTMLAggregation,
+        horizontal=True,
+        help="How to combine explanations from the selected models for the same sample.",
+    )
 
-    preds_dedup = preds[~preds.index.duplicated(keep="first")]
-    class_names = data_options.class_names
-    preds_dict: dict = {}
-    for sid in local_samples:
-        preds_dict[sid] = {}
-        try:
-            if true_col in preds_dedup.columns and sid in preds_dedup.index:
-                if data_options.problem_type == ProblemType.Regression:
-                    preds_dict[sid]["true"] = str(preds_dedup.loc[sid, true_col])
-                else:
-                    # Convert to int → str key to mirror the GNN class_names lookup
-                    true_str = str(int(preds_dedup.loc[sid, true_col]))
-                    preds_dict[sid]["true"] = class_names[true_str] if class_names else true_str
-            if pred_col and sid in preds_dedup.index:
-                if data_options.problem_type == ProblemType.Regression:
-                    preds_dict[sid]["predicted"] = str(preds_dedup.loc[sid, pred_col])
-                else:
-                    pred_str = str(int(preds_dedup.loc[sid, pred_col]))
-                    preds_dict[sid]["predicted"] = (
-                        class_names[pred_str] if class_names else pred_str
-                    )
-        except (KeyError, TypeError, ValueError):
-            pass
+    # Per (descriptor, sample) breakdown: true label + each selected
+    # model × bootstrap's predicted value and set membership in that bootstrap.
+    prediction_breakdowns = _build_prediction_breakdowns(
+        preds=preds,
+        model_log_names=list(models.keys()),
+        sample_ids=local_samples,
+        data_options=data_options,
+        iterator_col=iterator_cols[0] if iterator_cols else None,
+        selected_iterations=selected_iterations,
+    )
 
     if st.button("Run Local SHAP Explanation") or st.toggle(
         "Keep running automatically", key=TMLExplainStateKeys.LocalTMLKeepRunning
@@ -318,9 +418,10 @@ def _tml_local_tab(
             target_class=shared["target_class"],
             local_plot_type=local_plot_type,
             max_display=int(local_top_n),
-            predictions=preds_dict,
+            prediction_breakdowns=prediction_breakdowns,
             cache_root=cache_root,
             target_col=data_options.target_variable_col,
+            aggregation=aggregation,
         )
 
 
