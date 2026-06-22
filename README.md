@@ -27,7 +27,7 @@ Both entry points call the same underlying functions and produce identical resul
 
 ## Overview
 
-Predicting polymer properties from chemical structure is challenging because polymers are repeating units of one or more monomers combined in varying ratios. PolyNet handles this by representing each polymer as a graph where atoms are nodes, bonds are edges, and monomer weight fractions are encoded as node attributes. This graph is fed into GNN architectures that learn structure–property relationships directly from the molecular graph.
+Predicting polymer properties from chemical structure is challenging because polymers are repeating units of one or more monomers combined in varying ratios. PolyNet handles this by representing each polymer as a graph where atoms are nodes, bonds are edges, and per-monomer molar ratios (normalised to sum to 1 across the participating monomers) are encoded as node attributes. This graph is fed into GNN architectures that learn structure–property relationships directly from the molecular graph.
 
 PolyNet also supports traditional ML workflows using molecular descriptor vectors (RDKit descriptors, PolyBERT fingerprints, and others), enabling direct comparison between GNN and TML approaches on the same dataset and splits.
 
@@ -37,10 +37,9 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 
 - **Six GNN architectures** — GCN, GAT, CGGNN, MPNN, GraphSAGE, TransformerGNN — each with regression and classification variants
 - **Traditional ML** — Random Forest, XGBoost, SVM, Logistic Regression, Linear Regression
-- **Multi-monomer polymers** — handles copolymers with up to two monomers and weight fractions; ratio-0 monomers are excluded from the graph entirely so homopolymers written as `(monomer, 100/0)` are invariant to the second SMILES column
+- **Multi-monomer polymers** — handles copolymers with any number of monomers and molar ratios; ratios are normalised per polymer to sum to 1 across the participating monomers (any scale works — fractions, percentages, or arbitrary ratios such as 1:1:2), and ratio-0 monomers are excluded from the graph entirely so homopolymers written as `(monomer, 100/0)` are invariant to the empty SMILES column
 - **Per-monomer pooling** — `PerMonomerPooling` weighting mode pools each monomer's nodes separately and combines them as `Σ wᵢ·pool(monomerᵢ)`, removing the atom-count bias that arises when weighting before pooling on mixed-size copolymers (wD-MPNN-style weighted-mean pooling is also supported)
 - **PSMILES attachment-point handling** — opt-in `IsAttachmentPoint` atom feature strips `*` (wildcard) atoms from the graph and flags the atoms that were attached to them, replacing dangling pseudo-element nodes with an explicit boolean marker
-- **Cross-monomer attention** — optional attention mechanism that models interactions between monomer subgraphs
 - **PolyMetriX descriptors** — polymer-aware chemical descriptors (molecular weight, ring counts, TPSA, etc.) computed on the full repeat unit, side chain, or backbone, with configurable aggregation; three modes — `side_chain`, `backbone`, and `polymer` — can be used in any combination
 - **Automatic HPO** — Ray Tune with configurable split strategy (cross-validation, holdout, repeated holdout); ASHA early stopping active for holdout-based strategies
 - **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
@@ -200,11 +199,11 @@ PolyNet expects a CSV file with one row per polymer sample:
 | `polymer_id` | Recommended | Unique identifier (used as sample index) |
 | `monomer1_smiles` | Yes | SMILES string for the first monomer |
 | `monomer2_smiles` | Yes (copolymers) | SMILES string for the second monomer |
-| `weight_fraction_1` | No | Weight fraction of monomer 1 (0–100). Omit to treat monomers as equally weighted |
-| `weight_fraction_2` | No | Weight fraction of monomer 2 |
+| `ratio_1` | No | Molar ratio of monomer 1. Omit to treat monomers as equally weighted |
+| `ratio_2` | No | Molar ratio of monomer 2 |
 | `target` | Yes | Property to predict (numeric for regression, integer class for classification) |
 
-Polymers with more than two monomers are supported by adding additional SMILES and weight fraction columns and listing them in the config. The target column is optional when predicting on unseen data.
+Copolymers with any number of monomers are supported by adding one SMILES column and one molar-ratio column per monomer and listing them in the config. Ratios are normalised per polymer to sum to 1 across the participating monomers, so they need not sum to 1 or 100; a ratio of 0 excludes that monomer. The target column is optional when predicting on unseen data.
 
 ---
 
