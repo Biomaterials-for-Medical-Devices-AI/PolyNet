@@ -34,6 +34,7 @@ _X = np.array([1.0, 2.0, 3.0])  # one sample, 3 features
 # 2-D output (LinearExplainer / binary TreeExplainer): the fixed branch
 # ---------------------------------------------------------------------------
 
+
 def test_2d_binary_class0_is_negation_of_class1():
     pos = np.array([[0.5, -0.2, 0.1]])  # (1, n_features), positive-class values
     expl = _FakeExplainer(pos)
@@ -42,21 +43,22 @@ def test_2d_binary_class0_is_negation_of_class1():
     c0 = _compute_shap_values_for_row(expl, _X, ProblemType.Classification, target_class=0)
 
     assert np.allclose(c1, [0.5, -0.2, 0.1])
-    assert np.allclose(c0, [-0.5, 0.2, -0.1])      # mirror
-    assert np.allclose(c0, -c1)                     # explicitly the negation
-    assert not np.allclose(c0, c1)                  # the original bug: were identical
+    assert np.allclose(c0, [-0.5, 0.2, -0.1])  # mirror
+    assert np.allclose(c0, -c1)  # explicitly the negation
+    assert not np.allclose(c0, c1)  # the original bug: were identical
 
 
 def test_2d_regression_never_negated():
     vals = np.array([[0.5, -0.2, 0.1]])
     expl = _FakeExplainer(vals)
     out = _compute_shap_values_for_row(expl, _X, ProblemType.Regression, target_class=None)
-    assert np.allclose(out, [0.5, -0.2, 0.1])       # untouched
+    assert np.allclose(out, [0.5, -0.2, 0.1])  # untouched
 
 
 # ---------------------------------------------------------------------------
 # 3-D output (newer TreeExplainer, e.g. RandomForest): unchanged, class-aware
 # ---------------------------------------------------------------------------
+
 
 def test_3d_selects_requested_class():
     # (1, n_features, n_classes) with class0 = -class1
@@ -75,6 +77,7 @@ def test_3d_selects_requested_class():
 # list output (older TreeExplainer): unchanged, class-aware
 # ---------------------------------------------------------------------------
 
+
 def test_list_output_selects_requested_class():
     out = [np.array([[-0.5, 0.2, -0.1]]), np.array([[0.5, -0.2, 0.1]])]  # [class0, class1]
     expl = _FakeExplainer(out)
@@ -88,9 +91,9 @@ def test_list_output_selects_requested_class():
 
 def test_all_paths_return_1d():
     for output in (
-        np.array([[0.5, -0.2, 0.1]]),                                  # 2-D
-        np.array([[[-0.5, 0.5], [0.2, -0.2], [-0.1, 0.1]]]),           # 3-D
-        [np.array([[-0.5, 0.2, -0.1]]), np.array([[0.5, -0.2, 0.1]])], # list
+        np.array([[0.5, -0.2, 0.1]]),  # 2-D
+        np.array([[[-0.5, 0.5], [0.2, -0.2], [-0.1, 0.1]]]),  # 3-D
+        [np.array([[-0.5, 0.2, -0.1]]), np.array([[0.5, -0.2, 0.1]])],  # list
     ):
         out = _compute_shap_values_for_row(
             _FakeExplainer(output), _X, ProblemType.Classification, target_class=1

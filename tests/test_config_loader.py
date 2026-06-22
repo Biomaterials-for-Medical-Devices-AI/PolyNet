@@ -19,7 +19,6 @@ import pytest
 
 from polynet.config._loader import _normalise_representation, build_experiment_config
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -88,18 +87,12 @@ class TestDeprecatedFieldMigration:
 
     def test_empty_deprecated_field_is_stripped_without_side_effect(self):
         """An empty/falsy deprecated field must not stomp on existing data."""
-        raw = {
-            "rdkit_descriptors": [],  # falsy
-            "molecular_descriptors": {"rdkit": ["MolWt"]},
-        }
+        raw = {"rdkit_descriptors": [], "molecular_descriptors": {"rdkit": ["MolWt"]}}  # falsy
         result = _suppress_deprecation(_normalise_representation, raw)
         assert result["molecular_descriptors"]["rdkit"] == ["MolWt"]
 
     def test_multiple_deprecated_fields_all_migrated(self):
-        raw = {
-            "rdkit_descriptors": ["MolWt"],
-            "df_descriptors": ["col1"],
-        }
+        raw = {"rdkit_descriptors": ["MolWt"], "df_descriptors": ["col1"]}
         result = _suppress_deprecation(_normalise_representation, raw)
         assert result["molecular_descriptors"]["rdkit"] == ["MolWt"]
         assert result["molecular_descriptors"]["dataframe"] == ["col1"]

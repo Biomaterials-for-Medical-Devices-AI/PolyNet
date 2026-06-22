@@ -26,7 +26,6 @@ import pytest
 from polynet.config.enums import MolecularDescriptor
 from polynet.models.persistence import _resolve_features, load_dataframes
 
-
 # ---------------------------------------------------------------------------
 # _resolve_features — pure function tests
 # ---------------------------------------------------------------------------
@@ -137,9 +136,7 @@ class TestLoadDataframes:
         """Patch I/O and run ``load_dataframes``."""
         with (
             patch("polynet.models.persistence.pd.read_csv", return_value=mock_df),
-            patch(
-                "polynet.models.persistence.sanitise_df", side_effect=lambda df, **_: df
-            ),
+            patch("polynet.models.persistence.sanitise_df", side_effect=lambda df, **_: df),
             patch(
                 "polynet.models.persistence.representation_file",
                 return_value=Path("/fake/path.csv"),
@@ -162,9 +159,7 @@ class TestLoadDataframes:
 
     def test_auto_descriptor_returns_dataframe(self, dummy_path):
         """Auto-feature descriptors (PolyBERT, Morgan, etc.) skip column validation."""
-        mock_df = pd.DataFrame(
-            {"polybert_0": [0.1], "polybert_1": [0.2], "Tg": [300.0]}
-        )
+        mock_df = pd.DataFrame({"polybert_0": [0.1], "polybert_1": [0.2], "Tg": [300.0]})
         rep_opts = _make_representation_options(MolecularDescriptor.PolyBERT, [])
         data_opts = _make_data_options()
 

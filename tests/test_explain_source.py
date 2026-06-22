@@ -34,6 +34,7 @@ def _make_repr(root: Path, *, tml: bool, gnn: bool) -> None:
 # Experiment data source
 # ---------------------------------------------------------------------------
 
+
 def test_experiment_source_roots(tmp_path):
     exp = tmp_path / "exp"
     _make_repr(exp, tml=True, gnn=True)
@@ -60,6 +61,7 @@ def test_experiment_missing_representations(tmp_path):
 # ---------------------------------------------------------------------------
 # External data source — the three-root split
 # ---------------------------------------------------------------------------
+
 
 def test_external_source_splits_roots(tmp_path):
     exp = tmp_path / "exp"
@@ -92,6 +94,7 @@ def test_external_partial_representation_flags(tmp_path):
 # ---------------------------------------------------------------------------
 # Discovery + raw CSV lookup
 # ---------------------------------------------------------------------------
+
 
 def test_list_external_datasets(tmp_path):
     exp = tmp_path / "exp"

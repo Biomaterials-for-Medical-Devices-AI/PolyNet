@@ -39,15 +39,13 @@ def _make_model(pooling: Pooling) -> BaseNetwork:
 #   Polymer 0 (homopolymer): monomer A, 2 atoms, w=1.0
 #   Polymer 1 (copolymer):   monomer A', 2 atoms, w=0.25
 #                            monomer B,  3 atoms, w=0.75
-_xA = torch.tensor([[1.0, 2.0], [3.0, 4.0]])              # mean [2, 3]
-_xA2 = torch.tensor([[10.0, 10.0], [20.0, 20.0]])         # mean [15, 15]
+_xA = torch.tensor([[1.0, 2.0], [3.0, 4.0]])  # mean [2, 3]
+_xA2 = torch.tensor([[10.0, 10.0], [20.0, 20.0]])  # mean [15, 15]
 _xB = torch.tensor([[1.0, 0.0], [1.0, 0.0], [1.0, 0.0]])  # mean [1, 0]
 _X = torch.cat([_xA, _xA2, _xB], dim=0)
 _BATCH = torch.tensor([0, 0, 1, 1, 1, 1, 1])
 _MONOMER_ID = torch.tensor([[0], [0], [0], [0], [1], [1], [1]])
-_WEIGHT = torch.tensor(
-    [[1.0], [1.0], [0.25], [0.25], [0.75], [0.75], [0.75]]
-)
+_WEIGHT = torch.tensor([[1.0], [1.0], [0.25], [0.25], [0.75], [0.75], [0.75]])
 
 
 def test_weighted_per_monomer_mean_pool():
@@ -77,10 +75,7 @@ def test_zero_weight_monomer_is_invariant():
 
     with_phantom = model._pool(x, batch, weight, monomer_id)
     pure = model._pool(
-        _xA,
-        torch.tensor([0, 0]),
-        torch.tensor([[1.0], [1.0]]),
-        torch.tensor([[0], [0]]),
+        _xA, torch.tensor([0, 0]), torch.tensor([[1.0], [1.0]]), torch.tensor([[0], [0]])
     )
     assert torch.allclose(with_phantom, pure, atol=1e-6)
 
@@ -106,3 +101,28 @@ def test_fallback_when_monomer_id_missing():
     out = model._pool(_X, _BATCH, _WEIGHT, None)
     plain = global_mean_pool(_X, _BATCH)
     assert torch.allclose(out, plain, atol=1e-5)
+
+
+def test_three_monomers_with_equal_ratios():
+    """
+    Three monomers at equal (1/3 each) ratios must be pooled as three
+    *separate* segments — keyed by ``monomer_id`` — even though their weights
+    are identical. (The removed cross-attention path segmented by unique weight
+    value and would have collapsed equal-ratio monomers into one.)
+    """
+    model = _make_model(Pooling.GlobalMeanPool)
+
+    m0 = torch.tensor([[3.0, 0.0], [3.0, 0.0]])  # mean [3, 0]
+    m1 = torch.tensor([[0.0, 6.0]])  # mean [0, 6]
+    m2 = torch.tensor([[9.0, 9.0], [9.0, 9.0]])  # mean [9, 9]
+    x = torch.cat([m0, m1, m2], dim=0)
+    batch = torch.tensor([0, 0, 0, 0, 0])
+    monomer_id = torch.tensor([[0], [0], [1], [2], [2]])
+    w = 1.0 / 3.0
+    weight = torch.full((5, 1), w)
+
+    out = model._pool(x, batch, weight, monomer_id)
+    expected = (
+        w * torch.tensor([3.0, 0.0]) + w * torch.tensor([0.0, 6.0]) + w * torch.tensor([9.0, 9.0])
+    )
+    assert torch.allclose(out, expected.unsqueeze(0), atol=1e-5)

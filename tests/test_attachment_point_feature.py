@@ -47,6 +47,7 @@ def _bare_instance(node_feats, *, smiles_col=("smiles",), weights_col=None):
 # _strip_wildcards: pure helper, no instance needed (it's a @staticmethod)
 # ---------------------------------------------------------------------------
 
+
 def test_strip_wildcards_on_psmiles():
     mol = Chem.MolFromSmiles("[*]CCC[*]")  # 5 atoms: *-C-C-C-*
     stripped, attachment = CustomPolymerGraph._strip_wildcards(mol)
@@ -67,6 +68,7 @@ def test_strip_wildcards_on_small_molecule():
 # ---------------------------------------------------------------------------
 # _build_polymer_graph: full feature-vector path
 # ---------------------------------------------------------------------------
+
 
 def _row(smiles, smiles_col="smiles"):
     return pd.Series({smiles_col: smiles}), pd.DataFrame([{smiles_col: smiles}])

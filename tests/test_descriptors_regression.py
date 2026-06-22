@@ -133,9 +133,7 @@ class TestConcatenateRegression:
         pd.testing.assert_frame_equal(result, expected, check_like=True, check_dtype=False)
 
     def test_column_names(self, result):
-        expected_cols = {
-            f"{col}_{desc}" for col in SMILES_COLS for desc in DESCRIPTORS
-        }
+        expected_cols = {f"{col}_{desc}" for col in SMILES_COLS for desc in DESCRIPTORS}
         assert set(result.columns) == expected_cols
 
     def test_row_count(self, result, input_df):

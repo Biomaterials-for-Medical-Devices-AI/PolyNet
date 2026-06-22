@@ -385,10 +385,7 @@ def main() -> None:
             save_graph_feature_analysis,
         )
 
-        analysis = compute_graph_feature_analysis(
-            df=df,
-            smiles_cols=data_cfg.smiles_cols,
-        )
+        analysis = compute_graph_feature_analysis(df=df, smiles_cols=data_cfg.smiles_cols)
         analysis_path = graph_feature_analysis_path(experiment_path=out_dir)
         save_graph_feature_analysis(analysis=analysis, path=analysis_path)
         logger.info(f"  Saved graph feature analysis to {analysis_path}")
@@ -401,7 +398,7 @@ def main() -> None:
     # ------------------------------------------------------------------
     dataset = None
     repr_cfg = _build_repr_config(cfg)
-    #TODO compare user selected graph representation with the analysis
+    # TODO compare user selected graph representation with the analysis
     if gnn_enabled:
         t0 = announce("2. Build graph dataset")
         try:

@@ -25,7 +25,6 @@ from polynet.featurizer.descriptors import (
     merge_weighted,
 )
 
-
 # ---------------------------------------------------------------------------
 # merge_weighted
 # ---------------------------------------------------------------------------
@@ -33,10 +32,13 @@ from polynet.featurizer.descriptors import (
 
 class TestMergeWeighted:
     """
-    Weights are in **percentage** scale (0–100); the implementation divides
-    by 100 internally so the formula is effectively::
+    ``merge_weighted`` normalises each polymer's ratios by their per-row sum::
 
-        result = Σ (weight_i / 100) * descriptor_i
+        result = Σ (weight_i / Σ_j weight_j) * descriptor_i
+
+    When the ratios already sum to 100 (as in these fixtures) this is identical
+    to the previous ``weight_i / 100`` behaviour, so these expected values are
+    unchanged. See ``TestMergeWeightedNormalization`` for the non-100 cases.
     """
 
     @pytest.fixture
@@ -81,17 +83,13 @@ class TestMergeWeighted:
         data_equal = data_with_pct_weights.copy()
         data_equal["weight_A"] = 50.0
         data_equal["weight_B"] = 50.0
-        result_equal = merge_weighted(
-            known_df_dict, data_equal, weights_col_map, empty_data_index
-        )
+        result_equal = merge_weighted(known_df_dict, data_equal, weights_col_map, empty_data_index)
 
         # Rows 0 and 1 have unequal weights in the original fixture
         assert result_unequal.loc[0, "MolWt"] != pytest.approx(result_equal.loc[0, "MolWt"])
         assert result_unequal.loc[1, "MolWt"] != pytest.approx(result_equal.loc[1, "MolWt"])
 
-    def test_equal_weights_symmetric(
-        self, known_df_dict, weights_col_map, empty_data_index
-    ):
+    def test_equal_weights_symmetric(self, known_df_dict, weights_col_map, empty_data_index):
         """50/50 weights on symmetric data: result should equal the per-monomer values scaled."""
         data_equal = pd.DataFrame(
             {
@@ -271,3 +269,74 @@ class TestMergeDispatch:
         )
         assert result is not None
         assert not result.empty
+
+
+# ---------------------------------------------------------------------------
+# merge_weighted — per-polymer ratio normalisation (sum-to-1)
+# ---------------------------------------------------------------------------
+
+
+class TestMergeWeightedNormalization:
+    """
+    ``merge_weighted`` divides each monomer's ratio by the per-row sum of the
+    participating ratios, so the weights sum to 1 per polymer regardless of the
+    input scale. This reproduces the old ``ratio / 100`` results exactly when
+    the ratios already sum to 100, and handles any other scale.
+    """
+
+    @pytest.fixture
+    def weights_col_map(self) -> dict[str, str]:
+        return {"smiles_A": "weight_A", "smiles_B": "weight_B"}
+
+    def test_fraction_scale_matches_percentage_scale(
+        self, known_df_dict, weights_col_map, empty_data_index
+    ):
+        """0.6/0.4 (fractions) gives the same result as 60/40 (percentages)."""
+        data_frac = pd.DataFrame(
+            {"weight_A": [0.6, 0.4, 0.5], "weight_B": [0.4, 0.6, 0.5]}, index=[0, 1, 2]
+        )
+        data_pct = pd.DataFrame(
+            {"weight_A": [60.0, 40.0, 50.0], "weight_B": [40.0, 60.0, 50.0]}, index=[0, 1, 2]
+        )
+        res_frac = merge_weighted(known_df_dict, data_frac, weights_col_map, empty_data_index)
+        res_pct = merge_weighted(known_df_dict, data_pct, weights_col_map, empty_data_index)
+        pd.testing.assert_frame_equal(res_frac, res_pct)
+
+    def test_non_normalised_ratios(self, known_df_dict, weights_col_map, empty_data_index):
+        """Raw ratios that do not sum to 100 are normalised by their row sum."""
+        data = pd.DataFrame(
+            {"weight_A": [1.0, 3.0, 1.0], "weight_B": [1.0, 1.0, 3.0]}, index=[0, 1, 2]
+        )
+        result = merge_weighted(known_df_dict, data, weights_col_map, empty_data_index)
+        # Row 0: 1:1 → (16+18)/2 = 17.0
+        assert result.loc[0, "MolWt"] == pytest.approx(17.0)
+        # Row 1: 3:1 → (30*0.75 + 32*0.25) = 22.5 + 8.0 = 30.5
+        assert result.loc[1, "MolWt"] == pytest.approx(30.5)
+        # Row 2: 1:3 → (44*0.25 + 46*0.75) = 11.0 + 34.5 = 45.5
+        assert result.loc[2, "MolWt"] == pytest.approx(45.5)
+
+    def test_homopolymer_invariant_to_zero_ratio_column(
+        self, known_df_dict, weights_col_map, empty_data_index
+    ):
+        """A 100/0 row equals monomer A alone (the zero-ratio block drops out)."""
+        data = pd.DataFrame({"weight_A": [100.0], "weight_B": [0.0]}, index=[0])
+        df_dict = {
+            "smiles_A": known_df_dict["smiles_A"].loc[[0]],
+            "smiles_B": known_df_dict["smiles_B"].loc[[0]],
+        }
+        result = merge_weighted(df_dict, data, weights_col_map, pd.DataFrame(index=[0]))
+        assert result.loc[0, "MolWt"] == pytest.approx(16.0)
+
+    def test_three_monomers(self, empty_data_index):
+        """Three-monomer merge with ratios 1:1:2 normalises to 0.25/0.25/0.5."""
+        idx = [0]
+        df_dict = {
+            "smiles_A": pd.DataFrame({"MolWt": [10.0]}, index=idx),
+            "smiles_B": pd.DataFrame({"MolWt": [20.0]}, index=idx),
+            "smiles_C": pd.DataFrame({"MolWt": [40.0]}, index=idx),
+        }
+        data = pd.DataFrame({"weight_A": [1.0], "weight_B": [1.0], "weight_C": [2.0]}, index=idx)
+        weights_col = {"smiles_A": "weight_A", "smiles_B": "weight_B", "smiles_C": "weight_C"}
+        result = merge_weighted(df_dict, data, weights_col, pd.DataFrame(index=idx))
+        # 10*0.25 + 20*0.25 + 40*0.5 = 2.5 + 5.0 + 20.0 = 27.5
+        assert result.loc[0, "MolWt"] == pytest.approx(27.5)

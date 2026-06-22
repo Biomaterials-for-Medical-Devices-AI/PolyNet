@@ -39,8 +39,8 @@ metric values, then commit the updated JSON files:
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
+import sys
 
 import numpy as np
 import pandas as pd
@@ -64,15 +64,15 @@ TML_REL_TOL = 1e-2
 
 # Same 10 SMILES used in scripts/integration_test.py
 _MONOMER_SMILES = [
-    "c1ccccc1",   # benzene
-    "C=C",        # ethylene
-    "CC(=O)O",    # acetic acid
-    "CCO",        # ethanol
-    "c1ccncc1",   # pyridine
-    "CC(C)=O",    # acetone
-    "C1CCCCC1",   # cyclohexane
+    "c1ccccc1",  # benzene
+    "C=C",  # ethylene
+    "CC(=O)O",  # acetic acid
+    "CCO",  # ethanol
+    "c1ccncc1",  # pyridine
+    "CC(C)=O",  # acetone
+    "C1CCCCC1",  # cyclohexane
     "c1ccc(O)cc1",  # phenol
-    "CC(N)=O",    # acetamide
+    "CC(N)=O",  # acetamide
     "c1ccc(N)cc1",  # aniline
 ]
 _WEIGHT_PAIRS = [0.3, 0.5, 0.7]
@@ -81,6 +81,7 @@ _WEIGHT_PAIRS = [0.3, 0.5, 0.7]
 # ---------------------------------------------------------------------------
 # Synthetic data helper
 # ---------------------------------------------------------------------------
+
 
 def _make_synthetic_df(task: str, n_samples: int = N_SAMPLES, seed: int = SEED) -> pd.DataFrame:
     """Build a minimal two-monomer polymer DataFrame.
@@ -94,24 +95,24 @@ def _make_synthetic_df(task: str, n_samples: int = N_SAMPLES, seed: int = SEED) 
         m1 = _MONOMER_SMILES[i % len(_MONOMER_SMILES)]
         m2 = _MONOMER_SMILES[(i + 3) % len(_MONOMER_SMILES)]
         weight = _WEIGHT_PAIRS[i % len(_WEIGHT_PAIRS)]
-        target = (
-            float(rng.normal(5.0, 1.5)) if task == "regression"
-            else int(rng.integers(0, 2))
+        target = float(rng.normal(5.0, 1.5)) if task == "regression" else int(rng.integers(0, 2))
+        rows.append(
+            {
+                "id": f"poly_{i:04d}",
+                "monomer1": m1,
+                "monomer2": m2,
+                "weight_fraction_1": weight,
+                "weight_fraction_2": 1 - weight,
+                "target": target,
+            }
         )
-        rows.append({
-            "id": f"poly_{i:04d}",
-            "monomer1": m1,
-            "monomer2": m2,
-            "weight_fraction_1": weight,
-            "weight_fraction_2": 1 - weight,
-            "target": target,
-        })
     return pd.DataFrame(rows).set_index("id")
 
 
 # ---------------------------------------------------------------------------
 # Config factories
 # ---------------------------------------------------------------------------
+
 
 def _make_data_cfg(task: str, tmp_path: Path):
     from polynet.config.enums import ProblemType
@@ -197,6 +198,7 @@ def _make_preprocessing_cfg():
 # Metrics helpers
 # ---------------------------------------------------------------------------
 
+
 def _metrics_to_dict(metrics: dict) -> dict:
     """Convert ``EvaluationMetric`` enum keys → plain string dict for JSON comparison."""
     import math
@@ -233,7 +235,9 @@ def _assert_metrics_match(actual_dict: dict, fixture_path: Path, rel: float = 1e
 
     # Build and print comparison table before asserting so it's visible
     # even when all metrics pass (use `pytest -s` to see passing output).
-    header = f"{'model':<30} {'split':<12} {'metric':<14} {'expected':>10} {'actual':>10} {'diff%':>8}"
+    header = (
+        f"{'model':<30} {'split':<12} {'metric':<14} {'expected':>10} {'actual':>10} {'diff%':>8}"
+    )
     rows = []
     mismatches = []
 
@@ -250,7 +254,9 @@ def _assert_metrics_match(actual_dict: dict, fixture_path: Path, rel: float = 1e
                     if not act_val == pytest.approx(exp_val, rel=rel):
                         mismatches.append((model, split, metric, exp_val, act_val))
 
-    print(f"\n--- {fixture_path.name} (tol={rel*100:.0f}%, platform={'macOS' if _ON_MACOS else sys.platform}) ---")
+    print(
+        f"\n--- {fixture_path.name} (tol={rel*100:.0f}%, platform={'macOS' if _ON_MACOS else sys.platform}) ---"
+    )
     print(header)
     print("-" * len(header))
     for row in rows:
@@ -268,6 +274,7 @@ def _assert_metrics_match(actual_dict: dict, fixture_path: Path, rel: float = 1e
 # ---------------------------------------------------------------------------
 # Shared pipeline runners
 # ---------------------------------------------------------------------------
+
 
 def _run_gnn_pipeline(task: str, tmp_path: Path) -> dict:
     """Run graph dataset → splits → GNN train → inference → metrics."""
@@ -289,7 +296,9 @@ def _run_gnn_pipeline(task: str, tmp_path: Path) -> dict:
     df_reset = df.reset_index()
     df_reset.to_csv(tmp_path / "test_data.csv", index=False)
 
-    dataset = build_graph_dataset(data=df_reset, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=tmp_path)
+    dataset = build_graph_dataset(
+        data=df_reset, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=tmp_path
+    )
 
     split_indexes = compute_data_splits(
         data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=SEED
@@ -377,6 +386,7 @@ def _run_tml_pipeline(task: str, tmp_path: Path) -> dict:
 # Tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.integration
 class TestRegressionPipeline:
     """Pipeline regression tests for a continuous target variable."""
@@ -399,9 +409,13 @@ class TestClassificationPipeline:
     def test_gnn(self, tmp_path):
         """GNN (GCN) on synthetic classification data produces expected metrics."""
         actual = _run_gnn_pipeline(task="classification", tmp_path=tmp_path)
-        _assert_metrics_match(actual, FIXTURE_DIR / "classification_gnn_metrics.json", rel=GNN_REL_TOL)
+        _assert_metrics_match(
+            actual, FIXTURE_DIR / "classification_gnn_metrics.json", rel=GNN_REL_TOL
+        )
 
     def test_tml(self, tmp_path):
         """TML (RandomForest + RDKit descriptors) on synthetic classification data produces expected metrics."""
         actual = _run_tml_pipeline(task="classification", tmp_path=tmp_path)
-        _assert_metrics_match(actual, FIXTURE_DIR / "classification_tml_metrics.json", rel=TML_REL_TOL)
+        _assert_metrics_match(
+            actual, FIXTURE_DIR / "classification_tml_metrics.json", rel=TML_REL_TOL
+        )

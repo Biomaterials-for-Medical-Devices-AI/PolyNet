@@ -19,9 +19,9 @@ the generated values are guaranteed to match a subsequent test run.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 import sys
 import tempfile
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -58,18 +58,17 @@ def _make_synthetic_df(task: str) -> pd.DataFrame:
         m1 = _MONOMER_SMILES[i % len(_MONOMER_SMILES)]
         m2 = _MONOMER_SMILES[(i + 3) % len(_MONOMER_SMILES)]
         weight = _WEIGHT_PAIRS[i % len(_WEIGHT_PAIRS)]
-        target = (
-            float(rng.normal(5.0, 1.5)) if task == "regression"
-            else int(rng.integers(0, 2))
+        target = float(rng.normal(5.0, 1.5)) if task == "regression" else int(rng.integers(0, 2))
+        rows.append(
+            {
+                "id": f"poly_{i:04d}",
+                "monomer1": m1,
+                "monomer2": m2,
+                "weight_fraction_1": weight,
+                "weight_fraction_2": 1 - weight,
+                "target": target,
+            }
         )
-        rows.append({
-            "id": f"poly_{i:04d}",
-            "monomer1": m1,
-            "monomer2": m2,
-            "weight_fraction_1": weight,
-            "weight_fraction_2": 1 - weight,
-            "target": target,
-        })
     return pd.DataFrame(rows).set_index("id")
 
 
@@ -102,12 +101,7 @@ def _generate_gnn_fixture(task: str, tmp_path: Path) -> dict:
         SplitType,
         TrainingParam,
     )
-    from polynet.config.schemas import (
-        DataConfig,
-        RepresentationConfig,
-        SplitConfig,
-        TrainGNNConfig,
-    )
+    from polynet.config.schemas import DataConfig, RepresentationConfig, SplitConfig, TrainGNNConfig
     from polynet.pipeline import (
         build_graph_dataset,
         compute_data_splits,
@@ -130,7 +124,9 @@ def _generate_gnn_fixture(task: str, tmp_path: Path) -> dict:
     )
     repr_cfg = RepresentationConfig(
         smiles_merge_approach=DescriptorMergingMethod.WeightedAverage,
-        molecular_descriptors={MolecularDescriptor.RDKit: ["MolWt", "TPSA", "MolLogP", "NumHDonors", "NumHAcceptors"]},
+        molecular_descriptors={
+            MolecularDescriptor.RDKit: ["MolWt", "TPSA", "MolLogP", "NumHDonors", "NumHAcceptors"]
+        },
         weights_col={"monomer1": "weight_fraction_1", "monomer2": "weight_fraction_2"},
     )
     split_cfg = SplitConfig(
@@ -159,19 +155,34 @@ def _generate_gnn_fixture(task: str, tmp_path: Path) -> dict:
     df_reset = df.reset_index()
     df_reset.to_csv(tmp_path / "test_data.csv", index=False)
 
-    dataset = build_graph_dataset(data=df_reset, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=tmp_path)
-    split_indexes = compute_data_splits(data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=SEED)
+    dataset = build_graph_dataset(
+        data=df_reset, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=tmp_path
+    )
+    split_indexes = compute_data_splits(
+        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=SEED
+    )
     gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
-        dataset=dataset, split_indexes=split_indexes, data_cfg=data_cfg,
-        gnn_cfg=gnn_cfg, random_seed=SEED, out_dir=tmp_path,
+        dataset=dataset,
+        split_indexes=split_indexes,
+        data_cfg=data_cfg,
+        gnn_cfg=gnn_cfg,
+        random_seed=SEED,
+        out_dir=tmp_path,
     )
     predictions = run_gnn_inference(
-        trained_models=gnn_trained, loaders=gnn_loaders,
-        data_cfg=data_cfg, split_cfg=split_cfg, target_scalers=gnn_target_scalers,
+        trained_models=gnn_trained,
+        loaders=gnn_loaders,
+        data_cfg=data_cfg,
+        split_cfg=split_cfg,
+        target_scalers=gnn_target_scalers,
     )
     return _metrics_to_dict(
-        compute_metrics(predictions=predictions, trained_models=gnn_trained,
-                        data_cfg=data_cfg, split_cfg=split_cfg)
+        compute_metrics(
+            predictions=predictions,
+            trained_models=gnn_trained,
+            data_cfg=data_cfg,
+            split_cfg=split_cfg,
+        )
     )
 
 
@@ -213,7 +224,9 @@ def _generate_tml_fixture(task: str, tmp_path: Path) -> dict:
     )
     repr_cfg = RepresentationConfig(
         smiles_merge_approach=DescriptorMergingMethod.WeightedAverage,
-        molecular_descriptors={MolecularDescriptor.RDKit: ["MolWt", "TPSA", "MolLogP", "NumHDonors", "NumHAcceptors"]},
+        molecular_descriptors={
+            MolecularDescriptor.RDKit: ["MolWt", "TPSA", "MolLogP", "NumHDonors", "NumHAcceptors"]
+        },
         weights_col={"monomer1": "weight_fraction_1", "monomer2": "weight_fraction_2"},
     )
     split_cfg = SplitConfig(
@@ -230,19 +243,32 @@ def _generate_tml_fixture(task: str, tmp_path: Path) -> dict:
     preprocessing_cfg = FeatureTransformConfig()
 
     desc_dfs = compute_descriptors(data=df, data_cfg=data_cfg, repr_cfg=repr_cfg, out_dir=tmp_path)
-    split_indexes = compute_data_splits(data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=SEED)
+    split_indexes = compute_data_splits(
+        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=SEED
+    )
     tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
-        desc_dfs=desc_dfs, split_indexes=split_indexes, data_cfg=data_cfg,
-        tml_cfg=tml_cfg, preprocessing_cfg=preprocessing_cfg,
-        random_seed=SEED, out_dir=tmp_path,
+        desc_dfs=desc_dfs,
+        split_indexes=split_indexes,
+        data_cfg=data_cfg,
+        tml_cfg=tml_cfg,
+        preprocessing_cfg=preprocessing_cfg,
+        random_seed=SEED,
+        out_dir=tmp_path,
     )
     predictions = run_tml_inference(
-        trained=tml_trained, training_data=tml_training_data,
-        data_cfg=data_cfg, split_cfg=split_cfg, target_scalers=tml_target_scalers,
+        trained=tml_trained,
+        training_data=tml_training_data,
+        data_cfg=data_cfg,
+        split_cfg=split_cfg,
+        target_scalers=tml_target_scalers,
     )
     return _metrics_to_dict(
-        compute_metrics(predictions=predictions, trained_models=tml_trained,
-                        data_cfg=data_cfg, split_cfg=split_cfg)
+        compute_metrics(
+            predictions=predictions,
+            trained_models=tml_trained,
+            data_cfg=data_cfg,
+            split_cfg=split_cfg,
+        )
     )
 
 
@@ -257,8 +283,8 @@ def main() -> None:
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
 
     scenarios = [
-        ("regression",     "gnn", _generate_gnn_fixture),
-        ("regression",     "tml", _generate_tml_fixture),
+        ("regression", "gnn", _generate_gnn_fixture),
+        ("regression", "tml", _generate_tml_fixture),
         ("classification", "gnn", _generate_gnn_fixture),
         ("classification", "tml", _generate_tml_fixture),
     ]
@@ -280,6 +306,7 @@ def main() -> None:
             except Exception as exc:
                 print(f"  ✗ FAILED: {exc}")
                 import traceback
+
                 traceback.print_exc()
         print()
 
