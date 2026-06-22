@@ -46,9 +46,12 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
             }
 
     share_gnn_parameters:
-        If True and a polymer is defined by multiple SMILES strings, all
-        monomers share the same GNN weights during message passing.
-        If False, each SMILES position gets its own GNN.
+        If True, the shared GNN hyperparameter values (e.g. number of
+        convolutions, embedding dim, pooling, dropout, learning rate, batch
+        size) are entered once and applied to every selected architecture.
+        If False, each architecture is configured with its own hyperparameter
+        values. This controls hyperparameter sharing across architectures; it
+        does not affect per-monomer message passing.
     hyperparameter_optimisation:
         Inherited from ``HyperparamOptimConfig``. When True, a grid search
         is run over the parameter space defined in ``config/search_grids.py``
@@ -62,7 +65,8 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         ..., description="GNN architectures to train, keyed by Network enum."
     )
     share_gnn_parameters: bool = Field(
-        default=True, description="Share GNN weights across monomers in multi-SMILES polymers."
+        default=True,
+        description="Share GNN hyperparameter values across all selected architectures.",
     )
     epochs: int = Field(default=250, ge=1, description="Number of training epochs per GNN model.")
     hpo_split_strategy: HpoSplitStrategy = Field(
