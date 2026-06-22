@@ -39,7 +39,6 @@ class CGGNNBase(BaseNetwork):
         problem_type: ProblemType | str = ProblemType.Regression,
         n_classes: int = 1,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -54,7 +53,6 @@ class CGGNNBase(BaseNetwork):
             problem_type=problem_type,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
@@ -79,9 +77,6 @@ class CGGNNBase(BaseNetwork):
             [nn.BatchNorm1d(self.embedding_dim) for _ in range(self.n_convolutions)]
         )
 
-        if self.cross_att:
-            self.monomer_W_att = nn.Linear(self.embedding_dim, self.embedding_dim)
-
         self.make_readout_layers()
 
     def get_graph_embedding(
@@ -101,6 +96,7 @@ class CGGNNBase(BaseNetwork):
             x = x * monomer_weight
 
         x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
 
         for conv, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
@@ -114,9 +110,6 @@ class CGGNNBase(BaseNetwork):
             and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
         ):
             x = x * monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
 
         return self._pool(x, batch_index, monomer_weight, monomer_id)
 
@@ -137,6 +130,7 @@ class CGGNNBase(BaseNetwork):
             x = x * monomer_weight
 
         x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
 
         for conv, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
@@ -150,9 +144,6 @@ class CGGNNBase(BaseNetwork):
             and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
         ):
             x = x * monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
 
         return x
 
@@ -175,6 +166,7 @@ class CGGNNBase(BaseNetwork):
         is applied unconditionally (before pooling) if provided.
         """
         x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
 
         for conv, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
@@ -185,9 +177,6 @@ class CGGNNBase(BaseNetwork):
 
         if monomer_weight is not None:
             x = x * monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
 
         return self.pooling_fn(x, batch_index)  # was missing in original
 
@@ -205,7 +194,6 @@ class CGGNNClassifier(CGGNNBase, BaseNetworkClassifier):
         readout_layers: int = 2,
         n_classes: int = 2,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -220,7 +208,6 @@ class CGGNNClassifier(CGGNNBase, BaseNetworkClassifier):
             problem_type=ProblemType.Classification,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
@@ -240,7 +227,6 @@ class CGGNNRegressor(CGGNNBase):
         readout_layers: int = 2,
         n_classes: int = 1,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -255,7 +241,6 @@ class CGGNNRegressor(CGGNNBase):
             problem_type=ProblemType.Regression,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
