@@ -410,6 +410,25 @@ def _compute_masking_attributions(
 
         # Result keyed by monomer SMILES, then by fragment SMILES → list of
         # per-occurrence attributions (one entry per structural match)
+        #
+        # TODO(n-monomer): this dict is keyed by monomer SMILES, so if a single
+        # polymer contains the SAME monomer SMILES in two or more genuinely
+        # present (non-zero-ratio) positions, the later assignment to
+        # ``frag_attributions[smiles]`` (below) OVERWRITES the earlier one and
+        # that monomer's contribution is silently lost. The two copies are not
+        # redundant — they can sit at different molar ratios, so their per-node
+        # ``weight_monomer`` (and hence their masking attributions) differ.
+        # Today this is largely latent: zero-ratio monomers never reach here
+        # (``polymer_graph`` skips them before appending to ``mol.mols``) and
+        # duplicate canonical SMILES across columns are rare in 2-monomer
+        # weight-fraction datasets. It becomes reachable with arbitrary-N
+        # copolymers where a user deliberately repeats one monomer at multiple
+        # ratios. Fix is to key by monomer POSITION (e.g. ``(monomer_idx, smiles)``)
+        # through this module and its downstream consumers
+        # (``merge_fragment_attributions``, ``fragment_attributions_to_distribution``,
+        # and the display layer), with a cache-version bump since this dict is
+        # serialised to JSON. Deferred pending a decision on whether the
+        # repeated-monomer scenario is in scope.
         frag_attributions: dict[str, dict[str, list[float]]] = {}
 
         for monomer_idx, smiles in enumerate(mol.mols):
