@@ -13,7 +13,6 @@ import pytest
 from polynet.config.enums import FragmentationMethod
 from polynet.utils.chem_utils import fragment_and_match
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -79,9 +78,7 @@ class TestFragmentAndMatchBRICS:
         cases = ["C", "CCO", "c1ccccc1", "CC(=O)O", "C=CC(=O)OCCOCCO"]
         for smi in cases:
             result = fragment_and_match(smi, FragmentationMethod.BRICS)
-            assert isinstance(result, dict) and len(result) > 0, (
-                f"Empty result for SMILES '{smi}'"
-            )
+            assert isinstance(result, dict) and len(result) > 0, f"Empty result for SMILES '{smi}'"
 
     def test_invalid_smiles_raises(self):
         """An invalid SMILES string raises a ValueError."""

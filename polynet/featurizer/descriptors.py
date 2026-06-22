@@ -530,7 +530,17 @@ def _build_fp_df_dict(
     dim = len(next(iter(fp_dict.values())))
     fp_cols = get_fp_col_names(prefix=prefix, dim=dim)
     fp_df = pd.DataFrame.from_dict(fp_dict, orient="index", columns=fp_cols)
-    return {col: data.join(fp_df, how="left", on=col)[fp_cols].copy() for col in smiles_cols}
+
+    # Map each row's SMILES to its fingerprint by reindexing on the SMILES
+    # values rather than ``data.join(..., on=col)`` — a join would collide if a
+    # fingerprint column name also exists in ``data``. Reindexing returns the
+    # fingerprint columns aligned to data's index (NaN for unparseable SMILES).
+    result: dict[str, pd.DataFrame] = {}
+    for col in smiles_cols:
+        mapped = fp_df.reindex(data[col].to_numpy())
+        mapped.index = data.index
+        result[col] = mapped.copy()
+    return result
 
 
 def _get_unique_smiles(data: pd.DataFrame, smiles_cols: list[str]) -> list[str]:
@@ -553,8 +563,16 @@ def _calculate_rdkit_df_dict(
 
     rdkit_df_dict: dict[str, pd.DataFrame] = {}
     for col in smiles_cols:
-        joined = data.join(descriptors_df, how="left", on=col)
-        rdkit_df_dict[col] = joined.drop(columns=data.columns)
+        # Map each row's SMILES to its descriptor row by reindexing on the SMILES
+        # values, rather than ``data.join(..., on=col)``. A join would collide
+        # when a descriptor name (e.g. 'MolWt') also exists as a column in
+        # ``data`` (an extra user-supplied feature), raising "columns overlap".
+        # Reindexing returns exactly the descriptor columns, one row per data row
+        # (NaN where the SMILES has no computed descriptors), aligned to data's
+        # index.
+        mapped = descriptors_df.reindex(data[col].to_numpy())
+        mapped.index = data.index
+        rdkit_df_dict[col] = mapped
 
     return rdkit_df_dict
 
@@ -654,8 +672,16 @@ def merge_weighted(
     weights_col: dict[str, str],
     data_index: pd.DataFrame,
 ) -> pd.DataFrame:
+    # Per-row sum of the molar ratios across the monomers being merged, used to
+    # normalise each polymer's ratios to sum to 1. This reproduces the previous
+    # ``ratio / 100`` behaviour exactly when the ratios already sum to 100, and
+    # handles any other scale (fractions, 1:1:2, …). Zero-ratio monomers add 0
+    # to the denominator and contribute 0 to the weighted sum, mirroring their
+    # exclusion from the graph. A zero row sum (degenerate) yields NaN rather
+    # than dividing by zero.
+    denom = sum(data[weights_col[col]] for col in df_dict).replace(0, float("nan"))
     weighted = {
-        col: df.multiply(data[weights_col[col]], axis=0) / 100 for col, df in df_dict.items()
+        col: df.multiply(data[weights_col[col]] / denom, axis=0) for col, df in df_dict.items()
     }
     combined = sum(weighted.values())
     return pd.concat([data_index, combined], axis=1)

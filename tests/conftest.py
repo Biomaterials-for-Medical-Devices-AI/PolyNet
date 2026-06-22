@@ -9,7 +9,6 @@ All fixtures here are available to every test module without importing.
 import pandas as pd
 import pytest
 
-
 # ---------------------------------------------------------------------------
 # SMILES / polymer DataFrames
 # ---------------------------------------------------------------------------
@@ -41,12 +40,7 @@ def two_monomer_df() -> pd.DataFrame:
 @pytest.fixture
 def single_monomer_df() -> pd.DataFrame:
     """Single-monomer dataset for ``NoMerging`` strategy tests."""
-    return pd.DataFrame(
-        {
-            "smiles_A": ["C", "CC", "CCC"],
-            "Tg": [300.0, 350.0, 375.0],
-        }
-    )
+    return pd.DataFrame({"smiles_A": ["C", "CC", "CCC"], "Tg": [300.0, 350.0, 375.0]})
 
 
 # ---------------------------------------------------------------------------

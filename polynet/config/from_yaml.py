@@ -16,11 +16,15 @@ The YAML file must have one top-level key per pipeline section.
 Both the new canonical names and the legacy dataclass names are accepted
 for backward compatibility::
 
-    # Canonical form (recommended)
+    # Canonical form (recommended) — a three-monomer copolymer with molar ratios.
+    # Provide one SMILES column and one molar-ratio column per monomer. Ratios
+    # are normalised per polymer to sum to 1 across the participating monomers,
+    # so any scale works (fractions, percentages, or arbitrary ratios such as
+    # 1:1:2); a ratio of 0 excludes that monomer from the graph.
     data:
       data_name: My Polymer Dataset
       data_path: data/polymers.csv
-      smiles_cols: [SMILES]
+      smiles_cols: [SMILES_1, SMILES_2, SMILES_3]
       target_variable_col: Tg
       problem_type: regression
 
@@ -33,7 +37,11 @@ for backward compatibility::
       n_bootstrap_iterations: 5
 
     representation:
-      smiles_merge_approach: [no_merging]
+      smiles_merge_approach: [weighted_average]
+      weights_col:
+        SMILES_1: ratio_1
+        SMILES_2: ratio_2
+        SMILES_3: ratio_3
       node_features:
         GetAtomicNum:
           allowable_vals: [6, 7, 8, 9]
@@ -53,7 +61,7 @@ for backward compatibility::
           dropout: 0.01
           learning_rate: 0.01
           batch_size: 32
-          apply_weighting_to_graph: no_weighting
+          apply_weighting_to_graph: per_monomer_pooling
       share_gnn_parameters: true
       hyperparameter_optimisation: false
 """

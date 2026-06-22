@@ -28,16 +28,18 @@ Your dataset must be a **CSV file** where each row represents one polymer sample
 | **SMILES column(s)** | Yes | One column per monomer unit (e.g. `SMILES_1`, `SMILES_2`). Both SMILES and pSMILES notation are supported. |
 | **Target property column** | Yes | The property to predict. Use continuous numerical values for **regression** tasks (e.g. glass transition temperature), or integer/string class labels for **classification** tasks (e.g. biodegradable / not biodegradable). |
 | **Sample ID column** | Recommended | A unique identifier per row (e.g. `polymer_id`). If omitted, row indices are used. |
-| **Weight/fraction columns** | Optional | For copolymers, one column per monomer giving its molar fraction or weight fraction (e.g. `weight_1`, `weight_2`). |
+| **Molar-ratio columns** | Optional | For copolymers, one column per monomer giving its molar ratio (e.g. `ratio_1`, `ratio_2`, `ratio_3`). Ratios are normalised per polymer to sum to 1 across the participating monomers, so any scale works (fractions, percentages, or arbitrary ratios such as 1:1:2); a ratio of 0 excludes that monomer. |
 | **Extra descriptor columns** | Optional | Any additional numerical features (e.g. dispersity, mean molar mass) that SMILES alone cannot encode. These can be included as custom descriptors. |
 
 #### Example CSV structure
 
-| id    | SMILES_1        | SMILES_2        | weight_1 | Tg    |
-|-------|-----------------|-----------------|----------|-------|
-| P001  | CCO             | CCC             | 0.6      | 120.5 |
-| P002  | CCN             | c1ccccc1        | 0.4      | 85.2  |
-| ...   | ...             | ...             | ...      | ...   |
+A three-monomer copolymer with molar ratios (homopolymers/binary copolymers just set unused monomers to ratio 0):
+
+| id    | SMILES_1 | SMILES_2 | SMILES_3 | ratio_1 | ratio_2 | ratio_3 | Tg    |
+|-------|----------|----------|----------|---------|---------|---------|-------|
+| P001  | CCO      | CCC      | c1ccccc1 | 1       | 1       | 2       | 120.5 |
+| P002  | CCN      | c1ccccc1 | CCO      | 0.5     | 0.3     | 0.2     | 85.2  |
+| ...   | ...      | ...      | ...      | ...     | ...     | ...     | ...   |
 
 > **Note:** SMILES strings capture connectivity and atom types but cannot encode certain structural features such as dispersity, mean molar mass, or tacticity. Include these as extra columns if they are relevant to your property of interest.
 

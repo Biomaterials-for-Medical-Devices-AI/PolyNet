@@ -54,7 +54,7 @@ class BaseNetwork(nn.Module):
     Base GNN model for polymer property regression.
 
     Implements the shared forward pass, graph embedding extraction,
-    monomer weighting, cross-attention, pooling, and readout layers.
+    monomer weighting, pooling, and readout layers.
     Subclasses define ``conv_layers`` and ``norm_layers`` in their
     ``__init__`` and may override ``get_graph_embedding`` when their
     message passing differs from the default.
@@ -80,9 +80,6 @@ class BaseNetwork(nn.Module):
         n-class classification.
     dropout:
         Dropout probability applied after each conv and readout layer.
-    cross_att:
-        Whether to apply cross-monomer attention before pooling.
-        Requires ``weights_col`` to be set in the dataset.
     apply_weighting_to_graph:
         Where in the forward pass to apply monomer weight vectors.
     seed:
@@ -100,7 +97,6 @@ class BaseNetwork(nn.Module):
         problem_type: ProblemType | str = ProblemType.Regression,
         n_classes: int = 1,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -119,7 +115,6 @@ class BaseNetwork(nn.Module):
         )
         self.n_classes = n_classes
         self.dropout = dropout
-        self.cross_att = cross_att
         self.apply_weighting_to_graph = (
             ApplyWeightingToGraph(apply_weighting_to_graph)
             if isinstance(apply_weighting_to_graph, str)
@@ -336,6 +331,8 @@ class BaseNetwork(nn.Module):
         ):
             x = x * monomer_weight
 
+        edge_attr = self._coerce_edge_attr(edge_attr)
+
         for conv, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
                 F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
@@ -348,9 +345,6 @@ class BaseNetwork(nn.Module):
             and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
         ):
             x = x * monomer_weight
-
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
 
         return self._pool(x, batch_index, monomer_weight, monomer_id)
 
@@ -379,6 +373,8 @@ class BaseNetwork(nn.Module):
         ):
             x = x * monomer_weight
 
+        edge_attr = self._coerce_edge_attr(edge_attr)
+
         for conv, bn in zip(self.conv_layers, self.norm_layers):
             x = F.dropout(
                 F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
@@ -392,9 +388,6 @@ class BaseNetwork(nn.Module):
         ):
             x = x * monomer_weight
 
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
-
         return x
 
     def readout_function(self, x: Tensor) -> Tensor:
@@ -402,6 +395,25 @@ class BaseNetwork(nn.Module):
         for layer in self.readout:
             x = F.dropout(F.leaky_relu(layer(x)), p=self.dropout, training=self.training)
         return self.output_layer(x)
+
+    def _coerce_edge_attr(self, edge_attr: Tensor | None) -> Tensor | None:
+        """
+        Normalise a malformed empty ``edge_attr`` to the right rank.
+
+        A bond-free graph (e.g. a single-atom monomer after wildcard stripping,
+        or an entirely edgeless polymer) can carry a 1-D empty ``edge_attr`` of
+        shape ``(0,)`` — for instance from a graph cache built by an older
+        version, or when only edgeless graphs are collated into a batch. Coerce
+        it to ``(0, n_edge_features)`` so edge-aware convolutions (GATv2Conv,
+        CGConv, NNConv, TransformerConv) receive the rank they expect. Any other
+        ``edge_attr`` is returned unchanged.
+
+        Subclasses that override ``get_graph_embedding`` / ``get_node_embeddings``
+        and pass ``edge_attr`` to their convolutions must call this first.
+        """
+        if edge_attr is not None and edge_attr.dim() == 1 and edge_attr.numel() == 0:
+            return edge_attr.new_zeros((0, self.n_edge_features))
+        return edge_attr
 
     # ------------------------------------------------------------------
     # Prediction interface
@@ -501,33 +513,6 @@ class BaseNetwork(nn.Module):
         seed_everything(seed)
         torch.cuda.manual_seed(seed)
         torch.backends.cudnn.deterministic = True
-
-    def _split_batched_atom_feats(self, node_feats: Tensor, batch_index: Tensor) -> list[Tensor]:
-        """Split batched node features into per-graph lists."""
-        return [node_feats[batch_index == i] for i in range(batch_index.max().item() + 1)]
-
-    def _split_monomer_feats(self, node_feats: Tensor, weight_monomer: Tensor) -> list[Tensor]:
-        """Split node features by unique monomer weight value."""
-        unique_vals = torch.unique(weight_monomer)
-        weight_monomer = weight_monomer.squeeze()
-        return [node_feats[weight_monomer == v] for v in unique_vals]
-
-    def _cross_attention(self, x: Tensor, batch_index: Tensor, monomer_weight: Tensor) -> Tensor:
-        """Apply pairwise cross-monomer attention."""
-        split_feats = self._split_batched_atom_feats(x, batch_index)
-        split_weights = self._split_batched_atom_feats(monomer_weight, batch_index)
-        updated: list[Tensor] = []
-
-        for poly_feats, poly_weights in zip(split_feats, split_weights):
-            monomer_feats = self._split_monomer_feats(poly_feats, poly_weights)
-            q1 = F.leaky_relu(self.monomer_W_att(monomer_feats[0]))
-            q2 = F.leaky_relu(self.monomer_W_att(monomer_feats[1]))
-            attn = torch.sigmoid(torch.matmul(q1, q2.t()))
-            new_m1 = monomer_feats[0] + torch.matmul(attn, q2)
-            new_m2 = monomer_feats[1] + torch.matmul(attn.t(), q1)
-            updated.append(torch.cat([new_m1, new_m2], dim=0))
-
-        return torch.cat(updated, dim=0)
 
 
 # ---------------------------------------------------------------------------

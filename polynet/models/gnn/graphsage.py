@@ -41,7 +41,6 @@ class GraphSAGEBase(BaseNetwork):
         problem_type: ProblemType | str = ProblemType.Regression,
         n_classes: int = 1,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -56,7 +55,6 @@ class GraphSAGEBase(BaseNetwork):
             problem_type=problem_type,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
@@ -77,9 +75,6 @@ class GraphSAGEBase(BaseNetwork):
         self.norm_layers = nn.ModuleList(
             [nn.BatchNorm1d(self.embedding_dim) for _ in range(self.n_convolutions)]
         )
-
-        if self.cross_att:
-            self.monomer_W_att = nn.Linear(self.embedding_dim, self.embedding_dim)
 
         self.make_readout_layers()
 
@@ -113,9 +108,6 @@ class GraphSAGEBase(BaseNetwork):
         ):
             x = x * monomer_weight
 
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
-
         return self._pool(x, batch_index, monomer_weight, monomer_id)
 
     def get_node_embeddings(
@@ -145,9 +137,6 @@ class GraphSAGEBase(BaseNetwork):
         ):
             x = x * monomer_weight
 
-        if self.cross_att:
-            x = self._cross_attention(x, batch_index, monomer_weight)
-
         return x
 
 
@@ -165,7 +154,6 @@ class GraphSAGEClassifier(GraphSAGEBase, BaseNetworkClassifier):
         readout_layers: int = 2,
         n_classes: int = 2,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -181,7 +169,6 @@ class GraphSAGEClassifier(GraphSAGEBase, BaseNetworkClassifier):
             problem_type=ProblemType.Classification,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,
@@ -202,7 +189,6 @@ class GraphSAGERegressor(GraphSAGEBase):
         readout_layers: int = 2,
         n_classes: int = 1,
         dropout: float = 0.5,
-        cross_att: bool = False,
         apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
         n_polymer_descriptors: int = 0,
         seed: int = 42,
@@ -218,7 +204,6 @@ class GraphSAGERegressor(GraphSAGEBase):
             problem_type=ProblemType.Regression,
             n_classes=n_classes,
             dropout=dropout,
-            cross_att=cross_att,
             apply_weighting_to_graph=apply_weighting_to_graph,
             n_polymer_descriptors=n_polymer_descriptors,
             seed=seed,

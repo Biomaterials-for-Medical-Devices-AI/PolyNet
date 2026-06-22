@@ -43,12 +43,7 @@ def two_monomer_df() -> pd.DataFrame:
 
 @pytest.fixture
 def single_monomer_df() -> pd.DataFrame:
-    return pd.DataFrame(
-        {
-            "smiles_A": ["C", "CC", "CCC"],
-            "Tg": [300.0, 350.0, 375.0],
-        }
-    )
+    return pd.DataFrame({"smiles_A": ["C", "CC", "CCC"], "Tg": [300.0, 350.0, 375.0]})
 
 
 @pytest.fixture
@@ -230,11 +225,11 @@ class TestIndexPreservation:
         assert list(result.index) == list(two_monomer_df.index)
 
     def test_output_index_preserved_for_non_default_index(self):
-        df = pd.DataFrame(
-            {"smiles_A": ["C", "CC"], "Tg": [300.0, 350.0]}, index=[10, 20]
-        )
+        df = pd.DataFrame({"smiles_A": ["C", "CC"], "Tg": [300.0, 350.0]}, index=[10, 20])
         result = compute_rdkit_descriptors(
-            data=df, smiles_cols=["smiles_A"], descriptor_names=["MolWt"],
+            data=df,
+            smiles_cols=["smiles_A"],
+            descriptor_names=["MolWt"],
             merging_approach=DescriptorMergingMethod.NoMerging,
         )
         assert list(result.index) == [10, 20]
@@ -260,6 +255,29 @@ class TestEdgeCases:
         assert "MolWt" in result.columns
         assert "NotARealDescriptor" not in result.columns
         assert any("NotARealDescriptor" in r.message for r in caplog.records)
+
+    def test_extra_feature_column_named_like_descriptor_does_not_collide(self):
+        """
+        A user-supplied extra feature column whose name matches a requested RDKit
+        descriptor (e.g. 'MolWt') must not raise "columns overlap" — descriptor
+        values are mapped by SMILES, independent of the data's own columns.
+        """
+        df = pd.DataFrame(
+            {
+                "smiles_A": ["C", "CC", "CCC"],
+                "MolWt": [1.0, 2.0, 3.0],  # extra user feature colliding with the descriptor name
+                "Tg": [300.0, 350.0, 375.0],
+            }
+        )
+        result = compute_rdkit_descriptors(
+            data=df,
+            smiles_cols=["smiles_A"],
+            descriptor_names=["MolWt"],
+            merging_approach=DescriptorMergingMethod.NoMerging,
+        )
+        # The output 'MolWt' is the *computed* descriptor (methane ≈ 16.04),
+        # not the user's extra column (which was 1.0).
+        assert result.loc[0, "MolWt"] == MOLWT_METHANE
 
     def test_weighted_average_without_weights_col_raises(self, two_monomer_df):
         """``build_vector_representation`` raises if WeightedAverage is requested without weights."""
