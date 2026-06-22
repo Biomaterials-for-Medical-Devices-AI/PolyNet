@@ -198,6 +198,44 @@ class ExperimentConfig(PolynetBaseModel):
         return self
 
     @model_validator(mode="after")
+    def weights_col_matches_smiles_cols(self) -> "ExperimentConfig":
+        """
+        Keep the per-monomer ratio mapping consistent with the SMILES columns.
+
+        ``representation.weights_col`` maps each SMILES column to the column
+        holding that monomer's molar ratio. Any key that is not an actual SMILES
+        column is a hard error (typo / stale config). If weighting is configured
+        but some SMILES columns have no ratio column, warn — for a copolymer
+        every monomer normally needs a ratio so it can be normalised into the
+        per-polymer blend.
+        """
+        import warnings
+
+        weights_col = self.representation.weights_col
+        if not weights_col:
+            return self
+
+        smiles_cols = set(self.data.smiles_cols)
+        unknown = set(weights_col) - smiles_cols
+        if unknown:
+            raise ValueError(
+                "representation.weights_col references columns that are not in "
+                f"data.smiles_cols: {sorted(unknown)}. Its keys must be a subset of "
+                f"{self.data.smiles_cols}."
+            )
+
+        missing = smiles_cols - set(weights_col)
+        if missing:
+            warnings.warn(
+                "representation.weights_col does not provide a molar-ratio column for "
+                f"every SMILES column. Missing: {sorted(missing)}. Those monomers will "
+                "be unweighted, which is usually unintended for copolymers.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self
+
+    @model_validator(mode="after")
     def classification_num_classes_consistent(self) -> "ExperimentConfig":
         """
         For classification, warn if class_names is not provided.
