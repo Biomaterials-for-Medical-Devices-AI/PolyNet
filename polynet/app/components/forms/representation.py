@@ -39,7 +39,13 @@ def select_weight_factor(
 
     if requires_weights:
 
-        st.markdown("### Set weighting factors for polymer representation")
+        st.markdown("### Set molar ratios for polymer representation")
+        st.caption(
+            "Pick the column holding each monomer's molar ratio. Ratios are normalised "
+            "per polymer to sum to 1 across the participating monomers, so any scale works "
+            "(fractions, percentages, or arbitrary ratios such as 1:1:2). A ratio of 0 "
+            "excludes that monomer."
+        )
 
         smiles_cols = data_options.smiles_cols
         target_col = data_options.target_variable_col
@@ -57,11 +63,11 @@ def select_weight_factor(
 
             for col in smiles_cols:
                 weight_col = st.selectbox(
-                    label=f"Select weighting factor for molecules in column {col}",
+                    label=f"Select molar ratio for molecules in column {col}",
                     options=potential_weighting_factors,
                     key=f"{DescriptorCalculationStateKeys.WeightingFactor}_{col}",
                     index=None,
-                    help="Choose the column that contains the weighting factor for the SMILES column. This will be used to weight the numerical representations of the molecules.",
+                    help="Choose the column that contains this monomer's molar ratio. Ratios are normalised per polymer to sum to 1 across the participating monomers, so they need not sum to 1 or 100.",
                 )
 
                 if weight_col:
@@ -70,7 +76,7 @@ def select_weight_factor(
 
         else:
             st.error(
-                "Not enough numerical columns found in the DataFrame to use as weighting factors. Please ensure that the DataFrame contains numeric columns that you'd like to use as weighting factors."
+                "Not enough numerical columns found in the DataFrame to use as molar ratios. Please ensure that the DataFrame contains one numeric ratio column per SMILES column."
             )
 
     return mol_weights_col
@@ -212,22 +218,50 @@ def molecular_descriptor_representation(
         if pmx_descriptors:
             descriptors_dict[MolecularDescriptor.PolyMetriX] = {}
 
+            repeat_unit_options = list(CHEMICAL_FEATURIZER_REGISTRY.keys())
+            side_chain_options = list(CHEMICAL_FEATURIZER_REGISTRY.keys()) + list(
+                SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()
+            )
+            backbone_options = list(CHEMICAL_FEATURIZER_REGISTRY.keys()) + list(
+                BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()
+            )
+
+            select_all_repeat_unit = st.checkbox(
+                "Select all repeat-unit descriptors",
+                value=False,
+                key=DescriptorCalculationStateKeys.SelectAllPMXRepeatUnit,
+                help="If checked, every repeat-unit descriptor is selected by default. Uncheck to choose specific descriptors.",
+            )
             polymer_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the monomer repeat unit.",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys()),
+                options=repeat_unit_options,
+                default=repeat_unit_options if select_all_repeat_unit else None,
                 key=DescriptorCalculationStateKeys.PMXRepeatUnit,
             )
 
+            select_all_side_chain = st.checkbox(
+                "Select all side-chain descriptors",
+                value=False,
+                key=DescriptorCalculationStateKeys.SelectAllPMXSideChainDescriptors,
+                help="If checked, every side-chain descriptor is selected by default. Uncheck to choose specific descriptors.",
+            )
             side_chain_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the side chain of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
-                + list(SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=side_chain_options,
+                default=side_chain_options if select_all_side_chain else None,
                 key=DescriptorCalculationStateKeys.PMXSideChainDescriptors,
+            )
+
+            select_all_backbone = st.checkbox(
+                "Select all backbone descriptors",
+                value=False,
+                key=DescriptorCalculationStateKeys.SelectAllPMXBackboneDescriptors,
+                help="If checked, every backbone descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
             backbone_descriptors = st.multiselect(
                 "Select the descriptors to calculate for the backbone of the polymers",
-                options=list(CHEMICAL_FEATURIZER_REGISTRY.keys())
-                + list(BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()),
+                options=backbone_options,
+                default=backbone_options if select_all_backbone else None,
                 key=DescriptorCalculationStateKeys.PMXBackboneDescriptors,
             )
 
