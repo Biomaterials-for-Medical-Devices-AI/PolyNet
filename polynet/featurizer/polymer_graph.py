@@ -93,7 +93,10 @@ class CustomPolymerGraph(PolymerGraphDataset):
         Optional sample identifier column.
     weights_col:
         Optional mapping from SMILES column name to the column containing
-        that monomer's weight fraction (as a percentage, 0–100).
+        that monomer's molar ratio. Ratios are normalised per polymer to sum
+        to 1 across the participating monomers, so any scale works (fractions,
+        percentages, or arbitrary ratios such as 1:1:2); a value of 0 excludes
+        that monomer from the graph.
     node_feats:
         Mapping from ``AtomFeature`` to its feature configuration dict.
         The dict must contain ``AtomBondDescriptorDictKey.AllowableVals``
@@ -167,6 +170,7 @@ class CustomPolymerGraph(PolymerGraphDataset):
         accumulated_edge_feats: torch.Tensor | None = None
         accumulated_weights: torch.Tensor | None = None
         accumulated_monomer_id: torch.Tensor | None = None
+        weight_sum: float = 0.0
         monomers: list[str] = []
 
         for smiles_col in self.smiles_col:
@@ -216,8 +220,16 @@ class CustomPolymerGraph(PolymerGraphDataset):
                 accumulated_edge_feats = torch.cat([accumulated_edge_feats, edge_feats], dim=0)
 
             if self.weights_col and smiles_col in self.weights_col:
-                weight_val = row[self.weights_col[smiles_col]] / 100.0
-                monomer_weights = torch.full((node_feats.shape[0], 1), weight_val)
+                # Store the raw molar ratio per node here; the per-polymer
+                # normalisation (divide by the sum of the participating
+                # monomers' ratios) is applied once after the loop. For ratios
+                # that already sum to 100 this reproduces the previous
+                # ``ratio / 100`` behaviour exactly; for any other scale
+                # (fractions, 1:1:2, …) it yields per-monomer weights that sum
+                # to 1 across the participating monomers.
+                ratio_val = float(row[self.weights_col[smiles_col]])
+                weight_sum += ratio_val
+                monomer_weights = torch.full((node_feats.shape[0], 1), ratio_val)
                 accumulated_weights = (
                     monomer_weights
                     if accumulated_weights is None
@@ -238,6 +250,14 @@ class CustomPolymerGraph(PolymerGraphDataset):
         if accumulated_node_feats is None:
             logger.error(f"All monomers failed to parse for row {row.name} — skipping polymer.")
             return None
+
+        # Normalise the per-node monomer weights so each polymer's ratios sum to
+        # 1 across its participating monomers. ``weight_sum`` is the sum of the
+        # raw ratios of exactly the monomers that contributed nodes (zero-ratio
+        # and unparseable monomers were skipped above), so this is the correct
+        # denominator. A zero/negative sum is degenerate and left unnormalised.
+        if accumulated_weights is not None and weight_sum > 0:
+            accumulated_weights = accumulated_weights / weight_sum
 
         y = None
         if self.target_col is not None and self.target_col in data_df.columns:
@@ -403,6 +423,26 @@ class CustomPolymerGraph(PolymerGraphDataset):
     # Bond feature extraction
     # ------------------------------------------------------------------
 
+    def _n_edge_features(self) -> int:
+        """
+        Number of features produced per bond by :meth:`_bond_features`.
+
+        Derived from the configured edge features so that bond-free molecules
+        (e.g. a PSMILES monomer that reduces to a single atom after wildcard
+        stripping) can return a correctly shaped ``(0, n_edge_features)`` tensor
+        instead of a malformed 1-D ``(0,)`` tensor.
+        """
+        n = 0
+        for feat in (BondFeature.GetBondTypeAsDouble, BondFeature.GetStereo):
+            if feat in self.edge_feats:
+                cfg = self.edge_feats[feat]
+                n += len(cfg[AtomBondDescriptorDictKey.AllowableVals])
+                n += int(bool(cfg[AtomBondDescriptorDictKey.Wildcard]))
+        for feat in (BondFeature.IsInRing, BondFeature.GetIsConjugated, BondFeature.GetIsAromatic):
+            if feat in self.edge_feats:
+                n += 1
+        return n
+
     def _bond_features(self, mol) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Extract edge indices and edge feature vectors for all bonds.
@@ -456,6 +496,13 @@ class CustomPolymerGraph(PolymerGraphDataset):
             edge_feats_list += [bond_feat, bond_feat]
 
         edge_index = torch.tensor(edge_indices).t().to(torch.long).view(2, -1)
-        edge_feats = torch.tensor(edge_feats_list, dtype=torch.float)
+        if edge_feats_list:
+            edge_feats = torch.tensor(edge_feats_list, dtype=torch.float)
+        else:
+            # No bonds (e.g. a PSMILES monomer that reduces to a single atom
+            # after wildcard stripping). Build a correctly shaped empty tensor so
+            # the edge-feature dimension is preserved for batching and for
+            # edge-aware convolutions such as GATv2Conv.
+            edge_feats = torch.zeros((0, self._n_edge_features()), dtype=torch.float)
 
         return edge_index, edge_feats
