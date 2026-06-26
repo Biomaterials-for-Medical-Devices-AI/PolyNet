@@ -163,8 +163,8 @@ def get_tml_search_grid(
 
         case TraditionalMLModel.SupportVectorMachine:
             grid = copy.deepcopy(_SVM_GRID)
-            grid["random_state"] = [random_seed]
             if problem_type == ProblemType.Classification:
+                grid["random_state"] = [random_seed]
                 grid["probability"] = [True]
 
         case _:
