@@ -327,7 +327,10 @@ def count_atom_property_frequency(
         # Collect all unique values of the property in this molecule
         values = set()
         for atom in mol.GetAtoms():
-            val = getattr(atom, property)()
+            if property == AtomFeature.GetImplicitValence:
+                val = atom.GetValence(Chem.rdchem.ValenceType.IMPLICIT)
+            else:
+                val = getattr(atom, property)()
             values.add(val)
 
         # Count each unique value once per molecule
