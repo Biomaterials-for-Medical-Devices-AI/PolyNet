@@ -221,9 +221,11 @@ Full documentation lives in [`docs/`](docs/README.md):
 
 ---
 
-## Developer team
+## Team
+- [Eduardo Aguilar](https://edaguilarb.github.io./) (Chemist, Data Scientist, Research Software Engineer)
+- [David Winkler](https://scholar.google.com/citations?user=P8DvrTgAAAAJ&hl=en) (Professor, Cheminformatician)
+- [Grazziela Figueredo](https://scholar.google.com/citations?user=DXNNUcUAAAAJ&hl=en) (Associate Professor, Data Scientist, Product Owner, Principal Investigator)
 
-Main developer: [Eduardo Aguilar-Bejarano](https://edaguilarb.github.io/)
 
 ## Citing PolyNet
 
