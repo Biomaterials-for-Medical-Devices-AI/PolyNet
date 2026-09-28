@@ -182,6 +182,7 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
         hpo_n_folds=gnn_dict.get("hpo_n_folds", 5),
         hpo_val_fraction=gnn_dict.get("hpo_val_fraction", 0.2),
         hpo_n_repeats=gnn_dict.get("hpo_n_repeats", 3),
+        optimisation=gnn_dict.get("optimisation") or {},
     )
 
 
