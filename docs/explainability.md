@@ -3,7 +3,8 @@
 PolyNet provides two attribution pipelines that share the same configuration shape and
 the same options on the Streamlit **Explain Models** page:
 
-- **GNN** — chemistry-masking fragment attribution (Wellawatte et al., *Nat. Commun.* 2023).
+- **GNN** — chemistry-masking fragment attribution (substructure masking; Wu et al., *Nat. Commun.* 14,
+  2585 (2023), [doi:10.1038/s41467-023-38192-3](https://doi.org/10.1038/s41467-023-38192-3)).
 - **TML** — SHAP-based feature attribution, rendered with the native `shap` package.
 
 Both have a **global** view (population-level summary) and a **local** view (per

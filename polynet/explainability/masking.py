@@ -4,12 +4,17 @@ polynet.explainability.masking
 Chemistry-aware masking attribution for GNN explainability.
 
 Implements the fragment-masking strategy from:
-    Wellawatte et al., Nat. Commun. 14, 2023. https://doi.org/10.1038/s41467-023-38192-3
+    Wu, Z. et al., "Chemistry-intuitive explanation of graph neural networks for molecular
+    property prediction with substructure masking", Nat. Commun. 14, 2585 (2023).
+    https://doi.org/10.1038/s41467-023-38192-3
 
-For each fragment found in a molecule, all atoms belonging to that fragment are
-zeroed out in the pre-pooling node embedding space.  The attribution is defined as:
+For each occurrence of a fragment in a molecule, the nodes of that occurrence are
+removed from the pooling step (after message passing), and the attribution of that
+occurrence is:
 
-    attribution(fragment) = Y_pred_full − Y_pred_masked
+    attribution(fragment occurrence) = Y_pred_full − Y_pred_masked
+
+Removing (rather than zeroing) the nodes keeps mean pooling from being diluted.
 
 Molecules that do not contain a given fragment produce no entry for that fragment
 — they are not counted as zero.
@@ -358,9 +363,10 @@ def _compute_masking_attributions(
     """
     Core masking computation for a single molecule against a single model.
 
-    For each fragment found in the molecule, ALL occurrences are masked
-    simultaneously (their pre-pooling node embeddings are zeroed out).
-    Attribution is Y_pred_full − Y_pred_masked.
+    For each fragment found in the molecule, each occurrence is masked
+    separately: its nodes are removed from the pooling step and the
+    attribution of that occurrence is Y_pred_full − Y_pred_masked, giving one
+    score per occurrence.
 
     Returns
     -------
