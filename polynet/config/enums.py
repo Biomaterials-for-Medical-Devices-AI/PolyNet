@@ -310,6 +310,14 @@ class Scheduler(StrEnum):
     ReduceLROnPlateau = "reduce_lr_on_plateau"
 
 
+class RegressionLoss(StrEnum):
+    """Loss minimised when training GNNs on regression targets."""
+
+    RMSE = "rmse"  # sqrt of the batch mean squared error (PolyNet's historical default)
+    MSE = "mse"
+    MAE = "mae"
+
+
 # ---------------------------------------------------------------------------
 # Traditional ML
 # ---------------------------------------------------------------------------
