@@ -659,6 +659,14 @@ def predict_external(
     are loaded automatically.  If the target column is present in ``data``,
     per-model metrics are computed and returned; otherwise metrics are ``None``.
 
+    The models trained on the different splits are also combined into
+    ensembles (see ``polynet.inference.ensemble``): one per GNN architecture,
+    one across all GNNs, and one per TML model × representation. Regression
+    ensembles report the mean prediction and the standard deviation across
+    members; classification ensembles report the majority vote and the vote
+    fraction. Ensemble metrics are stored under the ``"ensemble"`` key of the
+    returned metrics, next to the per-split keys (``"1"``, ``"2"``, …).
+
     Parameters
     ----------
     data:
@@ -700,6 +708,7 @@ def predict_external(
     from polynet.data.preprocessing import sanitise_df
     from polynet.featurizer.descriptors import build_vector_representation
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
+    from polynet.inference.ensemble import ensemble_predictions
     from polynet.inference.utils import prepare_probs_df
     from polynet.training.metrics import calculate_metrics
 
@@ -773,6 +782,11 @@ def predict_external(
 
     predictions_tml: pd.DataFrame | None = None
     predictions_gnn: pd.DataFrame | None = None
+
+    # Per-split predicted column → (split number, model name, probability columns),
+    # and ensemble predicted column → ensemble model name; used for metrics.
+    split_cols: dict[str, tuple[str, str, list[str]]] = {}
+    ensemble_cols: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # TML path: descriptors → predict
@@ -858,6 +872,7 @@ def predict_external(
 
             preds_df = pd.DataFrame({predicted_col: preds})
 
+            probs_cols: list[str] = []
             if data_cfg.problem_type == ProblemType.Classification:
                 probs_df = prepare_probs_df(
                     probs=model.predict_proba(desc_df),
@@ -865,10 +880,26 @@ def predict_external(
                     model_name=model_log_name,
                 )
                 preds_df[probs_df.columns] = probs_df.to_numpy()
+                probs_cols = list(probs_df.columns)
 
+            # e.g. "random forest-rdkit" (model × representation), split "1"
+            split_cols[predicted_col] = (iteration, ml_model.replace("_", " "), probs_cols)
             preds_all = preds_df if preds_all is None else pd.concat([preds_all, preds_df], axis=1)
 
         if preds_all is not None:
+            # Ensemble per model × representation across splits
+            tml_groups: dict[str, list[str]] = {}
+            for col in preds_all.columns:
+                if col in split_cols:
+                    tml_groups.setdefault(split_cols[col][1], []).append(col)
+            ensemble_df, tml_ensemble_cols = ensemble_predictions(
+                predictions=preds_all,
+                groups=tml_groups,
+                problem_type=data_cfg.problem_type,
+                target_variable_name=data_cfg.target_variable_name,
+            )
+            ensemble_cols.update(tml_ensemble_cols)
+            preds_all = pd.concat([preds_all, ensemble_df], axis=1)
             predictions_tml = pd.concat([id_df, preds_all], axis=1, ignore_index=False)
 
     # ------------------------------------------------------------------
@@ -919,6 +950,7 @@ def predict_external(
 
             preds_df = pd.DataFrame({ResultColumn.INDEX: preds[0], predicted_col: y_pred})
 
+            probs_cols = []
             if data_cfg.problem_type == ProblemType.Classification:
                 probs_df = prepare_probs_df(
                     probs=preds[-1],
@@ -926,6 +958,10 @@ def predict_external(
                     model_name=model_log_name,
                 )
                 preds_df[probs_df.columns] = probs_df.to_numpy()
+                probs_cols = list(probs_df.columns)
+
+            # e.g. "GCN", split "1"
+            split_cols[predicted_col] = (gnn_iteration, model_name.rsplit("_", 1)[0], probs_cols)
 
             preds_all = (
                 preds_df
@@ -934,40 +970,21 @@ def predict_external(
             )
 
         if preds_all is not None:
-            # Ensemble voting per architecture
-            pred_cols = [c for c in preds_all.columns if ResultColumn.PREDICTED in c]
+            # Ensemble per architecture across splits, plus one across all GNNs
+            gnn_pred_cols = [c for c in preds_all.columns if c in split_cols]
             arch_groups: dict[str, list[str]] = {}
-            for col in pred_cols:
-                arch = col.split(" ")[0]
-                arch_groups.setdefault(arch, []).append(col)
-            arch_groups["GNN"] = pred_cols  # all GNN models together
+            for col in gnn_pred_cols:
+                arch_groups.setdefault(split_cols[col][1], []).append(col)
+            arch_groups["GNN"] = gnn_pred_cols
 
-            ensemble_series = []
-            for arch, cols in arch_groups.items():
-                if len(cols) < 2:
-                    continue
-                arch_preds = preds_all[cols]
-                if data_cfg.problem_type == ProblemType.Classification:
-                    from scipy.stats import mode as scipy_mode
-
-                    votes, _ = scipy_mode(arch_preds.values, axis=1, keepdims=False)
-                    ensemble_series.append(
-                        pd.Series(
-                            votes,
-                            index=arch_preds.index,
-                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
-                        )
-                    )
-                else:
-                    ensemble_series.append(
-                        pd.Series(
-                            arch_preds.mean(axis=1),
-                            index=arch_preds.index,
-                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
-                        )
-                    )
-            if ensemble_series:
-                preds_all = pd.concat([preds_all] + ensemble_series, axis=1)
+            ensemble_df, gnn_ensemble_cols = ensemble_predictions(
+                predictions=preds_all,
+                groups=arch_groups,
+                problem_type=data_cfg.problem_type,
+                target_variable_name=data_cfg.target_variable_name,
+            )
+            ensemble_cols.update(gnn_ensemble_cols)
+            preds_all = pd.concat([preds_all, ensemble_df], axis=1)
 
             predictions_gnn = pd.merge(id_df, preds_all, on=[ResultColumn.INDEX])
 
@@ -997,21 +1014,25 @@ def predict_external(
     metrics: dict | None = None
     if has_target:
         label_col = true_label_name
+        set_name = dataset_name.split(".")[0]
         metrics = {}
-        for col in predictions.columns:
-            if ResultColumn.PREDICTED not in col or "Ensemble" in col:
-                continue
-            split_name = col.rsplit(" ", 3)
-            model, number = split_name[0], split_name[1]
-            model_name_key = f"{model} {number}"
-            probs_cols = [
-                c for c in predictions.columns if ResultColumn.SCORE in c and model_name_key in c
-            ]
-            metrics.setdefault(number, {}).setdefault(model, {})[dataset_name.split(".")[0]] = (
+        # Per-split models: metrics[split][model][set]
+        for col, (number, model, probs_cols) in split_cols.items():
+            metrics.setdefault(number, {}).setdefault(model, {})[set_name] = calculate_metrics(
+                y_true=predictions[label_col],
+                y_pred=predictions[col],
+                y_probs=predictions[probs_cols] if probs_cols else None,
+                problem_type=data_cfg.problem_type,
+            )
+        # Ensembles: metrics["ensemble"]["<name> Ensemble"][set]. Classification
+        # ensembles have hard votes only, so probability-based metrics (AUROC)
+        # are not computed for them.
+        for col, model in ensemble_cols.items():
+            metrics.setdefault("ensemble", {}).setdefault(model, {})[set_name] = (
                 calculate_metrics(
                     y_true=predictions[label_col],
                     y_pred=predictions[col],
-                    y_probs=predictions[probs_cols] if probs_cols else None,
+                    y_probs=None,
                     problem_type=data_cfg.problem_type,
                 )
             )
