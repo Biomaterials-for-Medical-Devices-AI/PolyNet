@@ -9,8 +9,10 @@ Supports three descriptor sources:
 2. **DataFrame** — user-provided descriptors loaded from an external file.
 3. **PolyBERT** — latent-space fingerprints from the PolyBERT model
    (requires PSMILES notation).
-4. **Morgan** — Morgan count fingerprints via RDKit's ``GetMorganGenerator``.
-5. **RDKitFP** — RDKit count fingerprints via RDKit's ``GetRDKitFPGenerator``.
+4. **Morgan** — Morgan count fingerprints via RDKit's ``GetMorganGenerator``
+   (default radius 3, 2048 bins; configurable, see ``FINGERPRINT_DEFAULTS``).
+5. **RDKitFP** — RDKit count fingerprints via RDKit's ``GetRDKitFPGenerator``
+   (default 2048 bins; configurable).
 
 For multi-monomer polymers (multiple SMILES columns), per-monomer
 descriptors are merged into a single polymer-level representation using
@@ -45,6 +47,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, MolFromSmiles, rdFingerprintGenerator
 
 from polynet.config.column_names import get_fp_col_names
+from polynet.config.constants import FINGERPRINT_DEFAULTS, fingerprint_settings
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.data.preprocessing import get_data_index
 from polynet.featurizer.pmx import create_pmx_featurizer
@@ -52,10 +55,18 @@ from polynet.featurizer.pmx import create_pmx_featurizer
 logger = logging.getLogger(__name__)
 
 # Registry mapping each count-fingerprint descriptor to its (generator factory, column prefix).
-# To add a new fingerprint type: add one entry here and one value to MolecularDescriptor.
+# Each factory receives the resolved settings (``fingerprint_settings``).
+# To add a new fingerprint type: add one entry here, its defaults to
+# ``FINGERPRINT_DEFAULTS`` and one value to MolecularDescriptor.
 _COUNT_FP_REGISTRY: dict[MolecularDescriptor, tuple] = {
-    MolecularDescriptor.Morgan: (rdFingerprintGenerator.GetMorganGenerator, "morgan"),
-    MolecularDescriptor.RDKitFP: (rdFingerprintGenerator.GetRDKitFPGenerator, "rdkitfp"),
+    MolecularDescriptor.Morgan: (
+        lambda s: rdFingerprintGenerator.GetMorganGenerator(radius=s["radius"], fpSize=s["fp_size"]),
+        "morgan",
+    ),
+    MolecularDescriptor.RDKitFP: (
+        lambda s: rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=s["fp_size"]),
+        "rdkitfp",
+    ),
 }
 
 
@@ -196,7 +207,9 @@ def build_vector_representation(
     # --- Count fingerprints (Morgan, RDKitFP, …) ---
     for descriptor, (gen_factory, prefix) in _COUNT_FP_REGISTRY.items():
         if descriptor in molecular_descriptors:
-            fp_dict = _compute_count_fingerprints(unique_smiles, gen_factory())
+            settings = fingerprint_settings(descriptor, molecular_descriptors[descriptor])
+            logger.info(f"Computing {prefix} count fingerprints with {settings}.")
+            fp_dict = _compute_count_fingerprints(unique_smiles, gen_factory(settings))
             descriptors[descriptor] = _merge(
                 _build_fp_df_dict(fp_dict, prefix, data, smiles_cols),
                 data,
@@ -340,20 +353,33 @@ def calculate_descriptors(
 # ---------------------------------------------------------------------------
 
 
-def get_morgan_fingerprints(smiles_list: list[str]) -> dict[str, list[int]]:
+def get_morgan_fingerprints(
+    smiles_list: list[str],
+    fp_size: int = FINGERPRINT_DEFAULTS["morgan"]["fp_size"],
+    radius: int = FINGERPRINT_DEFAULTS["morgan"]["radius"],
+) -> dict[str, list[int]]:
     """
-    Compute Morgan count fingerprints (``radius=2``, ``fpSize=2048``) for a
-    list of SMILES strings. Invalid SMILES are skipped with a warning.
+    Compute Morgan count fingerprints for a list of SMILES strings.
+
+    Defaults are ``radius=3`` and ``fp_size=2048`` (RDKit's generator
+    defaults, which PolyNet has always used). Invalid SMILES are skipped with
+    a warning.
     """
-    return _compute_count_fingerprints(smiles_list, rdFingerprintGenerator.GetMorganGenerator())
+    return _compute_count_fingerprints(
+        smiles_list, rdFingerprintGenerator.GetMorganGenerator(radius=radius, fpSize=fp_size)
+    )
 
 
-def get_rdkitfp_fingerprints(smiles_list: list[str]) -> dict[str, list[int]]:
+def get_rdkitfp_fingerprints(
+    smiles_list: list[str], fp_size: int = FINGERPRINT_DEFAULTS["rdkitfp"]["fp_size"]
+) -> dict[str, list[int]]:
     """
-    Compute RDKit count fingerprints (``fpSize=2048``) for a list of SMILES
-    strings. Invalid SMILES are skipped with a warning.
+    Compute RDKit count fingerprints (default ``fp_size=2048``) for a list of
+    SMILES strings. Invalid SMILES are skipped with a warning.
     """
-    return _compute_count_fingerprints(smiles_list, rdFingerprintGenerator.GetRDKitFPGenerator())
+    return _compute_count_fingerprints(
+        smiles_list, rdFingerprintGenerator.GetRDKitFPGenerator(fpSize=fp_size)
+    )
 
 
 def calculate_morgan_df_dict(
