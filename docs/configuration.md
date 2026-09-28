@@ -249,6 +249,12 @@ feature_preprocessing:
 **Available models:** `RandomForest`, `XGBoost`, `SupportVectorMachine`,
 `LogisticRegression`, `LinearRegression`
 
+> **Polymer descriptors in GNNs:** `feature_preprocessing.scaler` is also applied to
+> the `representations.polymer_descriptors` fed to the GNN readout (fitted per split on
+> the training graphs; selectors are not applied). Without a `feature_preprocessing`
+> section, GNNs use `standard_scaler`. See
+> [Polymer descriptor fusion](descriptors.md#polymer-descriptor-fusion).
+
 > **Robust feature preprocessing:** when the feature transformer is fit, any
 > descriptor column containing `NaN` or `±inf` in the training data is dropped (with a
 > logged warning naming the columns), so a single undefined descriptor cannot abort

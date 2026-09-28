@@ -189,6 +189,7 @@ results/my_experiment/
 │   │   ├── rf-Morgan_1.joblib   # TML model (iteration 1)
 │   │   ├── Morgan.pkl           # Feature scaler for Morgan descriptor
 │   │   ├── target_scaler_1.pkl  # GNN target scaler (iteration 1; omitted when no_transformation)
+│   │   ├── polymer_descriptor_scaler_1.pkl  # GNN polymer descriptor scaler (iteration 1; only with polymer_descriptors)
 │   │   └── target_Morgan_1.pkl  # TML target scaler for Morgan, iteration 1
 │   └── plots/
 │       ├── GCN_1_learning_curve.png

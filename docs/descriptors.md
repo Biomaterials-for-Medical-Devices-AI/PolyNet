@@ -44,6 +44,20 @@ the FFN readout receives both the learned graph representation and the experimen
 polymer context. The first readout layer is automatically widened to accommodate the
 extra dimensions.
 
+**Scaling (GNN).** Before concatenation the descriptors are scaled with the **same
+transformation as the tabular features**: the `feature_preprocessing.scaler` strategy,
+applied through the same `FeatureTransformer` class. A transformer is fitted on the
+polymer descriptors of the **training graphs of each split only** (and, during HPO, on
+the training part of each HPO split). Feature selection (`selectors`) is *not* applied,
+since the readout has a fixed input width and polymer descriptors are chosen explicitly.
+If no `feature_preprocessing` section is configured (e.g. a GNN-only experiment),
+`standard_scaler` is used. The fitted transformer is stored inside each saved GNN model
+and applied in its forward pass, so predictions on external data and explanations always
+use the training-split scaling; it is also written to
+`ml_results/models/polymer_descriptor_scaler_{iteration}.pkl` for reference. A polymer
+descriptor containing `NaN`/`±inf` in the training set raises an error for GNNs (it
+cannot be dropped without changing the model input width).
+
 ```
 GNN forward pass with polymer descriptors:
 
@@ -51,7 +65,7 @@ GNN forward pass with polymer descriptors:
                                                                ↓
                                               [embedding, dim = embedding_dim]
                                                                ↓
-                                     cat([embedding, polymer_descriptors], dim=1)
+                             cat([embedding, scale(polymer_descriptors)], dim=1)
                                                                ↓
                                               FFN readout → prediction
 ```
