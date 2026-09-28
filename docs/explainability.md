@@ -160,8 +160,19 @@ The Analyse Results page can statistically compare model predictions and metrics
   signed-rank tests on the per-sample **absolute errors** `|y_true − y_pred|`
   (regression). Comparing absolute errors tests for a difference in accuracy;
   signed residuals would only test for a difference in bias.
-- **Metrics** — pairwise Wilcoxon tests across bootstrap iterations, plus box plots of
-  the bootstrap metric distributions.
+- **Metrics** — pairwise tests on a metric measured over the repeated random splits,
+  plus box plots of the per-split metric distributions. Two tests are available:
+
+  | Test | When to use |
+  |---|---|
+  | **Wilcoxon signed-rank** (default) | Non-parametric, paired by split. Needs **at least 6 splits**: with `k` splits the smallest two-sided p-value it can return is `2 / 2^k` (0.0625 for 5 splits), so with 5 or fewer no difference can be significant at 0.05. The page warns when there are fewer than 6 splits. |
+  | **Nadeau–Bengio corrected t-test** | Recommended for repeated splits. The splits share training data, so the per-split metrics are not independent and ordinary paired tests are too optimistic. The corrected resampled t-test (Nadeau & Bengio, *Machine Learning* 52, 239–281, 2003) replaces the variance term `σ²/k` of the paired t-test by `(1/k + n_test/n_train)·σ²`, with `k − 1` degrees of freedom. |
+
+  For the corrected test, `n_test / n_train` is computed from `split_indices.json` as
+  the mean size of the analysed set (validation or test) over the mean size of the
+  training set **excluding** the validation set (the conservative choice, giving a
+  larger correction). It needs at least 2 splits and is not meaningful for
+  training-set metrics.
 
 Because comparing *k* models pairwise produces `k·(k−1)/2` simultaneous tests, a
 **multiple-comparison correction** is applied to the p-value matrices, selectable in
