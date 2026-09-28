@@ -14,10 +14,13 @@ from polynet.config.display_names import prettify_label, prettify_metric
 from polynet.config.enums import Plot, ProblemType, SplitType
 from polynet.config.schemas import DataConfig
 from polynet.utils.statistical_analysis import (
+    METRIC_COMPARISON_TESTS,
+    MIN_SPLITS_FOR_WILCOXON,
     MULTIPLE_COMPARISON_METHODS,
     correct_pvalue_matrix,
     mcnemar_pvalue_matrix,
     metrics_pvalue_matrix,
+    min_wilcoxon_pvalue,
     regression_pvalue_matrix,
 )
 from polynet.visualization import (
@@ -123,7 +126,75 @@ def compare_predictions_form(
         return plot
 
 
-def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
+def _metric_test_selector(
+    n_splits: int, analyse_set: str, split_sizes: dict[str, float] | None
+) -> tuple[str, float | None] | None:
+    """
+    Render the statistical-test choice for the metric-level comparison.
+
+    Warns when Wilcoxon cannot reach significance with the available number of
+    splits, and computes ``n_test / n_train`` for the Nadeau–Bengio corrected
+    t-test from the saved split sizes.
+
+    Returns
+    -------
+    tuple[str, float | None] | None
+        ``(test, test_train_ratio)`` for ``metrics_pvalue_matrix``, or ``None``
+        when the chosen test cannot be run.
+    """
+    label = st.selectbox(
+        "Statistical test",
+        options=list(METRIC_COMPARISON_TESTS),
+        index=0,
+        key="metrics_statistical_test",
+        help=(
+            "Metrics come from repeated random splits of the same dataset, whose training "
+            "sets overlap, so the per-split values are not independent. The Nadeau–Bengio "
+            "corrected resampled t-test accounts for this overlap by inflating the variance "
+            "with n_test / n_train; the Wilcoxon signed-rank test does not."
+        ),
+    )
+    test = METRIC_COMPARISON_TESTS[label]
+
+    if test == "wilcoxon":
+        if n_splits < MIN_SPLITS_FOR_WILCOXON:
+            st.warning(
+                f"Only {n_splits} split(s) are available. With {n_splits} paired values the "
+                f"smallest two-sided p-value the Wilcoxon test can return is "
+                f"{min_wilcoxon_pvalue(n_splits):.4f}, so no difference can be significant at "
+                f"0.05. Train with at least {MIN_SPLITS_FOR_WILCOXON} repeated splits, or use "
+                "the Nadeau–Bengio corrected t-test."
+            )
+        return test, None
+
+    if n_splits < 2:
+        st.warning("The corrected t-test needs at least 2 splits.")
+        return None
+    if not split_sizes or DataSet.Training not in split_sizes or analyse_set not in split_sizes:
+        st.error(
+            "Split sizes are unavailable (split_indices.json not found), so the corrected "
+            "t-test cannot be computed. Re-run training to save the split indices."
+        )
+        return None
+    ratio = split_sizes[analyse_set] / split_sizes[DataSet.Training]
+    st.caption(
+        f"Corrected t-test with n_test / n_train = {split_sizes[analyse_set]:.0f} / "
+        f"{split_sizes[DataSet.Training]:.0f} = {ratio:.3f} (mean set sizes across splits; "
+        "n_train is the training set without validation)."
+    )
+    if analyse_set == DataSet.Training:
+        st.info(
+            "The corrected t-test is meant for held-out data. On training-set metrics "
+            "n_test / n_train = 1, which makes it very conservative."
+        )
+    return test, ratio
+
+
+def compare_metrics_form(
+    metrics: dict,
+    data_options: DataConfig | None = None,
+    split_sizes: dict[str, float] | None = None,
+):
 
     st.write("### Model metrics comparison")
 
@@ -174,7 +245,16 @@ def compare_metrics_form(metrics: dict, data_options: DataConfig | None = None):
                 model_pred_col=None,
                 model_true_cols=None,
             )
-            p_matrix, order = metrics_pvalue_matrix(selected, test="wilcoxon")
+            n_splits = min(len(v) for v in selected.values())
+            test_choice = _metric_test_selector(
+                n_splits=n_splits, analyse_set=analyse_set, split_sizes=split_sizes
+            )
+            if test_choice is None:
+                return None
+            test, test_train_ratio = test_choice
+            p_matrix, order = metrics_pvalue_matrix(
+                selected, test=test, test_train_ratio=test_train_ratio
+            )
             correction = _multiple_comparison_selector(key="metrics_pvalue_correction")
             p_matrix = correct_pvalue_matrix(p_matrix, method=correction)
             abbreviate = config.pop("abbreviate_labels", False)
