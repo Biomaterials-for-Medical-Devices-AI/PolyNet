@@ -6,7 +6,6 @@ Pydantic schema for molecular / polymer representation options.
 
 from pydantic import Field, model_validator
 
-from polynet.config.constants import fingerprint_settings
 from polynet.config.enums import (
     AtomFeature,
     BondFeature,
@@ -14,6 +13,7 @@ from polynet.config.enums import (
     MolecularDescriptor,
 )
 from polynet.config.schemas.base import PolynetBaseModel
+from polynet.config.schemas.fingerprints import FINGERPRINT_CONFIGS, resolve_fingerprint_config
 
 
 class RepresentationConfig(PolynetBaseModel):
@@ -47,8 +47,8 @@ class RepresentationConfig(PolynetBaseModel):
         Mapping from ``MolecularDescriptor`` to the descriptor configuration.
         Supported keys: ``rdkit`` (list of descriptor names), ``dataframe``
         (list of DataFrame column names), ``polybert`` (bool), ``morgan`` and
-        ``rdkitfp`` (``true`` for the defaults, or a mapping of settings:
-        ``fp_size`` for both, plus ``radius`` for ``morgan``; defaults 2048 bins,
+        ``rdkitfp`` (``true`` for the defaults, or a mapping of settings — see
+        ``polynet.config.schemas.fingerprints``; defaults 2048 bins, Morgan
         radius 3), etc.
         An empty dict disables descriptor-based representation.
     rdkit_independent:
@@ -108,10 +108,18 @@ class RepresentationConfig(PolynetBaseModel):
         return self
 
     @model_validator(mode="after")
-    def fingerprint_settings_are_valid(self) -> "RepresentationConfig":
-        for descriptor in (MolecularDescriptor.Morgan, MolecularDescriptor.RDKitFP):
+    def resolve_fingerprint_settings(self) -> "RepresentationConfig":
+        """
+        Validate count-fingerprint settings and store them fully resolved.
+
+        ``true`` / ``[]`` (older configs) become the explicit defaults, so the
+        saved ``representation_options.json`` records the settings used.
+        """
+        for descriptor in FINGERPRINT_CONFIGS:
             if descriptor in self.molecular_descriptors:
-                fingerprint_settings(descriptor, self.molecular_descriptors[descriptor])
+                self.molecular_descriptors[descriptor] = resolve_fingerprint_config(
+                    descriptor, self.molecular_descriptors[descriptor]
+                ).model_dump()
         return self
 
     @model_validator(mode="after")
