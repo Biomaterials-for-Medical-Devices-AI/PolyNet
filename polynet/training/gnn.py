@@ -34,18 +34,17 @@ from torch_geometric.loader import DataLoader
 from polynet.config.enums import (
     HpoSplitStrategy,
     Network,
-    Optimizer,
     ProblemType,
-    Scheduler,
     TargetTransformDescriptor,
     TrainingParam,
     TransformDescriptor,
 )
+from polynet.config.schemas.training import GNNOptimisationConfig
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
-from polynet.factories.optimizer import create_optimizer, create_scheduler
+from polynet.factories.optimizer import create_optimizer, create_scheduler, step_scheduler
 from polynet.training.metrics import compute_class_weights
 
 logger = logging.getLogger(__name__)
@@ -134,6 +133,55 @@ def fit_polymer_descriptor_scaler(
     return transformer
 
 
+def build_optimisation(
+    model: Module,
+    lr: float,
+    problem_type: ProblemType,
+    optimisation: GNNOptimisationConfig | None = None,
+    class_weights: torch.Tensor | None = None,
+) -> tuple:
+    """
+    Build the optimiser, learning-rate scheduler and loss for one GNN.
+
+    Shared by final training and every HPO trial so both use exactly the
+    same settings.
+
+    Parameters
+    ----------
+    model:
+        The GNN whose parameters are optimised.
+    lr:
+        Initial learning rate.
+    problem_type:
+        Classification or regression.
+    optimisation:
+        Optimiser, scheduler and loss settings. ``None`` uses the defaults
+        (Adam, ReduceLROnPlateau, RMSE).
+    class_weights:
+        Optional cross-entropy class weights (classification only).
+
+    Returns
+    -------
+    tuple
+        ``(optimizer, scheduler, loss_fn)``.
+    """
+    opt = optimisation or GNNOptimisationConfig()
+    optimizer = create_optimizer(opt.optimizer, model, lr=lr)
+    scheduler = create_scheduler(
+        opt.scheduler,
+        optimizer,
+        gamma=opt.scheduler_factor,
+        patience=opt.scheduler_patience,
+        min_lr=opt.scheduler_min_lr,
+        step_size=opt.scheduler_step_size,
+        milestones=list(opt.scheduler_milestones),
+    )
+    loss_fn = create_loss(
+        problem_type, class_weights=class_weights, regression_loss=opt.regression_loss
+    )
+    return optimizer, scheduler, loss_fn
+
+
 def n_polymer_descriptors_of(graph) -> int:
     """Number of polymer descriptors stored on a graph (0 if none)."""
     poly_desc = getattr(graph, "polymer_descriptors", None)
@@ -160,6 +208,7 @@ def train_gnn_ensemble(
     hpo_val_fraction: float = 0.2,
     hpo_n_repeats: int = 3,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -210,6 +259,10 @@ def train_gnn_ensemble(
         iteration and attached to every model trained in that iteration
         (see ``BaseNetwork.set_polymer_descriptor_scaler``). Ignored when the
         graphs carry no polymer descriptors.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss, used for the
+        final models and for every HPO trial. ``None`` uses the defaults
+        (Adam, ReduceLROnPlateau, RMSE).
 
     Returns
     -------
@@ -303,6 +356,7 @@ def train_gnn_ensemble(
                     val_fraction=hpo_val_fraction,
                     n_repeats=hpo_n_repeats,
                     polymer_descriptor_scaler=polymer_descriptor_scaler,
+                    optimisation=optimisation,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")
@@ -351,11 +405,14 @@ def train_gnn_ensemble(
                     imbalance_strength=loss_strength,
                 )
 
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights,
             )
-            loss_fn = create_loss(problem_type, class_weights=class_weights).to(device)
+            loss_fn = loss_fn.to(device)
 
             model = train_model(
                 model=model,
@@ -407,7 +464,8 @@ def train_model(
     optimizer:
         Instantiated optimizer bound to ``model.parameters()``.
     scheduler:
-        Learning rate scheduler. Expected to accept ``scheduler.step(val_loss)``.
+        Learning rate scheduler; advanced once per epoch with
+        ``step_scheduler`` (only ``ReduceLROnPlateau`` sees the validation loss).
     device:
         ``"cuda"`` or ``"cpu"``.
     epochs:
@@ -431,7 +489,7 @@ def train_model(
             best_val_loss = val_loss
             best_state = deepcopy(model.state_dict())
 
-        scheduler.step(val_loss)
+        step_scheduler(scheduler, val_loss)
 
         logger.info(
             f"Epoch {epoch:03d} | "
@@ -551,7 +609,7 @@ def eval_network(
 def _compute_loss(
     out: torch.Tensor, y: torch.Tensor, loss_fn: Module, problem_type: ProblemType
 ) -> torch.Tensor:
-    """Compute the appropriate loss based on problem type."""
+    """Compute the loss for a batch (the loss module defines RMSE / MSE / MAE / CE)."""
     if problem_type == ProblemType.Regression:
-        return torch.sqrt(loss_fn(out.squeeze(1), y.float()))
+        return loss_fn(out.squeeze(1), y.float())
     return loss_fn(out, y.long())
