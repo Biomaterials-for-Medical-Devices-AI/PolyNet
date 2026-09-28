@@ -44,7 +44,41 @@ data:
   smiles_cols:
     - "monomer1_smiles"
     - "monomer2_smiles"
+  string_representation: "smiles"  # smiles | psmiles
+  canonicalise_smiles: true        # canonicalise structures before featurisation (default true)
 ```
+
+### Structure validation and canonicalisation
+
+The GUI, the CLI and external prediction (`predict_external`) prepare the structure
+columns with the same function (`polynet.data.structures.prepare_structures`):
+
+1. **Detect** the representation (PSMILES if every value has at least two `*`
+   attachment points, otherwise SMILES). If it differs from `string_representation`, a
+   warning is logged and the configured value is used.
+2. **Validate** every structure with RDKit. Invalid structures stop the run with an
+   error listing examples per column, e.g.
+   `column 'monomer1_smiles': 2 invalid, e.g. C1CC, xyz`.
+3. **Canonicalise** the structures when `canonicalise_smiles` is `true` (RDKit for
+   SMILES, `psmiles` for PSMILES), so the same molecule is always written the same way.
+   New data passed to `predict_external` is canonicalised with the training settings.
+
+Missing structures (empty cells, e.g. the absent second monomer of a homopolymer whose
+weight is 0) are allowed in the CLI and in external prediction (they are logged and left
+empty); the GUI rejects them.
+
+> Before this was shared, the CLI accepted `canonicalise_smiles` but did not apply it.
+> Canonicalisation does not change the molecules or the descriptors, but it can reorder
+> the atoms of non-canonical inputs, which changes the random dropout masks during GNN
+> training. GNN results on such datasets can therefore differ slightly from earlier CLI
+> runs (as they would with a different seed); set `canonicalise_smiles: false` to
+> reproduce them exactly.
+
+### Sample IDs (`id_col`)
+
+IDs must be unique. The CLI stops with an error listing example duplicates. The GUI
+shows a warning and numbers the samples by row order instead (the ID column is kept as
+a regular column). Without `id_col`, samples are numbered by row order.
 
 ## `representations`
 
