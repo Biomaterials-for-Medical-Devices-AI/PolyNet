@@ -53,9 +53,9 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         values. This controls hyperparameter sharing across architectures; it
         does not affect per-monomer message passing.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, a grid search
-        is run over the parameter space defined in ``config/search_grids.py``
-        before final training.
+        Inherited from ``HyperparamOptimConfig``. When True, Ray Tune samples
+        random configurations from the search grid defined in
+        ``config/search_grid.py`` before final training.
     """
 
     train_gnn: bool = Field(
@@ -202,9 +202,16 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         Feature scaling / transformation applied to descriptor inputs
         before training. Has no effect on raw graph inputs.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, a grid search
-        is run over the parameter space defined in ``config/search_grids.py``
-        for each selected model.
+        Inherited from ``HyperparamOptimConfig``. When True, a randomised
+        search (``RandomizedSearchCV``, 30 configurations, ``hpo_n_folds``-fold
+        shuffled CV) is run over the search grid defined in
+        ``config/search_grid.py`` for each selected model.
+    hpo_n_folds:
+        Number of cross-validation folds used to score each configuration
+        during TML hyperparameter search (default 5, minimum 2). Folds are
+        shuffled, and stratified for classification. Checked against the data
+        at training time: ``k`` may not exceed the number of training samples
+        or, for classification, the size of the smallest class.
     """
 
     train_tml: bool = Field(
@@ -213,6 +220,11 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
     selected_models: dict[TraditionalMLModel, dict] | None = Field(
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
+    )
+    hpo_n_folds: int = Field(
+        default=5,
+        ge=2,
+        description="Number of shuffled CV folds used to score TML HPO configurations.",
     )
 
     @model_validator(mode="after")
