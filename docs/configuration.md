@@ -376,8 +376,12 @@ tml_models:
 - **Sample counts.** `hpo_num_samples` must be ≥ 1. For TML it is capped, with a
   warning, at the number of distinct grid combinations (sampling more would only
   repeat configurations).
-- **Provenance.** The settings are saved in `config_used.yaml` and in
-  `train_gnn_options.json` / `train_tml_options.json`. The merged GNN grid is written
+- **Provenance.** The settings, as written by the user, are saved in `config_used.yaml`
+  and in `train_gnn_options.json` / `train_tml_options.json`. Before training starts,
+  `hpo_search_spaces.json` records the **merged** search space of every architecture /
+  model that runs HPO (defaults + `hpo_search_grid`, without the per-split seed),
+  with the sample counts (TML `n_iter` after capping) and HPO split settings. The
+  merged GNN grid is also written
   to `gnn_hyp_opt/iteration_{n}/{arch}_{hash}/search_space.json`; for TML, the merged
   grid, the number of samples used, the folds and the best parameters of each tuned
   model are written to `tml_hyp_opt/{model}-{representation}_{iteration}.json`.

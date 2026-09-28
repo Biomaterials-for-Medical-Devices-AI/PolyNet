@@ -204,6 +204,7 @@ Everything is written under `experiment.output_dir`:
 results/my_experiment/
 ├── config_used.yaml             # Exact configuration used (for reproducibility)
 ├── split_indices.json           # Train/val/test sample IDs for each iteration
+├── hpo_search_spaces.json       # Merged HPO search spaces (only when automatic HPO runs)
 ├── data_options.json            # Saved DataConfig
 ├── representation_options.json  # Saved RepresentationConfig
 ├── general_options.json         # Saved GeneralConfig
