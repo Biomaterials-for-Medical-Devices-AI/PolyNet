@@ -19,7 +19,9 @@ class SplitConfig(PolynetBaseModel):
     Attributes
     ----------
     split_type:
-        The overall cross-validation or hold-out strategy to use.
+        The overall splitting strategy. Only ``train_val_test`` (repeated
+        random train/validation/test splits) is implemented; the other
+        ``SplitType`` values are reserved for future work and rejected here.
     split_method:
         How samples are assigned to splits — randomly or stratified by
         the target variable (stratified is recommended for classification).
@@ -64,6 +66,17 @@ class SplitConfig(PolynetBaseModel):
     )
 
     @model_validator(mode="after")
+    def only_train_val_test_is_implemented(self) -> "SplitConfig":
+        if self.split_type != SplitType.TrainValTest:
+            raise ValueError(
+                f"split_type '{self.split_type.value}' is not implemented yet. Only "
+                f"'{SplitType.TrainValTest.value}' is available: repeated random "
+                "train/validation/test splits, controlled by test_ratio, val_ratio and "
+                "n_bootstrap_iterations."
+            )
+        return self
+
+    @model_validator(mode="after")
     def ratios_leave_room_for_training(self) -> "SplitConfig":
         total_held_out = self.test_ratio + self.val_ratio
         if total_held_out >= 1.0:
@@ -71,45 +84,5 @@ class SplitConfig(PolynetBaseModel):
                 f"test_ratio ({self.test_ratio}) + val_ratio ({self.val_ratio}) = "
                 f"{total_held_out:.2f}, which leaves no data for training. "
                 "Their sum must be less than 1.0."
-            )
-        return self
-
-    @model_validator(mode="after")
-    def val_ratio_only_relevant_for_train_val_test(self) -> "SplitConfig":
-        no_val_types = {
-            SplitType.TrainTest,
-            SplitType.CrossValidation,
-            SplitType.NestedCrossValidation,
-            SplitType.LeaveOneOut,
-        }
-        if self.split_type in no_val_types and self.val_ratio != 0.1:
-            # Warn rather than error — user may have copy-pasted a full config
-            import warnings
-
-            warnings.warn(
-                f"val_ratio is set to {self.val_ratio} but split_type is "
-                f"'{self.split_type}', which does not use a validation set. "
-                "val_ratio will be ignored.",
-                UserWarning,
-                stacklevel=2,
-            )
-        return self
-
-    @model_validator(mode="after")
-    def bootstrap_only_relevant_for_holdout_splits(self) -> "SplitConfig":
-        iterative_types = {
-            SplitType.CrossValidation,
-            SplitType.NestedCrossValidation,
-            SplitType.LeaveOneOut,
-        }
-        if self.split_type in iterative_types and self.n_bootstrap_iterations > 1:
-            import warnings
-
-            warnings.warn(
-                f"n_bootstrap_iterations is {self.n_bootstrap_iterations} but "
-                f"split_type is '{self.split_type}', which does not use bootstrapping. "
-                "n_bootstrap_iterations will be ignored.",
-                UserWarning,
-                stacklevel=2,
             )
         return self
