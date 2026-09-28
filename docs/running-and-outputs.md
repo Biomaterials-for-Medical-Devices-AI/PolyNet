@@ -240,6 +240,28 @@ results/my_experiment/
 The `predictions.csv` table holds one row per `(sample × bootstrap iteration)`, with a
 `Set` column (train/val/test) and one predicted-value column per trained model.
 
+### GNN learning curves
+
+`plots/{model}_{iteration}_learning_curve.png` shows, for one GNN and one split, the
+training, validation and test loss after every epoch.
+
+- **Model selection uses the validation loss only.** Each GNN is trained for a fixed
+  number of epochs (`training.epochs`; there is no early stopping). After every epoch
+  the validation loss is computed, and at the end the weights from the epoch with the
+  **lowest validation loss** are restored. The default `reduce_lr_on_plateau` scheduler
+  also monitors the validation loss.
+- **The test curve is for monitoring only.** The test loss is computed every epoch so
+  the curves can be inspected, but it is never used for training, for choosing the
+  learning rate or for choosing the final weights.
+- **What the loss values are.** The curves show the training loss
+  (`gnn_training.optimisation.regression_loss`, RMSE by default; cross-entropy for
+  classification). With `target_transform` enabled they are in the *scaled* target
+  units. The training curve is the mean of the per-batch losses during the epoch,
+  computed with dropout active. The validation and test losses are evaluated one sample
+  at a time, so with the default RMSE loss each per-sample value is the absolute error
+  and the validation/test curves equal the mean absolute error — the best epoch is
+  therefore the one with the lowest validation MAE.
+
 ## Debugging
 
 An integration test runs each pipeline stage independently using synthetic polymer
