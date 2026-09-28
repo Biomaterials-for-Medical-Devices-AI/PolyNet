@@ -183,10 +183,12 @@ feature_preprocessing:
 # TML models
 # Traditional ML models trained on descriptor vectors.
 # Only active when representations.descriptors.enabled is true.
-# Leave the block empty ({}) to trigger GridSearchCV HPO.
+# Leave the block empty ({}) to trigger randomised-search HPO (RandomizedSearchCV,
+# 30 configurations, hpo_n_folds-fold shuffled CV).
 # -----------------------------------------------------------------------------
 tml_models:
   train_tml: true
+  hpo_n_folds: 5   # CV folds for automatic HPO (>= 2; <= smallest class size for classification)
 
   selected_models:
     random_forest:
