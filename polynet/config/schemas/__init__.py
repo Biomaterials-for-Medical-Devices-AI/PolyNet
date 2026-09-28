@@ -24,7 +24,11 @@ from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.split_data import SplitConfig
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
 from polynet.config.schemas.tml_explainability import TMLExplainabilityConfig
-from polynet.config.schemas.training import TrainGNNConfig, TrainTMLConfig
+from polynet.config.schemas.training import (
+    GNNOptimisationConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+)
 
 __all__ = [
     "DataConfig",
@@ -36,6 +40,7 @@ __all__ = [
     "SplitConfig",
     "TargetTransformConfig",
     "TMLExplainabilityConfig",
+    "GNNOptimisationConfig",
     "TrainGNNConfig",
     "TrainTMLConfig",
 ]
