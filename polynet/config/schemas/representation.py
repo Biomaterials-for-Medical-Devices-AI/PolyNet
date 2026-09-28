@@ -6,6 +6,7 @@ Pydantic schema for molecular / polymer representation options.
 
 from pydantic import Field, model_validator
 
+from polynet.config.constants import fingerprint_settings
 from polynet.config.enums import (
     AtomFeature,
     BondFeature,
@@ -45,7 +46,10 @@ class RepresentationConfig(PolynetBaseModel):
     molecular_descriptors:
         Mapping from ``MolecularDescriptor`` to the descriptor configuration.
         Supported keys: ``rdkit`` (list of descriptor names), ``dataframe``
-        (list of DataFrame column names), ``polybert`` (bool), etc.
+        (list of DataFrame column names), ``polybert`` (bool), ``morgan`` and
+        ``rdkitfp`` (``true`` for the defaults, or a mapping of settings:
+        ``fp_size`` for both, plus ``radius`` for ``morgan``; defaults 2048 bins,
+        radius 3), etc.
         An empty dict disables descriptor-based representation.
     rdkit_independent:
         If True, RDKit descriptors are used as an independent representation
@@ -101,6 +105,13 @@ class RepresentationConfig(PolynetBaseModel):
                 "molecular_descriptors includes 'dataframe' but no column names are provided. "
                 "Set molecular_descriptors[dataframe] to a non-empty list of column names."
             )
+        return self
+
+    @model_validator(mode="after")
+    def fingerprint_settings_are_valid(self) -> "RepresentationConfig":
+        for descriptor in (MolecularDescriptor.Morgan, MolecularDescriptor.RDKitFP):
+            if descriptor in self.molecular_descriptors:
+                fingerprint_settings(descriptor, self.molecular_descriptors[descriptor])
         return self
 
     @model_validator(mode="after")
