@@ -20,7 +20,7 @@ YAML layout::
       bootstraps: "all"
 
       # Molecular fragmentation strategy.
-      fragmentation: "brics"           # brics | recap | murcko_scaffold | functional_groups
+      fragmentation: "brics"           # brics | murcko_scaffold
 
       # Data split to draw molecules from when explain_mol_ids is not set.
       explain_set: "test"              # train | validation | test | all

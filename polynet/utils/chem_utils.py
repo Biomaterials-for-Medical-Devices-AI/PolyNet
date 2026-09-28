@@ -106,7 +106,8 @@ def fragment_and_match(
     Parameters
     ----------
     smiles : str
-    mode : str, one of ["brics", "functional_groups", "murcko"]
+    fragmentation_approach : FragmentationMethod
+        ``brics`` or ``murcko_scaffold``.
 
     Returns
     -------
@@ -125,10 +126,6 @@ def fragment_and_match(
 
         case FragmentationMethod.MurckoScaffold:
             frags = _fragments_murcko(mol)
-
-        # TODO: fix these fragment approaches to follow the new behaviour.
-        # case "functional_groups":
-        #     frags = _fragments_functional_groups(mol)
 
         case _:
             raise ValueError(f"Unknown fragmentation mode: {fragmentation_approach}")
@@ -192,22 +189,6 @@ def _fragments_brics(mol) -> dict:
         frag_dict[smi].append(idxs)
 
     return dict(frag_dict)
-
-
-# def _fragments_functional_groups(mol):
-
-#     frags = []
-#     fg_smarts = GetFunctionalGroupSmarts()
-
-#     for name, smarts in fg_smarts.items():
-#         patt = Chem.MolFromSmarts(smarts)
-#         if patt is None:
-#             continue
-
-#         if mol.HasSubstructMatch(patt):
-#             frags.append(patt)
-
-#     return frags
 
 
 def _fragments_murcko(mol) -> dict:

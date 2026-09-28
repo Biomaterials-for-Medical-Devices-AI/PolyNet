@@ -221,8 +221,6 @@ class FragmentationMethod(StrEnum):
 
     MurckoScaffold = "murcko_scaffold"
     BRICS = "brics"
-    FunctionalGroups = "functional_groups"
-    Recap = "recap"
 
 
 # ---------------------------------------------------------------------------
