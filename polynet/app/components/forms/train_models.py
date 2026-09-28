@@ -24,10 +24,9 @@ from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
 
 
-def train_TML_models(problem_type: ProblemType):
+def train_TML_models(problem_type: ProblemType) -> dict:
 
     models = {}
-    feature_cfg = {}
 
     st.write(
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
@@ -247,16 +246,43 @@ def train_TML_models(problem_type: ProblemType):
                 )
                 models[TraditionalMLModel.XGBoost]["max_depth"] = max_depth
 
-        st.divider()
-
-        feature_cfg = feature_transformer_widgets()
-
-    return models, feature_cfg
+    return models
 
 
-def feature_transformer_widgets() -> FeatureTransformConfig:
-    st.markdown("### Feature preprocessing")
-    st.caption("Scale features and optionally apply feature selection (fit on train only).")
+def feature_transformer_widgets(
+    train_tml: bool, gnn_polymer_descriptors: bool
+) -> FeatureTransformConfig:
+    """
+    Render the pipeline-wide feature preprocessing widgets.
+
+    The scaler applies to every tabular feature the pipeline uses: the
+    molecular descriptors of traditional ML models and the user-supplied
+    polymer descriptors concatenated to the GNN graph embedding. Feature
+    selection is only offered when traditional ML models are trained, since
+    it does not apply to GNNs.
+
+    Parameters
+    ----------
+    train_tml:
+        Whether traditional ML models will be trained.
+    gnn_polymer_descriptors:
+        Whether GNNs will be trained with user-supplied polymer descriptors.
+
+    Returns
+    -------
+    FeatureTransformConfig
+        The selected scaler and (TML only) feature selection steps.
+    """
+    applies_to = []
+    if train_tml:
+        applies_to.append("the molecular descriptors of the TML models")
+    if gnn_polymer_descriptors:
+        applies_to.append("the polymer descriptors concatenated to the GNN graph embedding")
+    st.caption(
+        "Scaling is fitted on the training set of each split and applied to "
+        + " and to ".join(applies_to)
+        + "."
+    )
 
     scaler = st.selectbox(
         "Scaling / normalization",
@@ -274,8 +300,9 @@ def feature_transformer_widgets() -> FeatureTransformConfig:
         help="Applied to X (independent variables). Fit on training set, reused for val/test.",
     )
 
-    enable_fs = st.toggle(
-        "Enable feature selection",
+    # Feature selection applies to TML models only.
+    enable_fs = train_tml and st.toggle(
+        "Enable feature selection (TML models only)",
         value=False,
         key=getattr(TrainTMLStateKeys, "EnableFeatureSelection", "EnableFeatureSelection"),
         help="Applies selection after scaling. Steps are applied sequentially in the order chosen.",
