@@ -127,6 +127,16 @@ class TrainGNNStateKeys(StrEnum):
     AsymmetricLoss = "AsymmetricLoss"
     ImbalanceStrength = "ImbalanceStrength"
 
+    # Advanced training options (optimiser, scheduler, loss)
+    Optimizer = "GNNOptimizer"
+    Scheduler = "GNNScheduler"
+    SchedulerFactor = "GNNSchedulerFactor"
+    SchedulerPatience = "GNNSchedulerPatience"
+    SchedulerMinLR = "GNNSchedulerMinLR"
+    SchedulerStepSize = "GNNSchedulerStepSize"
+    SchedulerMilestones = "GNNSchedulerMilestones"
+    RegressionLoss = "GNNRegressionLoss"
+
     # Specific GNN Hyperparameters
 
     # GCN
