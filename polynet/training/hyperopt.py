@@ -39,12 +39,18 @@ from polynet.config.enums import (
     ProblemType,
     Scheduler,
     TrainingParam,
+    TransformDescriptor,
 )
 from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import create_optimizer, create_scheduler
-from polynet.training.gnn import eval_network, train_network
+from polynet.training.gnn import (
+    eval_network,
+    fit_polymer_descriptor_scaler,
+    n_polymer_descriptors_of,
+    train_network,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +140,7 @@ def gnn_hyp_opt(
     n_folds: int = 5,
     val_fraction: float = 0.2,
     n_repeats: int = 3,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
@@ -174,6 +181,9 @@ def gnn_hyp_opt(
         ``RepeatedHoldout``.
     n_repeats:
         Number of independent random splits. Used only by ``RepeatedHoldout``.
+    polymer_descriptor_scaler:
+        Scaling strategy for polymer descriptors. Within each trial the
+        scaler is fitted on the training part of every HPO split only.
 
     Returns
     -------
@@ -241,6 +251,7 @@ def gnn_hyp_opt(
             strategy=hpo_split_strategy,
             network=gnn_arch,
             problem_type=problem_type,
+            polymer_descriptor_scaler=polymer_descriptor_scaler,
         ),
         config=tune_config,
         num_samples=num_samples,
@@ -274,6 +285,7 @@ def _gnn_target_function(
     strategy: HpoSplitStrategy,
     network: Network,
     problem_type: ProblemType,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
 ) -> None:
     """
     Ray Tune objective function — trains a GNN and reports validation loss.
@@ -318,8 +330,12 @@ def _gnn_target_function(
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=num_classes,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 **cfg,
             ).to(device)
+            model.set_polymer_descriptor_scaler(
+                fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
+            )
 
             optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
             scheduler = create_scheduler(
@@ -364,8 +380,12 @@ def _gnn_target_function(
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=num_classes,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 **cfg,
             ).to(device)
+            model.set_polymer_descriptor_scaler(
+                fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
+            )
 
             optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
             scheduler = create_scheduler(
