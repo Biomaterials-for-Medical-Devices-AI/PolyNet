@@ -708,6 +708,7 @@ def predict_external(
     )
     from polynet.config.constants import ResultColumn
     from polynet.data.preprocessing import sanitise_df
+    from polynet.data.structures import prepare_structures
     from polynet.featurizer.descriptors import build_vector_representation
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
     from polynet.inference.ensemble import ensemble_predictions
@@ -722,6 +723,16 @@ def predict_external(
     df = data.copy()
     if data_cfg.id_col and df.index.name == data_cfg.id_col:
         df = df.reset_index()
+
+    # Prepare the new structures exactly like the training data (validate, and
+    # canonicalise with the training representation when training did).
+    df, _ = prepare_structures(
+        df,
+        smiles_cols=data_cfg.smiles_cols,
+        representation=data_cfg.string_representation,
+        canonicalise=data_cfg.canonicalise_smiles,
+        allow_missing=True,
+    )
 
     has_target = data_cfg.target_variable_col in df.columns
 
