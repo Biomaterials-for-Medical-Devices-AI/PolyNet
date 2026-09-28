@@ -18,12 +18,14 @@ from polynet.app.options.file_paths import (
     model_metrics_file_path,
     polynet_experiments_base_dir,
     representation_options_path,
+    split_indices_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.config.enums import ProblemType
+from polynet.utils.statistical_analysis import mean_split_sizes
 from polynet.config.schemas import (
     DataConfig,
     GeneralConfig,
@@ -152,7 +154,15 @@ if experiment_name:
 
     st.divider()
 
-    compare_metrics_plot = compare_metrics_form(metrics=metrics, data_options=data_options)
+    splits_file = split_indices_path(experiment_path=experiment_path)
+    split_sizes = None
+    if splits_file.exists():
+        with open(splits_file) as f:
+            split_sizes = mean_split_sizes(json.load(f))
+
+    compare_metrics_plot = compare_metrics_form(
+        metrics=metrics, data_options=data_options, split_sizes=split_sizes
+    )
 
     if compare_metrics_plot:
         st.pyplot(compare_metrics_plot)
