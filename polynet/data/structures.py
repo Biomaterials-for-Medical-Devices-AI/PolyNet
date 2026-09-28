@@ -9,7 +9,8 @@ featurisation:
 
 1. **detect** the string representation (SMILES or PSMILES);
 2. **validate** every structure, raising a ``ValueError`` that lists example
-   invalid entries per column;
+   invalid entries per column (missing structures count as invalid and are
+   shown as ``<missing>``);
 3. **canonicalise** the structures (optional, on by default), so the same
    molecule is always written the same way.
 
@@ -38,7 +39,7 @@ from polynet.utils.chem_utils import (
     canonicalise_psmiles,
     canonicalise_smiles,
     check_smiles,
-    determine_string_representation,
+    identify_psmiles,
 )
 
 logger = logging.getLogger(__name__)
@@ -58,8 +59,17 @@ _N_EXAMPLES = 5
 
 
 def detect_string_representation(df: pd.DataFrame, smiles_cols: list[str]) -> StringRepresentation:
-    """Return the representation of the structure columns (PSMILES if every value has ≥ 2 ``*``)."""
-    return StringRepresentation(determine_string_representation(df=df, smiles_cols=smiles_cols))
+    """
+    Return the representation of the structure columns.
+
+    PSMILES if every value of every column has at least two ``*`` attachment
+    points, otherwise SMILES. Missing / non-string values count as not PSMILES
+    (they are reported by ``find_invalid_structures``).
+    """
+    for col in smiles_cols:
+        if not df[col].apply(lambda s: isinstance(s, str) and identify_psmiles(s)).all():
+            return StringRepresentation.SMILES
+    return StringRepresentation.PSMILES
 
 
 def _is_missing(value) -> bool:
@@ -67,10 +77,7 @@ def _is_missing(value) -> bool:
 
 
 def find_invalid_structures(
-    df: pd.DataFrame,
-    smiles_cols: list[str],
-    representation: StringRepresentation,
-    allow_missing: bool = False,
+    df: pd.DataFrame, smiles_cols: list[str], representation: StringRepresentation
 ) -> dict[str, list[str]]:
     """
     Return the structures that cannot be parsed, per column.
@@ -83,22 +90,21 @@ def find_invalid_structures(
         Structure columns to check.
     representation:
         Representation of those columns (selects the parser).
-    allow_missing:
-        If True, missing values (NaN / empty) are not reported as invalid.
 
     Returns
     -------
     dict[str, list[str]]
         ``{column: [invalid values]}``; columns with no invalid value are
-        omitted, so an empty dict means everything is valid.
+        omitted, so an empty dict means everything is valid. Missing values
+        (NaN / empty) are invalid and reported as ``"<missing>"``.
     """
     is_valid = _VALIDATORS[StringRepresentation(representation)]
     invalid: dict[str, list[str]] = {}
     for col in smiles_cols:
         bad = [
-            str(s)
+            "<missing>" if _is_missing(s) else str(s)
             for s in df[col]
-            if (not allow_missing or not _is_missing(s)) and (_is_missing(s) or not is_valid(s))
+            if _is_missing(s) or not is_valid(s)
         ]
         if bad:
             invalid[col] = bad
@@ -129,9 +135,8 @@ def canonicalise_structures(
     out = df.copy()
     failed: dict[str, list[str]] = {}
     for col in smiles_cols:
-        present = ~out[col].apply(_is_missing)  # missing values stay missing
-        canonical = out[col].where(~present, out.loc[present, col].apply(canonicalise))
-        bad = out.loc[present & canonical.isna(), col].astype(str).tolist()
+        canonical = out[col].apply(canonicalise)
+        bad = out.loc[canonical.isna(), col].astype(str).tolist()
         if bad:
             failed[col] = bad
         out[col] = canonical
@@ -150,7 +155,6 @@ def prepare_structures(
     smiles_cols: list[str],
     representation: StringRepresentation | str | None = None,
     canonicalise: bool = True,
-    allow_missing: bool = False,
 ) -> tuple[pd.DataFrame, StringRepresentation]:
     """
     Detect, validate and (optionally) canonicalise the structure columns.
@@ -167,10 +171,6 @@ def prepare_structures(
         the declared representation is used. ``None`` uses the detected one.
     canonicalise:
         Whether to canonicalise the structures (``data.canonicalise_smiles``).
-    allow_missing:
-        If True, missing structures (NaN / empty, e.g. an absent second
-        monomer of a homopolymer with weight 0) are left as they are and
-        logged; if False they are reported as invalid.
 
     Returns
     -------
@@ -180,13 +180,10 @@ def prepare_structures(
     Raises
     ------
     ValueError
-        If any structure is invalid (the message lists examples per column)
-        or cannot be canonicalised.
+        If any structure is invalid or missing (the message lists examples
+        per column) or cannot be canonicalised.
     """
-    present_df = df.dropna(subset=list(smiles_cols), how="any") if allow_missing else df
-    detected = detect_string_representation(
-        present_df if len(present_df) else df, smiles_cols
-    )
+    detected = detect_string_representation(df, smiles_cols)
     if representation is None:
         representation = detected
     else:
@@ -199,15 +196,7 @@ def prepare_structures(
                 representation.value,
             )
 
-    if allow_missing:
-        for col in smiles_cols:
-            n_missing = int(df[col].apply(_is_missing).sum())
-            if n_missing:
-                logger.warning(
-                    f"Structure column '{col}' has {n_missing} missing value(s); they are left "
-                    "empty (e.g. an absent monomer with weight 0)."
-                )
-    invalid = find_invalid_structures(df, smiles_cols, representation, allow_missing)
+    invalid = find_invalid_structures(df, smiles_cols, representation)
     if invalid:
         raise ValueError(invalid_structures_message(invalid, representation.value))
 

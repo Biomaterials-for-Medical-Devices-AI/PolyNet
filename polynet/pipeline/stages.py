@@ -731,7 +731,6 @@ def predict_external(
         smiles_cols=data_cfg.smiles_cols,
         representation=data_cfg.string_representation,
         canonicalise=data_cfg.canonicalise_smiles,
-        allow_missing=True,
     )
 
     has_target = data_cfg.target_variable_col in df.columns

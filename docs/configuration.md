@@ -63,9 +63,9 @@ columns with the same function (`polynet.data.structures.prepare_structures`):
    SMILES, `psmiles` for PSMILES), so the same molecule is always written the same way.
    New data passed to `predict_external` is canonicalised with the training settings.
 
-Missing structures (empty cells, e.g. the absent second monomer of a homopolymer whose
-weight is 0) are allowed in the CLI and in external prediction (they are logged and left
-empty); the GUI rejects them.
+Missing structures (empty cells) are treated as invalid everywhere: the run stops and
+the error shows them as `<missing>`. For a homopolymer in a multi-monomer dataset, repeat
+its SMILES in the other structure column and give it a weight of 0.
 
 > Before this was shared, the CLI accepted `canonicalise_smiles` but did not apply it.
 > Canonicalisation does not change the molecules or the descriptors, but it can reorder

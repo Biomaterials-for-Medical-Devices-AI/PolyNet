@@ -50,14 +50,11 @@ def test_invalid_structures_raise_with_examples_per_column():
     assert "column 'b': 1 invalid, e.g. ((" in msg
 
 
-def test_missing_structures_rejected_by_default_allowed_on_request(caplog):
-    df = pd.DataFrame({"a": ["OCC", "CCN"], "b": ["CC", np.nan]})
-    with pytest.raises(ValueError, match="column 'b': 1 invalid"):
+@pytest.mark.parametrize("missing", [np.nan, None, "", "   "])
+def test_missing_structures_stop_the_run(missing):
+    df = pd.DataFrame({"a": ["OCC", "CCN"], "b": ["CC", missing]})
+    with pytest.raises(ValueError, match=r"column 'b': 1 invalid, e.g. <missing>"):
         prepare_structures(df, ["a", "b"])
-    with caplog.at_level(logging.WARNING):
-        out, _ = prepare_structures(df, ["a", "b"], allow_missing=True)
-    assert out["a"].tolist() == ["CCO", "CCN"] and pd.isna(out["b"].iloc[1])
-    assert "1 missing value" in caplog.text
 
 
 def test_declared_representation_wins_with_a_warning(caplog):
@@ -94,3 +91,16 @@ def test_cli_loader_rejects_duplicate_ids_with_examples(tmp_path):
     pd.DataFrame({"id": [1, 2, 2, 5, 5], "smiles": ["CCO"] * 5, "y": range(5)}).to_csv(path, index=False)
     with pytest.raises(ValueError, match=r"2 duplicated value\(s\), e.g. 2, 5"):
         load_dataset(path, smiles_cols=["smiles"], target_col="y", id_col="id")
+
+
+def test_detection_tolerates_missing_values():
+    df = pd.DataFrame({"s": ["[*]CC[*]", np.nan]})
+    assert detect_string_representation(df, ["s"]) == StringRepresentation.SMILES
+
+
+def test_detection_matches_the_previous_chem_utils_rule():
+    from polynet.utils.chem_utils import determine_string_representation
+
+    for values in (["CCO", "[*]CC[*]"], ["[*]CC[*]", "[*]OC[*]"], ["C*C", "[*]CC[*]"]):
+        df = pd.DataFrame({"s": values})
+        assert detect_string_representation(df, ["s"]) == determine_string_representation(df, ["s"])

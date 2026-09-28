@@ -413,13 +413,12 @@ def main() -> None:
     t0 = announce("1. Load & validate data")
     df = _load_data(cfg, root, out_dir)
     # Same structure preparation as the GUI: detect → validate → canonicalise.
-    # Missing structures (e.g. an absent monomer with weight 0) stay allowed.
+    # Invalid or missing structures stop the run.
     df, _ = prepare_structures(
         df,
         smiles_cols=data_cfg.smiles_cols,
         representation=data_cfg.string_representation,
         canonicalise=data_cfg.canonicalise_smiles,
-        allow_missing=True,
     )
     df.to_csv(out_dir / cfg["data"]["data_name"])
     done(t0)
