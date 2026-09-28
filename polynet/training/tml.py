@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import KFold, RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
@@ -36,6 +36,7 @@ from polynet.config.enums import (
 from polynet.config.search_grid import get_tml_search_grid
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
+from polynet.training.cv import make_kfold
 
 logger = logging.getLogger(__name__)
 
@@ -207,16 +208,6 @@ def train_tml_ensemble(
     scalers: dict = {}
     target_scalers: dict = {}
 
-    # Fail fast: check the HPO fold count against every split before fitting anything.
-    if any(not params for params in tml_models.values()):
-        any_df = next(iter(dataframes.values()))
-        validate_hpo_n_folds_for_splits(
-            n_folds=hpo_n_folds,
-            y=any_df.iloc[:, -1],
-            train_val_test_idxs=(train_ids, val_ids, test_ids),
-            problem_type=problem_type,
-        )
-
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
         iteration = i + 1
         seed = random_seed + i
@@ -314,94 +305,6 @@ def train_tml_ensemble(
     return trained_models, training_data, scalers, target_scalers
 
 
-def validate_hpo_n_folds(n_folds: int, y, problem_type: ProblemType) -> None:
-    """
-    Check that ``n_folds`` is usable for cross-validation on targets ``y``.
-
-    Parameters
-    ----------
-    n_folds:
-        Requested number of CV folds (``k``).
-    y:
-        Training targets the search will be run on.
-    problem_type:
-        Classification or regression.
-
-    Raises
-    ------
-    ValueError
-        If ``k < 2``, if ``k`` exceeds the number of training samples, or,
-        for classification, if any class has fewer than ``k`` training
-        samples (stratified folds need every class in every fold).
-    """
-    y = pd.Series(np.asarray(y).ravel())
-    n_samples = len(y)
-
-    if n_folds < 2:
-        raise ValueError(f"hpo_n_folds must be at least 2, got {n_folds}.")
-    if n_folds > n_samples:
-        raise ValueError(
-            f"hpo_n_folds={n_folds} exceeds the number of training samples ({n_samples}). "
-            f"Choose hpo_n_folds between 2 and {n_samples}."
-        )
-    if problem_type == ProblemType.Classification:
-        class_counts = y.value_counts()
-        smallest_class, smallest_count = class_counts.idxmin(), int(class_counts.min())
-        if n_folds > smallest_count:
-            raise ValueError(
-                f"hpo_n_folds={n_folds} is larger than the smallest class in the training set "
-                f"(class {smallest_class} has {smallest_count} samples). Stratified CV needs "
-                f"every class in every fold: choose hpo_n_folds between 2 and {smallest_count}."
-            )
-
-
-def validate_hpo_n_folds_for_splits(
-    n_folds: int, y: pd.Series, train_val_test_idxs: tuple, problem_type: ProblemType
-) -> None:
-    """
-    Run ``validate_hpo_n_folds`` on the HPO data of every split.
-
-    TML hyperparameter search runs on the training + validation samples of
-    each split, so ``k`` is checked against exactly those samples.
-
-    Parameters
-    ----------
-    n_folds:
-        Requested number of CV folds (``k``).
-    y:
-        Target values for the whole dataset, indexed by sample ID.
-    train_val_test_idxs:
-        ``(train_ids, val_ids, test_ids)``, each a list with one entry per split.
-    problem_type:
-        Classification or regression.
-
-    Raises
-    ------
-    ValueError
-        If ``k`` is invalid for any split; the message names the split.
-    """
-    train_ids, val_ids, _ = train_val_test_idxs
-    for i, (train_idxs, val_idxs) in enumerate(zip(train_ids, val_ids), start=1):
-        hpo_idxs = pd.Index(train_idxs).append(pd.Index(val_idxs if val_idxs is not None else []))
-        try:
-            validate_hpo_n_folds(n_folds=n_folds, y=y.loc[hpo_idxs], problem_type=problem_type)
-        except ValueError as e:
-            raise ValueError(f"tml_models.hpo_n_folds is invalid for split {i}: {e}") from None
-
-
-def _make_hpo_cv(problem_type: ProblemType, random_seed: int, n_splits: int = 5):
-    """
-    Return the shuffled K-fold splitter used for TML hyperparameter search.
-
-    Folds are always shuffled so that a dataset sorted by target (or by any
-    other column) does not produce biased folds. Classification uses
-    stratified folds to preserve class proportions.
-    """
-    if problem_type == ProblemType.Classification:
-        return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
-    return KFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
-
-
 def _run_random_search(
     model,
     model_id: TraditionalMLModel,
@@ -430,8 +333,8 @@ def _run_random_search(
     random_seed:
         Seed for the fold shuffling and the configuration sampling.
     n_folds:
-        Number of CV folds; validated against ``train_df`` (see
-        ``validate_hpo_n_folds``).
+        Number of CV folds. Checked against the data before training starts
+        (``polynet.pipeline.validate_hpo_folds``).
 
     Returns
     -------
@@ -441,8 +344,7 @@ def _run_random_search(
     param_grid = get_tml_search_grid(
         model=model_id, problem_type=problem_type, random_seed=random_seed
     )
-    validate_hpo_n_folds(n_folds=n_folds, y=train_df.iloc[:, -1], problem_type=problem_type)
-    cv = _make_hpo_cv(problem_type=problem_type, random_seed=random_seed, n_splits=n_folds)
+    cv = make_kfold(problem_type=problem_type, n_folds=n_folds, random_seed=random_seed)
 
     logger.info(
         f"Running RandomizedSearchCV for {model_id.value} "
