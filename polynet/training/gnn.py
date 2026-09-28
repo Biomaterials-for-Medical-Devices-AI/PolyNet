@@ -39,7 +39,9 @@ from polynet.config.enums import (
     Scheduler,
     TargetTransformDescriptor,
     TrainingParam,
+    TransformDescriptor,
 )
+from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
@@ -85,6 +87,59 @@ def _scale_dataset_targets(dataset: list, scaler: "TargetScaler") -> list:
     return scaled
 
 
+def fit_polymer_descriptor_scaler(
+    train_set: list, scaler: TransformDescriptor | str
+) -> FeatureTransformer | None:
+    """
+    Fit the tabular feature scaler on the polymer descriptors of ``train_set``.
+
+    Uses the same ``FeatureTransformer`` as the traditional-ML pipeline, with
+    the same scaling strategy but without feature selection: the GNN readout
+    has a fixed input width, and polymer descriptors are chosen explicitly by
+    the user.
+
+    Parameters
+    ----------
+    train_set:
+        Training graphs only — the scaler must never see validation or
+        test descriptors.
+    scaler:
+        Scaling strategy (``feature_preprocessing.scaler``).
+
+    Returns
+    -------
+    FeatureTransformer | None
+        The fitted transformer, or ``None`` when the graphs carry no polymer
+        descriptors or ``scaler`` is ``no_transformation``.
+
+    Raises
+    ------
+    ValueError
+        If a polymer descriptor contains NaN or ±inf in the training set
+        (the transformer would drop the column and change the model input
+        width).
+    """
+    if TransformDescriptor(scaler) == TransformDescriptor.NoTransformation:
+        return None
+    if not train_set or getattr(train_set[0], "polymer_descriptors", None) is None:
+        return None
+
+    X = torch.cat([d.polymer_descriptors for d in train_set], dim=0).cpu().numpy()
+    transformer = FeatureTransformer(scaler=TransformDescriptor(scaler), selectors={}).fit(X)
+    if len(transformer.feature_names_in_) != X.shape[1]:
+        raise ValueError(
+            "Polymer descriptors contain NaN or infinite values in the training set. "
+            "Clean or impute these columns before training a GNN."
+        )
+    return transformer
+
+
+def n_polymer_descriptors_of(graph) -> int:
+    """Number of polymer descriptors stored on a graph (0 if none)."""
+    poly_desc = getattr(graph, "polymer_descriptors", None)
+    return poly_desc.shape[1] if poly_desc is not None else 0
+
+
 # ---------------------------------------------------------------------------
 # Ensemble training
 # ---------------------------------------------------------------------------
@@ -104,6 +159,7 @@ def train_gnn_ensemble(
     hpo_n_folds: int = 5,
     hpo_val_fraction: float = 0.2,
     hpo_n_repeats: int = 3,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -147,6 +203,13 @@ def train_gnn_ensemble(
         Validation fraction for ``Holdout`` / ``RepeatedHoldout``.
     hpo_n_repeats:
         Number of independent splits for ``RepeatedHoldout``.
+    polymer_descriptor_scaler:
+        Scaling strategy for user-supplied polymer descriptors — the same
+        ``TransformDescriptor`` used for tabular features. A
+        ``FeatureTransformer`` is fitted on the training graphs of each
+        iteration and attached to every model trained in that iteration
+        (see ``BaseNetwork.set_polymer_descriptor_scaler``). Ignored when the
+        graphs carry no polymer descriptors.
 
     Returns
     -------
@@ -213,6 +276,9 @@ def train_gnn_ensemble(
             test_set_fit = test_set
         target_scalers[str(iteration)] = target_scaler
 
+        # Fit the polymer descriptor scaler on training graphs only.
+        descriptor_scaler = fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
+
         for gnn_arch, arch_params in gnn_conv_params.items():
             arch_params = arch_params or {}
             is_hpo = not arch_params
@@ -236,6 +302,7 @@ def train_gnn_ensemble(
                     n_folds=hpo_n_folds,
                     val_fraction=hpo_val_fraction,
                     n_repeats=hpo_n_repeats,
+                    polymer_descriptor_scaler=polymer_descriptor_scaler,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")
@@ -254,19 +321,17 @@ def train_gnn_ensemble(
                 lr = arch_lr[gnn_arch]
                 batch_size = arch_batch_size[gnn_arch]
 
-            _poly_desc = getattr(dataset[0], "polymer_descriptors", None)
-            n_polymer_descriptors = _poly_desc.shape[1] if _poly_desc is not None else 0
-
             model = create_network(
                 network=gnn_arch,
                 problem_type=problem_type,
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=int(num_classes),
-                n_polymer_descriptors=n_polymer_descriptors,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 seed=seed,
                 **arch_params,
             ).to(device)
+            model.set_polymer_descriptor_scaler(descriptor_scaler)
 
             train_loader = DataLoader(
                 train_set_fit,
