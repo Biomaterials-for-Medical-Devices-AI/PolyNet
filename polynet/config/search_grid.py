@@ -134,7 +134,7 @@ def get_tml_search_grid(
     Returns
     -------
     dict
-        A hyperparameter grid suitable for use with sklearn's GridSearchCV.
+        A hyperparameter grid, sampled by sklearn's ``RandomizedSearchCV``.
 
     Raises
     ------

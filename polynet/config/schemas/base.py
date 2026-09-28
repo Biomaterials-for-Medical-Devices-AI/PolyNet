@@ -15,7 +15,7 @@ class HyperparamOptimConfig(BaseModel):
     Mixin for any training config that supports hyperparameter optimisation.
 
     Inherit from this alongside ``BaseModel`` for any model type that can
-    run a grid search or similar optimisation strategy.
+    run a randomised search or similar optimisation strategy.
     """
 
     hyperparameter_optimisation: bool = Field(
