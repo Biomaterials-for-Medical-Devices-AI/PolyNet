@@ -508,7 +508,9 @@ def _compute_masking_attributions(
                     # Polymer descriptors are concatenated to the pooled embedding
                     # before the readout MLP (mirrors BaseNetwork.forward)
                     if polymer_descriptors is not None and model.n_polymer_descriptors > 0:
-                        pooled = torch.cat([pooled, polymer_descriptors], dim=1)
+                        pooled = torch.cat(
+                            [pooled, model.scale_polymer_descriptors(polymer_descriptors)], dim=1
+                        )
 
                     y_masked = _get_scalar_prediction(
                         model.readout_function(pooled),
