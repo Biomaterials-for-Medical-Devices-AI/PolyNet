@@ -211,3 +211,34 @@ def test_gnn_cache_is_reused_only_for_the_same_search(tmp_path):
     _, new_samples = _run_gnn_hpo(tmp_path, num_samples=13)
     assert new_grid.call_count == 1 and new_samples.call_count == 1  # changed → re-run
     assert len(list(tmp_path.glob("gnn_hyp_opt/iteration_1/GCN_*"))) == 3
+
+
+# ---------------------------------------------------------------------------
+# Experiment-level summary of the search spaces (hpo_search_spaces.json)
+# ---------------------------------------------------------------------------
+
+
+def test_effective_search_spaces_lists_only_tuned_models_with_merged_grids():
+    from polynet.config.search_grid import effective_search_spaces
+
+    gnn = TrainGNNConfig(
+        gnn_convolutional_layers={"GCN": {}, "GAT": {"learning_rate": 0.01, "batch_size": 8}},
+        hpo_num_samples=20,
+        hpo_search_grid={"shared": {"dropout": [0.3]}},
+    )
+    tml_cfg = TrainTMLConfig(
+        train_tml=True,
+        selected_models={"linear_regression": {}, "random_forest": {"n_estimators": 5}},
+    )
+    spaces = effective_search_spaces(ProblemType.Regression, gnn_cfg=gnn, tml_cfg=tml_cfg)
+
+    assert list(spaces["gnn"]["architectures"]) == ["GCN"]  # GAT has explicit params
+    gcn = spaces["gnn"]["architectures"]["GCN"]
+    assert gcn[ArchitectureParam.Dropout] == [0.3] and TrainingParam.Seed not in gcn
+    assert spaces["gnn"]["hpo_num_samples"] == 20
+
+    assert list(spaces["tml"]["models"]) == ["linear_regression"]
+    lr = spaces["tml"]["models"]["linear_regression"]
+    assert lr == {"search_grid": {"fit_intercept": [True, False]}, "n_iter": 2}  # capped
+
+    assert effective_search_spaces(ProblemType.Regression) == {}
