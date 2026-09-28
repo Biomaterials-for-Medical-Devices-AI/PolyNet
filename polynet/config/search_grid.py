@@ -299,3 +299,77 @@ def get_gnn_search_grid(
     )
     grid[TrainingParam.Seed] = [random_seed]
     return grid
+
+
+def effective_search_spaces(problem_type: ProblemType, gnn_cfg=None, tml_cfg=None) -> dict:
+    """
+    Describe the search spaces automatic HPO will use in an experiment.
+
+    For every architecture / model that runs HPO (empty hyperparameter
+    block), returns its default grid merged with the user's
+    ``hpo_search_grid``, together with the sample count and folds. Seeds
+    (``seed`` / ``random_state``) are left out because they change per split
+    (``random_seed + split - 1``); everything else is exactly what is searched.
+
+    Parameters
+    ----------
+    problem_type:
+        Classification or regression (TML grids depend on it).
+    gnn_cfg:
+        ``TrainGNNConfig`` or ``None`` if GNNs are not trained.
+    tml_cfg:
+        ``TrainTMLConfig`` or ``None`` if TML models are not trained.
+
+    Returns
+    -------
+    dict
+        ``{"gnn": {...}, "tml": {...}}`` with an entry only for pipelines that
+        run HPO; empty if nothing is tuned.
+    """
+    spaces: dict = {}
+
+    if gnn_cfg is not None:
+        architectures = {
+            net.value: {
+                k: v
+                for k, v in get_gnn_search_grid(
+                    net, random_seed=0, custom_grid=gnn_cfg.hpo_search_grid
+                ).items()
+                if k != TrainingParam.Seed
+            }
+            for net, params in gnn_cfg.gnn_convolutional_layers.items()
+            if not params
+        }
+        if architectures:
+            spaces["gnn"] = {
+                "hpo_num_samples": gnn_cfg.hpo_num_samples,
+                "hpo_split_strategy": gnn_cfg.hpo_split_strategy.value,
+                "hpo_n_folds": gnn_cfg.hpo_n_folds,
+                "hpo_val_fraction": gnn_cfg.hpo_val_fraction,
+                "hpo_n_repeats": gnn_cfg.hpo_n_repeats,
+                "architectures": architectures,
+            }
+
+    if tml_cfg is not None:
+        models = {}
+        for model, params in (tml_cfg.selected_models or {}).items():
+            if params:
+                continue
+            grid = get_tml_search_grid(
+                model,
+                problem_type,
+                random_seed=0,
+                custom_grid=tml_cfg.hpo_search_grid.get(model.value),
+            )
+            models[model.value] = {
+                "search_grid": {k: v for k, v in grid.items() if k != "random_state"},
+                "n_iter": min(tml_cfg.hpo_num_samples, n_grid_combinations(grid)),
+            }
+        if models:
+            spaces["tml"] = {
+                "hpo_num_samples": tml_cfg.hpo_num_samples,
+                "hpo_n_folds": tml_cfg.hpo_n_folds,
+                "models": models,
+            }
+
+    return spaces
