@@ -334,7 +334,7 @@ def _run_random_search(
         Seed for the fold shuffling and the configuration sampling.
     n_folds:
         Number of CV folds. Checked against the data before training starts
-        (``polynet.pipeline.validate_hpo_folds``).
+        (``polynet.utils.validation.validate_hpo_folds``).
 
     Returns
     -------

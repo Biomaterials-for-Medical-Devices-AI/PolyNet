@@ -22,7 +22,7 @@ class HyperparamOptimConfig(BaseModel):
     (stratified for classification) on the training + validation samples of
     each split. Only ``k >= 2`` can be checked here; the data-dependent rules
     (``k`` vs. number of samples and smallest class) are checked once the data
-    is split, by ``polynet.pipeline.validate_hpo_folds``.
+    is split, by ``polynet.utils.validation.validate_hpo_folds``.
     """
 
     hyperparameter_optimisation: bool = Field(
