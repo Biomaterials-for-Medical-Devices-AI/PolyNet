@@ -5,8 +5,8 @@ Cross-validation settings shared by the TML and GNN hyperparameter searches:
 
 - ``hpo_n_folds`` is one schema field (``HyperparamOptimConfig``) with ``k >= 2``;
 - ``polynet.training.cv`` builds the shuffled (stratified) splitter for both;
-- ``polynet.pipeline.validate_hpo_folds`` checks ``k`` against the data of every
-  split before any training, for whichever pipeline will run cross-validated HPO.
+- ``polynet.utils.validation`` checks ``k`` against the data of every split
+  before any training, for whichever pipeline will run cross-validated HPO.
 """
 
 import numpy as np
@@ -17,8 +17,8 @@ from sklearn.model_selection import KFold, StratifiedKFold
 
 from polynet.config.enums import HpoSplitStrategy, Network, ProblemType, TraditionalMLModel
 from polynet.config.schemas import DataConfig, TrainGNNConfig, TrainTMLConfig
-from polynet.pipeline import validate_hpo_folds
-from polynet.training.cv import check_n_folds, check_n_folds_for_splits, make_kfold
+from polynet.training.cv import make_kfold
+from polynet.utils.validation import check_n_folds, check_n_folds_for_splits, validate_hpo_folds
 
 _TML_HPO = {TraditionalMLModel.RandomForest: {}}
 _GNN_HPO = {Network.GCN: {}}
@@ -129,7 +129,7 @@ def test_split_check_names_setting_and_split():
 
 
 # ---------------------------------------------------------------------------
-# Pipeline stage: one check for both pipelines
+# One validator for both pipelines
 # ---------------------------------------------------------------------------
 
 _DATA = pd.DataFrame({"target": [0] * 16 + [1] * 4}, index=range(20))
@@ -147,19 +147,19 @@ def _data_cfg():
     )
 
 
-def test_stage_rejects_bad_tml_k():
+def test_validator_rejects_bad_tml_k():
     tml_cfg = TrainTMLConfig(train_tml=True, selected_models=_TML_HPO, hpo_n_folds=3)
     with pytest.raises(ValueError, match="tml_models.hpo_n_folds=3 is invalid for split 1"):
         validate_hpo_folds(_DATA, _data_cfg(), _SPLITS, tml_cfg=tml_cfg)
 
 
-def test_stage_rejects_bad_gnn_k_under_cross_validation():
+def test_validator_rejects_bad_gnn_k_under_cross_validation():
     gnn_cfg = TrainGNNConfig(gnn_convolutional_layers=_GNN_HPO, hpo_n_folds=3)
     with pytest.raises(ValueError, match="gnn_training.hpo_n_folds=3 is invalid for split 1"):
         validate_hpo_folds(_DATA, _data_cfg(), _SPLITS, gnn_cfg=gnn_cfg)
 
 
-def test_stage_skips_pipelines_without_cross_validated_hpo():
+def test_validator_skips_pipelines_without_cross_validated_hpo():
     # TML with explicit hyperparameters → no HPO.
     tml_cfg = TrainTMLConfig(
         train_tml=True,
@@ -173,7 +173,7 @@ def test_stage_skips_pipelines_without_cross_validated_hpo():
     validate_hpo_folds(_DATA, _data_cfg(), _SPLITS, tml_cfg=tml_cfg, gnn_cfg=gnn_cfg)
 
 
-def test_stage_accepts_valid_k():
+def test_validator_accepts_valid_k():
     tml_cfg = TrainTMLConfig(train_tml=True, selected_models=_TML_HPO, hpo_n_folds=2)
     gnn_cfg = TrainGNNConfig(gnn_convolutional_layers=_GNN_HPO, hpo_n_folds=2)
     validate_hpo_folds(_DATA, _data_cfg(), _SPLITS, tml_cfg=tml_cfg, gnn_cfg=gnn_cfg)
