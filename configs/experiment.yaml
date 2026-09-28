@@ -116,8 +116,8 @@ representations:
 # Data splitting
 # -----------------------------------------------------------------------------
 splitting:
-  split_type: "train_val_test"       # TrainValTest | LeaveOneOut
-  split_method: "random"           # Random | Scaffold (scaffold requires RDKit)
+  split_type: "train_val_test"     # the only implemented split type
+  split_method: "random"           # random | stratified (by target; recommended for classification)
   train_set_balance: null
   test_ratio: 0.15
   val_ratio: 0.15
