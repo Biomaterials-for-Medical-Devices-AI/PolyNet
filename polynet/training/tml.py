@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import KFold, RandomizedSearchCV, StratifiedKFold
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
@@ -143,13 +143,15 @@ def train_tml_ensemble(
     random_seed: int,
     train_val_test_idxs: tuple[list, list | None, list],
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
+    hpo_n_folds: int = 5,
 ) -> tuple[dict, dict, dict, dict]:
     """
     Train an ensemble of TML models across all bootstrap iterations.
 
     For each iteration and each descriptor DataFrame, each requested model
-    is either fitted with the provided hyperparameters or tuned via
-    ``GridSearchCV`` if no hyperparameters are provided.
+    is either fitted with the provided hyperparameters or tuned via a
+    randomised search (``RandomizedSearchCV``, ``hpo_n_folds``-fold shuffled
+    CV) if no hyperparameters are provided.
 
     Note: The validation set is merged into the training set for TML
     models, as TML training uses internal cross-validation for HPO
@@ -159,7 +161,7 @@ def train_tml_ensemble(
     ----------
     tml_models:
         Mapping from model identifier to hyperparameter dict. Pass an
-        empty dict or ``None`` to trigger GridSearchCV HPO for that model.
+        empty dict or ``None`` to trigger randomised-search HPO for that model.
     problem_type:
         Classification or regression.
     transform_type:
@@ -204,6 +206,16 @@ def train_tml_ensemble(
     training_data: dict = {}
     scalers: dict = {}
     target_scalers: dict = {}
+
+    # Fail fast: check the HPO fold count against every split before fitting anything.
+    if any(not params for params in tml_models.values()):
+        any_df = next(iter(dataframes.values()))
+        validate_hpo_n_folds_for_splits(
+            n_folds=hpo_n_folds,
+            y=any_df.iloc[:, -1],
+            train_val_test_idxs=(train_ids, val_ids, test_ids),
+            problem_type=problem_type,
+        )
 
     for i, (train_idxs, val_idxs, test_idxs) in enumerate(zip(train_ids, val_ids, test_ids)):
         iteration = i + 1
@@ -284,12 +296,13 @@ def train_tml_ensemble(
                 model = get_model(model_cls=model_cls, model_params=model_params, random_state=seed)
 
                 if is_hpo:
-                    model = _run_grid_search(
+                    model = _run_random_search(
                         model=model,
                         model_id=model_id,
                         train_df=train_df_fit,
                         problem_type=problem_type,
                         random_seed=seed,
+                        n_folds=hpo_n_folds,
                     )
                 else:
                     logger.info(f"Fitting {model_id.value} (iteration {iteration}, {df_name})...")
@@ -301,27 +314,142 @@ def train_tml_ensemble(
     return trained_models, training_data, scalers, target_scalers
 
 
-def _run_grid_search(
+def validate_hpo_n_folds(n_folds: int, y, problem_type: ProblemType) -> None:
+    """
+    Check that ``n_folds`` is usable for cross-validation on targets ``y``.
+
+    Parameters
+    ----------
+    n_folds:
+        Requested number of CV folds (``k``).
+    y:
+        Training targets the search will be run on.
+    problem_type:
+        Classification or regression.
+
+    Raises
+    ------
+    ValueError
+        If ``k < 2``, if ``k`` exceeds the number of training samples, or,
+        for classification, if any class has fewer than ``k`` training
+        samples (stratified folds need every class in every fold).
+    """
+    y = pd.Series(np.asarray(y).ravel())
+    n_samples = len(y)
+
+    if n_folds < 2:
+        raise ValueError(f"hpo_n_folds must be at least 2, got {n_folds}.")
+    if n_folds > n_samples:
+        raise ValueError(
+            f"hpo_n_folds={n_folds} exceeds the number of training samples ({n_samples}). "
+            f"Choose hpo_n_folds between 2 and {n_samples}."
+        )
+    if problem_type == ProblemType.Classification:
+        class_counts = y.value_counts()
+        smallest_class, smallest_count = class_counts.idxmin(), int(class_counts.min())
+        if n_folds > smallest_count:
+            raise ValueError(
+                f"hpo_n_folds={n_folds} is larger than the smallest class in the training set "
+                f"(class {smallest_class} has {smallest_count} samples). Stratified CV needs "
+                f"every class in every fold: choose hpo_n_folds between 2 and {smallest_count}."
+            )
+
+
+def validate_hpo_n_folds_for_splits(
+    n_folds: int, y: pd.Series, train_val_test_idxs: tuple, problem_type: ProblemType
+) -> None:
+    """
+    Run ``validate_hpo_n_folds`` on the HPO data of every split.
+
+    TML hyperparameter search runs on the training + validation samples of
+    each split, so ``k`` is checked against exactly those samples.
+
+    Parameters
+    ----------
+    n_folds:
+        Requested number of CV folds (``k``).
+    y:
+        Target values for the whole dataset, indexed by sample ID.
+    train_val_test_idxs:
+        ``(train_ids, val_ids, test_ids)``, each a list with one entry per split.
+    problem_type:
+        Classification or regression.
+
+    Raises
+    ------
+    ValueError
+        If ``k`` is invalid for any split; the message names the split.
+    """
+    train_ids, val_ids, _ = train_val_test_idxs
+    for i, (train_idxs, val_idxs) in enumerate(zip(train_ids, val_ids), start=1):
+        hpo_idxs = pd.Index(train_idxs).append(pd.Index(val_idxs if val_idxs is not None else []))
+        try:
+            validate_hpo_n_folds(n_folds=n_folds, y=y.loc[hpo_idxs], problem_type=problem_type)
+        except ValueError as e:
+            raise ValueError(f"tml_models.hpo_n_folds is invalid for split {i}: {e}") from None
+
+
+def _make_hpo_cv(problem_type: ProblemType, random_seed: int, n_splits: int = 5):
+    """
+    Return the shuffled K-fold splitter used for TML hyperparameter search.
+
+    Folds are always shuffled so that a dataset sorted by target (or by any
+    other column) does not produce biased folds. Classification uses
+    stratified folds to preserve class proportions.
+    """
+    if problem_type == ProblemType.Classification:
+        return StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+    return KFold(n_splits=n_splits, shuffle=True, random_state=random_seed)
+
+
+def _run_random_search(
     model,
     model_id: TraditionalMLModel,
     train_df: pd.DataFrame,
     problem_type: ProblemType,
     random_seed: int,
+    n_folds: int = 5,
 ) -> object:
-    """Run GridSearchCV HPO and return the best estimator."""
+    """
+    Tune a TML model with a randomised hyperparameter search.
+
+    Samples 30 configurations from the model's search grid
+    (``get_tml_search_grid``) with ``RandomizedSearchCV`` and scores them by
+    ``n_folds``-fold shuffled cross-validation (stratified for classification).
+
+    Parameters
+    ----------
+    model:
+        Unfitted estimator to tune.
+    model_id:
+        Model identifier, used to look up the search grid.
+    train_df:
+        Training data: features in all columns except the last, target last.
+    problem_type:
+        Classification or regression.
+    random_seed:
+        Seed for the fold shuffling and the configuration sampling.
+    n_folds:
+        Number of CV folds; validated against ``train_df`` (see
+        ``validate_hpo_n_folds``).
+
+    Returns
+    -------
+    object
+        The best estimator, refitted on the full ``train_df``.
+    """
     param_grid = get_tml_search_grid(
         model=model_id, problem_type=problem_type, random_seed=random_seed
     )
+    validate_hpo_n_folds(n_folds=n_folds, y=train_df.iloc[:, -1], problem_type=problem_type)
+    cv = _make_hpo_cv(problem_type=problem_type, random_seed=random_seed, n_splits=n_folds)
 
-    cv = (
-        StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
-        if problem_type == ProblemType.Classification
-        else 5
+    logger.info(
+        f"Running RandomizedSearchCV for {model_id.value} "
+        f"({n_folds}-fold CV, seed={random_seed})..."
     )
 
-    logger.info(f"Running GridSearchCV for {model_id.value} (seed={random_seed})...")
-
-    grid_search = RandomizedSearchCV(
+    random_search = RandomizedSearchCV(
         estimator=model,
         param_distributions=param_grid,
         n_iter=30,
@@ -329,7 +457,7 @@ def _run_grid_search(
         random_state=random_seed,
         n_jobs=-1,
     )
-    grid_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
+    random_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
-    logger.info(f"Best params for {model_id.value}: {grid_search.best_params_}")
-    return grid_search.best_estimator_
+    logger.info(f"Best params for {model_id.value}: {random_search.best_params_}")
+    return random_search.best_estimator_
