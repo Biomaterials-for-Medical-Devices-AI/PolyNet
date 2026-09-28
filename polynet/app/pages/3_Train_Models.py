@@ -6,6 +6,7 @@ import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
+    feature_transformer_widgets,
     split_data_form,
     target_transform_widget,
     train_GNN_models_form,
@@ -66,7 +67,7 @@ from polynet.pipeline import (
 def train_models(
     experiment_name: str,
     tml_models: dict,
-    preprocessing_cfg: FeatureTransformConfig,
+    preprocessing_cfg: FeatureTransformConfig | None,
     gnn_conv_params: dict,
     representation_options: RepresentationConfig,
     data_options: DataConfig,
@@ -112,6 +113,10 @@ def train_models(
     )
     save_options(split_cfg_path, split_cfg)
     save_options(target_transform_opts_path, target_cfg)
+    # Pipeline-wide feature preprocessing (TML descriptors and GNN polymer
+    # descriptors); only set when there are tabular features to scale.
+    if preprocessing_cfg is not None:
+        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
     # read the data
     data = pd.read_csv(
@@ -142,7 +147,6 @@ def train_models(
             train_tml=st.session_state[TrainTMLStateKeys.TrainTML], selected_models=tml_models
         )
         save_options(path=tml_training_opts_path, options=tml_cfg)
-        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
         # load descriptor DataFrames from disk (saved by Page 2)
         dataframes = load_dataframes(
@@ -219,11 +223,8 @@ def train_models(
             random_seed=general_experiment_options.random_seed,
             out_dir=experiment_path,
             target_cfg=target_cfg,
-            # Polymer descriptors use the tabular scaler when TML is configured
-            # (otherwise ``train_gnn`` falls back to standard scaling).
-            preprocessing_cfg=(
-                preprocessing_cfg if isinstance(preprocessing_cfg, FeatureTransformConfig) else None
-            ),
+            # Polymer descriptors use the pipeline-wide feature scaler.
+            preprocessing_cfg=preprocessing_cfg,
         )
 
         gnn_predictions_df = run_gnn_inference(
@@ -325,12 +326,11 @@ if experiment_name:
 
     if representation_file_path(experiment_path=experiment_path).exists():
 
-        tml_models, preprocessing_cfg = train_TML_models(problem_type=data_opts.problem_type)
+        tml_models = train_TML_models(problem_type=data_opts.problem_type)
 
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
         tml_models = {}
-        preprocessing_cfg = {}
 
     st.markdown("## Graph Neural Networks (GNNs)")
 
@@ -345,6 +345,20 @@ if experiment_name:
             "No graph representation found. Please build a graph representation of your polymers first."
         )
         gnn_conv_params = {}
+
+    # ------------------------------------------------------------------
+    # Feature preprocessing (pipeline-wide): only meaningful when there are
+    # tabular features to scale — TML descriptors and/or GNN polymer descriptors.
+    # ------------------------------------------------------------------
+    gnn_polymer_descriptors = bool(gnn_conv_params) and bool(
+        representation_opts.polymer_descriptors
+    )
+    preprocessing_cfg = None
+    if tml_models or gnn_polymer_descriptors:
+        st.markdown("## Feature Preprocessing")
+        preprocessing_cfg = feature_transformer_widgets(
+            train_tml=bool(tml_models), gnn_polymer_descriptors=gnn_polymer_descriptors
+        )
 
     st.markdown("## Data Splitting Options")
     split_data_form(problem_type=data_opts.problem_type)
