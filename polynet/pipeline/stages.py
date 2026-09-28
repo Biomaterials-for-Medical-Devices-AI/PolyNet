@@ -30,6 +30,7 @@ from pathlib import Path
 import pandas as pd
 
 from polynet.config.enums import ProblemType, TargetTransformDescriptor, TransformDescriptor
+from polynet.config.paths import split_indices_path
 from polynet.config.schemas import (
     DataConfig,
     ExplainabilityConfig,
@@ -239,7 +240,7 @@ def compute_data_splits(
         logger.info(f"Split {i + 1}: train={len(tr)}, val={len(va)}, test={len(te)}")
 
     if out_dir is not None:
-        splits_file = out_dir / "split_indices.json"
+        splits_file = split_indices_path(out_dir)
         with open(splits_file, "w") as f:
             json.dump(
                 {
