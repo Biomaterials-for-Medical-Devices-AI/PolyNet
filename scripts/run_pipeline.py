@@ -195,6 +195,48 @@ def _build_preprocessing_config(cfg: dict) -> FeatureTransformConfig:
     return FeatureTransformConfig.model_validate(cfg["feature_preprocessing"])
 
 
+def _resolve_preprocessing_config(
+    cfg: dict, train_tml: bool, gnn_polymer_descriptors: bool
+) -> FeatureTransformConfig | None:
+    """
+    Build the pipeline-wide feature preprocessing config, if one is given.
+
+    ``feature_preprocessing.scaler`` applies to every tabular feature the
+    pipeline uses: the molecular descriptors of TML models and the
+    ``representations.polymer_descriptors`` concatenated to the GNN graph
+    embedding. ``selectors`` apply to TML models only.
+
+    Parameters
+    ----------
+    cfg:
+        Raw experiment config dict.
+    train_tml:
+        Whether TML models will be trained.
+    gnn_polymer_descriptors:
+        Whether GNNs will be trained with user-supplied polymer descriptors.
+
+    Returns
+    -------
+    FeatureTransformConfig | None
+        The validated config, or ``None`` when the section is absent.
+    """
+    if not cfg.get("feature_preprocessing"):
+        return None
+
+    preprocessing_cfg = _build_preprocessing_config(cfg)
+    if not train_tml and not gnn_polymer_descriptors:
+        logger.warning(
+            "feature_preprocessing has no effect: no TML models are trained and no "
+            "representations.polymer_descriptors are given for the GNNs."
+        )
+    elif not train_tml and preprocessing_cfg.selectors:
+        logger.warning(
+            "feature_preprocessing.selectors apply to TML models only and are ignored for "
+            "the GNN polymer descriptors (only the scaler is applied)."
+        )
+    return preprocessing_cfg
+
+
 def _build_target_config(cfg: dict) -> TargetTransformConfig:
     """Build TargetTransformConfig from the optional 'target_transform' section.
 
@@ -436,6 +478,17 @@ def main() -> None:
     save_options(out_dir / "split_options.json", split_cfg)
     done(t0)
 
+    # Pipeline-wide feature preprocessing: TML descriptors and GNN polymer descriptors.
+    preprocessing_cfg = _resolve_preprocessing_config(
+        cfg,
+        train_tml=tml_enabled and desc_dfs is not None,
+        gnn_polymer_descriptors=(
+            gnn_enabled and dataset is not None and bool(repr_cfg.polymer_descriptors)
+        ),
+    )
+    if preprocessing_cfg is not None:
+        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
+
     all_predictions = []
     all_trained_models = {}
 
@@ -450,10 +503,6 @@ def main() -> None:
         target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_gnn_options.json", gnn_cfg)
         try:
-            # Polymer descriptors use the same scaler as the tabular features.
-            gnn_preprocessing_cfg = (
-                _build_preprocessing_config(cfg) if cfg.get("feature_preprocessing") else None
-            )
             gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
                 dataset,
                 split_indexes,
@@ -462,7 +511,7 @@ def main() -> None:
                 random_seed,
                 out_dir,
                 target_cfg,
-                preprocessing_cfg=gnn_preprocessing_cfg,
+                preprocessing_cfg=preprocessing_cfg,
             )
             done(t0)
 
@@ -484,10 +533,10 @@ def main() -> None:
     if tml_enabled and desc_dfs is not None:
         t0 = announce("7. Train TML ensemble")
         tml_cfg = _build_tml_config(cfg)
-        preprocessing_cfg = _build_preprocessing_config(cfg)
+        if preprocessing_cfg is None:
+            preprocessing_cfg = _build_preprocessing_config(cfg)  # required for TML
         target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_tml_options.json", tml_cfg)
-        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
         try:
             tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
                 desc_dfs,
