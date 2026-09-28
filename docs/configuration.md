@@ -241,10 +241,25 @@ tml_models:
   selected_models:
     - RandomForest
     - XGBoost
+  hpo_n_folds: 5            # CV folds for automatic HPO (optional, default 5, min 2)
 ```
 
 **Available models:** `RandomForest`, `XGBoost`, `SupportVectorMachine`,
 `LogisticRegression`, `LinearRegression`
+
+**Automatic HPO:** leave a model's block empty (`{}`) to tune it automatically.
+`RandomizedSearchCV` samples 30 configurations from the model's default search grid
+(`polynet/config/search_grid.py`) and scores them by `hpo_n_folds`-fold
+cross-validation on the training (+ validation) samples of each split. Folds are always
+shuffled (stratified for classification) with the split's seed, so a dataset sorted by
+target cannot produce biased folds.
+
+| Parameter | Default | Description |
+|---|---|---|
+| `hpo_n_folds` | `5` | Number of CV folds `k`. Must be ≥ 2 (checked at config load). Before any model is trained, `k` is also checked against every split: it may not exceed the number of training samples, and for classification it may not exceed the size of the smallest class (stratified folds need every class in every fold). An invalid `k` stops the run with an error stating the allowed range. |
+
+In the GUI, the fold count appears under *Perform hyperparameter tuning* on the Train
+Models page.
 
 TML models require a [`feature_preprocessing`](#feature_preprocessing) section.
 
@@ -278,7 +293,10 @@ conditions (feature selection is only offered when TML models are selected).
 
 > **Polymer descriptors in GNNs:** the scaler is fitted on the polymer descriptors of
 > the training graphs of each split. If a GNN-only experiment with polymer descriptors
-> has no `feature_preprocessing` section, `standard_scaler` is used. See
+> has no `feature_preprocessing` section, `standard_scaler` is used. Note that TML
+> transformers are fitted on training + validation samples while the GNN descriptor
+> scaler is fitted on training samples only, so the scaled values differ slightly between
+> the two model families; we are working on aligning them. See
 > [Polymer descriptor fusion](descriptors.md#polymer-descriptor-fusion).
 
 > **Robust feature preprocessing:** when the feature transformer is fit, any
