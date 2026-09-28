@@ -163,6 +163,16 @@ gnn_training:
 
     # MPNN: {}   # empty = trigger HPO
 
+  # Optional: optimiser, learning-rate scheduler and loss for every GNN (final training
+  # and HPO trials). Defaults shown; see docs/configuration.md for all options.
+  # optimisation:
+  #   optimizer: adam                    # adam | sgd | rmsprop | adadelta | adagrad
+  #   scheduler: reduce_lr_on_plateau    # reduce_lr_on_plateau | step_lr | multi_step_lr | exponential_lr
+  #   scheduler_factor: 0.9
+  #   scheduler_patience: 15             # reduce_lr_on_plateau only
+  #   scheduler_min_lr: 1.0e-8           # reduce_lr_on_plateau only
+  #   regression_loss: rmse              # rmse | mse | mae
+
 training:
   epochs: 250
 
@@ -208,7 +218,8 @@ tml_models:
 # -----------------------------------------------------------------------------
 # Explainability
 # Only applied to GNN models. Requires gnn_training.train_gnn: true
-# Uses chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023):
+# Uses chemistry-masking attribution (substructure masking; Wu et al., Nat. Commun.
+# 14, 2585 (2023), https://doi.org/10.1038/s41467-023-38192-3):
 #   attribution(fragment) = Y_pred_full − Y_pred_masked
 # -----------------------------------------------------------------------------
 explainability:
