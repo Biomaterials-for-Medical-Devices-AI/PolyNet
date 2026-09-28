@@ -329,8 +329,6 @@ class TraditionalMLModel(StrEnum):
     RandomForest = "random_forest"
     XGBoost = "xgboost"
     SupportVectorMachine = "support_vector_machine"
-    KNeighborsClassifier = "k_neighbors_classifier"
-    DecisionTreeClassifier = "decision_tree_classifier"
 
 
 # ---------------------------------------------------------------------------
