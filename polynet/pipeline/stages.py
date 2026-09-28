@@ -29,7 +29,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from polynet.config.enums import ProblemType, TargetTransformDescriptor
+from polynet.config.enums import ProblemType, TargetTransformDescriptor, TransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
     ExplainabilityConfig,
@@ -268,6 +268,7 @@ def train_gnn(
     random_seed: int,
     out_dir: Path,
     target_cfg: TargetTransformConfig | None = None,
+    preprocessing_cfg: FeatureTransformConfig | None = None,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble, save ``.pt`` model files, and return
@@ -292,6 +293,12 @@ def train_gnn(
     target_cfg:
         Optional target variable scaling configuration. Defaults to no
         scaling when ``None``.
+    preprocessing_cfg:
+        Tabular feature preprocessing configuration. Its ``scaler`` is also
+        applied to the polymer descriptors fed to the GNN readout (fitted on
+        the training graphs of each split; feature selection is not
+        applied). When ``None`` — e.g. a GNN-only experiment with no
+        ``feature_preprocessing`` section — ``standard_scaler`` is used.
 
     Returns
     -------
@@ -318,6 +325,17 @@ def train_gnn(
         )
         target_cfg = TargetTransformConfig()  # reset to NoTransformation
 
+    polymer_descriptor_scaler = (
+        preprocessing_cfg.scaler
+        if preprocessing_cfg is not None
+        else TransformDescriptor.StandardScaler
+    )
+    if getattr(dataset[0], "polymer_descriptors", None) is not None:
+        logger.info(
+            "Polymer descriptors will be scaled with '%s' (fitted on each training split).",
+            polymer_descriptor_scaler,
+        )
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
@@ -335,10 +353,20 @@ def train_gnn(
         hpo_n_folds=gnn_cfg.hpo_n_folds,
         hpo_val_fraction=gnn_cfg.hpo_val_fraction,
         hpo_n_repeats=gnn_cfg.hpo_n_repeats,
+        polymer_descriptor_scaler=polymer_descriptor_scaler,
     )
 
     for model_name, model in trained_models.items():
         torch_save(model, models_dir / f"{model_name}.pt")
+
+        # The scaler is also pickled inside the .pt (it is applied in the
+        # model's forward pass); it is written separately for provenance.
+        descriptor_scaler = getattr(model, "polymer_descriptor_scaler", None)
+        if descriptor_scaler is not None:
+            iter_key = model_name.rsplit("_", 1)[-1]
+            joblib.dump(
+                descriptor_scaler, models_dir / f"polymer_descriptor_scaler_{iter_key}.pkl"
+            )
 
     # TODO: create function to save this scaler
     for iter_key, scaler in target_scalers.items():
