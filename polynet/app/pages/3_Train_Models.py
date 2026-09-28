@@ -7,6 +7,7 @@ import streamlit as st
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
     feature_transformer_widgets,
+    gnn_optimisation_widgets,
     split_data_form,
     target_transform_widget,
     train_GNN_models_form,
@@ -46,6 +47,7 @@ from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
     GeneralConfig,
+    GNNOptimisationConfig,
     RepresentationConfig,
     SplitConfig,
     TargetTransformConfig,
@@ -73,6 +75,7 @@ def train_models(
     representation_options: RepresentationConfig,
     data_options: DataConfig,
     target_cfg: TargetTransformConfig | None = None,
+    gnn_optimisation_cfg: GNNOptimisationConfig | None = None,
 ):
 
     if target_cfg is None:
@@ -148,6 +151,7 @@ def train_models(
             train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
             gnn_convolutional_layers=gnn_conv_params,
             share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
+            optimisation=gnn_optimisation_cfg or GNNOptimisationConfig(),
         )
         if gnn_conv_params
         else None
@@ -364,12 +368,18 @@ if experiment_name:
         gnn_conv_params = train_GNN_models_form(
             representation_opts=representation_opts, problem_type=data_opts.problem_type
         )
+        gnn_optimisation_cfg = (
+            gnn_optimisation_widgets(problem_type=data_opts.problem_type)
+            if gnn_conv_params
+            else None
+        )
 
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."
         )
         gnn_conv_params = {}
+        gnn_optimisation_cfg = None
 
     # ------------------------------------------------------------------
     # Feature preprocessing (pipeline-wide): only meaningful when there are
@@ -409,6 +419,7 @@ if experiment_name:
             tml_models=tml_models,
             preprocessing_cfg=preprocessing_cfg,
             gnn_conv_params=gnn_conv_params,
+            gnn_optimisation_cfg=gnn_optimisation_cfg,
             representation_options=representation_opts,
             data_options=data_opts,
             target_cfg=target_cfg,
