@@ -378,6 +378,8 @@ def main() -> None:
         train_gnn,
         train_tml,
     )
+    from polynet.config.paths import hpo_search_spaces_path
+    from polynet.config.search_grid import effective_search_spaces
     from polynet.data.structures import prepare_structures
     from polynet.utils.validation import validate_hpo_folds
 
@@ -509,13 +511,24 @@ def main() -> None:
         save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
 
     # Config errors must stop the run before any (possibly long) training starts.
+    hpo_tml_cfg = _build_tml_config(cfg) if tml_enabled and desc_dfs is not None else None
+    hpo_gnn_cfg = _build_gnn_config(cfg) if gnn_enabled and dataset is not None else None
     validate_hpo_folds(
         data=df,
         data_cfg=data_cfg,
         split_indexes=split_indexes,
-        tml_cfg=_build_tml_config(cfg) if tml_enabled and desc_dfs is not None else None,
-        gnn_cfg=_build_gnn_config(cfg) if gnn_enabled and dataset is not None else None,
+        tml_cfg=hpo_tml_cfg,
+        gnn_cfg=hpo_gnn_cfg,
     )
+    # Provenance: the merged HPO search spaces (defaults + hpo_search_grid).
+    search_spaces = effective_search_spaces(
+        data_cfg.problem_type, gnn_cfg=hpo_gnn_cfg, tml_cfg=hpo_tml_cfg
+    )
+    spaces_file = hpo_search_spaces_path(out_dir)
+    if search_spaces:
+        save_options(spaces_file, search_spaces)
+    elif spaces_file.exists():
+        spaces_file.unlink()  # stale from an earlier run in the same directory
 
     all_predictions = []
     all_trained_models = {}
