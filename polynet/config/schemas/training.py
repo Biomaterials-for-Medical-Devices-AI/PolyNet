@@ -11,8 +11,107 @@ import warnings
 
 from pydantic import Field, model_validator
 
-from polynet.config.enums import HpoSplitStrategy, Network, TraditionalMLModel, TransformDescriptor
+from polynet.config.enums import (
+    HpoSplitStrategy,
+    Network,
+    Optimizer,
+    RegressionLoss,
+    Scheduler,
+    TraditionalMLModel,
+    TransformDescriptor,
+)
 from polynet.config.schemas.base import HyperparamOptimConfig, PolynetBaseModel
+
+# ---------------------------------------------------------------------------
+# GNN optimisation settings
+# ---------------------------------------------------------------------------
+
+
+class GNNOptimisationConfig(PolynetBaseModel):
+    """
+    Optimiser, learning-rate scheduler and loss used to train GNNs.
+
+    Applied identically to final training and to every HPO trial. The
+    defaults reproduce PolyNet's historical behaviour: Adam, ReduceLROnPlateau
+    (factor 0.9, patience 15, min_lr 1e-8) and an RMSE loss for regression.
+
+    Attributes
+    ----------
+    optimizer:
+        Gradient-descent optimiser (``adam``, ``sgd``, ``rmsprop``,
+        ``adadelta``, ``adagrad``). The learning rate comes from the
+        architecture block (``LearningRate``) or from HPO.
+    scheduler:
+        Learning-rate scheduler (``reduce_lr_on_plateau``, ``step_lr``,
+        ``multi_step_lr``, ``exponential_lr``). ``reduce_lr_on_plateau``
+        monitors the validation loss; the others step once per epoch.
+    scheduler_factor:
+        Multiplicative learning-rate decay (``gamma``). Used by every scheduler.
+    scheduler_patience:
+        Epochs without validation improvement before decaying the learning
+        rate. ``reduce_lr_on_plateau`` only.
+    scheduler_min_lr:
+        Lower bound on the learning rate. ``reduce_lr_on_plateau`` only.
+    scheduler_step_size:
+        Decay period in epochs. ``step_lr`` only.
+    scheduler_milestones:
+        Epochs at which to decay the learning rate. ``multi_step_lr`` only.
+    regression_loss:
+        Loss minimised for regression: ``rmse`` (default), ``mse`` or ``mae``.
+        Classification always uses cross-entropy.
+    """
+
+    optimizer: Optimizer = Field(default=Optimizer.Adam, description="GNN optimiser.")
+    scheduler: Scheduler = Field(
+        default=Scheduler.ReduceLROnPlateau, description="Learning-rate scheduler."
+    )
+    scheduler_factor: float = Field(
+        default=0.9, gt=0.0, lt=1.0, description="Learning-rate decay factor (gamma)."
+    )
+    scheduler_patience: int = Field(
+        default=15, ge=0, description="Patience in epochs (reduce_lr_on_plateau)."
+    )
+    scheduler_min_lr: float = Field(
+        default=1e-8, ge=0.0, description="Minimum learning rate (reduce_lr_on_plateau)."
+    )
+    scheduler_step_size: int = Field(default=10, ge=1, description="Decay period (step_lr).")
+    scheduler_milestones: list[int] = Field(
+        default_factory=lambda: [30, 60, 90], description="Decay epochs (multi_step_lr)."
+    )
+    regression_loss: RegressionLoss = Field(
+        default=RegressionLoss.RMSE, description="Loss minimised for regression targets."
+    )
+
+    @model_validator(mode="after")
+    def check_milestones(self) -> "GNNOptimisationConfig":
+        m = self.scheduler_milestones
+        if not m or any(e < 1 for e in m) or m != sorted(set(m)):
+            raise ValueError(
+                f"scheduler_milestones must be a non-empty, strictly increasing list of "
+                f"positive epochs, got {m}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def warn_on_unused_scheduler_params(self) -> "GNNOptimisationConfig":
+        """Warn when a scheduler parameter is changed but the chosen scheduler ignores it."""
+        used_by = {
+            "scheduler_patience": Scheduler.ReduceLROnPlateau,
+            "scheduler_min_lr": Scheduler.ReduceLROnPlateau,
+            "scheduler_step_size": Scheduler.StepLR,
+            "scheduler_milestones": Scheduler.MultiStepLR,
+        }
+        for field, scheduler in used_by.items():
+            if self.scheduler != scheduler and field in self.model_fields_set:
+                warnings.warn(
+                    f"{field}={getattr(self, field)!r} has no effect with "
+                    f"scheduler='{self.scheduler.value}' (it is only used by "
+                    f"'{scheduler.value}').",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # GNN training config
@@ -52,6 +151,10 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         If False, each architecture is configured with its own hyperparameter
         values. This controls hyperparameter sharing across architectures; it
         does not affect per-monomer message passing.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss, applied to
+        final training and to every HPO trial (``GNNOptimisationConfig``).
+        Defaults reproduce Adam + ReduceLROnPlateau + RMSE.
     hyperparameter_optimisation:
         Inherited from ``HyperparamOptimConfig``. When True, Ray Tune samples
         random configurations from the search grid defined in
@@ -78,6 +181,10 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
     )
     hpo_n_repeats: int = Field(
         default=3, ge=1, description="Number of random splits for RepeatedHoldout HPO."
+    )
+    optimisation: GNNOptimisationConfig = Field(
+        default_factory=GNNOptimisationConfig,
+        description="Optimiser, scheduler and loss (training and HPO).",
     )
 
     @model_validator(mode="after")
