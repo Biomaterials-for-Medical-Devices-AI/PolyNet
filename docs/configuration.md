@@ -143,9 +143,43 @@ gnn_training:
   hpo_val_fraction: 0.2                   # val fraction used by holdout / repeated_holdout
   hpo_n_repeats: 3                        # number of random splits for repeated_holdout
 
+  # Optimiser, scheduler and loss (optional — all fields below show their defaults)
+  optimisation:
+    optimizer: "adam"                     # adam | sgd | rmsprop | adadelta | adagrad
+    scheduler: "reduce_lr_on_plateau"     # reduce_lr_on_plateau | step_lr | multi_step_lr | exponential_lr
+    scheduler_factor: 0.9                 # learning-rate decay factor (gamma), all schedulers
+    scheduler_patience: 15                # reduce_lr_on_plateau only
+    scheduler_min_lr: 1.0e-8              # reduce_lr_on_plateau only
+    scheduler_step_size: 10               # step_lr only
+    scheduler_milestones: [30, 60, 90]    # multi_step_lr only
+    regression_loss: "rmse"               # rmse | mse | mae (regression only)
+
 training:
   epochs: 250
 ```
+
+### Optimiser, scheduler and loss (`optimisation`)
+
+The `optimisation` block controls how every GNN is trained — the final models **and**
+every HPO trial use the same settings. All fields are optional; the defaults reproduce
+PolyNet's standard settings (Adam, ReduceLROnPlateau with factor 0.9 / patience 15 /
+min_lr 1e-8, RMSE loss). The learning rate itself comes from each architecture block
+(`LearningRate`) or from HPO.
+
+| Field | Default | Used by | Description |
+|---|---|---|---|
+| `optimizer` | `adam` | all | Gradient-descent optimiser |
+| `scheduler` | `reduce_lr_on_plateau` | all | `reduce_lr_on_plateau` lowers the learning rate when the validation loss stops improving; `step_lr`, `multi_step_lr` and `exponential_lr` decay it on a fixed epoch schedule |
+| `scheduler_factor` | `0.9` | all schedulers | Multiplicative decay (`gamma`), in (0, 1) |
+| `scheduler_patience` | `15` | `reduce_lr_on_plateau` | Epochs without validation improvement before decaying |
+| `scheduler_min_lr` | `1e-8` | `reduce_lr_on_plateau` | Lower bound on the learning rate |
+| `scheduler_step_size` | `10` | `step_lr` | Decay every N epochs |
+| `scheduler_milestones` | `[30, 60, 90]` | `multi_step_lr` | Epochs at which to decay (strictly increasing) |
+| `regression_loss` | `rmse` | regression | `rmse` (root mean squared error per batch), `mse` or `mae` (mean absolute error, less sensitive to outliers). Classification always uses cross-entropy (with optional `AsymmetricLossStrength` class weights). |
+
+Setting a scheduler parameter that the chosen scheduler does not use emits a warning at
+config-load time. In the GUI these options are under **Advanced training options** in
+the GNN section of the Train Models page.
 
 **Available architectures:** `GCN`, `GAT`, `CGGNN`, `MPNN`, `GraphSAGE`, `TransformerGNN`
 
