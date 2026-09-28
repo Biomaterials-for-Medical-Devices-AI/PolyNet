@@ -241,18 +241,44 @@ tml_models:
   selected_models:
     - RandomForest
     - XGBoost
-
-feature_preprocessing:
-  scaler: "StandardScaler"         # StandardScaler | MinMaxScaler | RobustScaler | NoTransformation
 ```
 
 **Available models:** `RandomForest`, `XGBoost`, `SupportVectorMachine`,
 `LogisticRegression`, `LinearRegression`
 
-> **Polymer descriptors in GNNs:** `feature_preprocessing.scaler` is also applied to
-> the `representations.polymer_descriptors` fed to the GNN readout (fitted per split on
-> the training graphs; selectors are not applied). Without a `feature_preprocessing`
-> section, GNNs use `standard_scaler`. See
+TML models require a [`feature_preprocessing`](#feature_preprocessing) section.
+
+## `feature_preprocessing`
+
+A **pipeline-wide** option: the scaler applies to every tabular feature the pipeline
+uses, regardless of which model families are trained.
+
+```yaml
+feature_preprocessing:
+  scaler: "standard_scaler"   # no_transformation | standard_scaler | min_max_scaler | robust_scaler
+                              # | power_transformer | quantile_transformer | normalizer
+  selectors:                  # TML models only
+    variance:
+      threshold: 0.05
+    correlation:
+      threshold: 0.95
+```
+
+| Field | Applies to | Description |
+|---|---|---|
+| `scaler` | TML descriptors **and** GNN polymer descriptors | Fitted on the training set of each split, then applied to validation, test and external data |
+| `selectors` | TML descriptors only | Variance / correlation feature selection, applied after scaling |
+
+The section is only meaningful when there are tabular features to scale: when TML
+models are trained, or when GNNs are trained with
+`representations.polymer_descriptors`. Otherwise it has no effect and a warning is
+logged; `selectors` given for a GNN-only run are ignored with a warning. In the GUI,
+the *Feature Preprocessing* section on the Train Models page appears under the same
+conditions (feature selection is only offered when TML models are selected).
+
+> **Polymer descriptors in GNNs:** the scaler is fitted on the polymer descriptors of
+> the training graphs of each split. If a GNN-only experiment with polymer descriptors
+> has no `feature_preprocessing` section, `standard_scaler` is used. See
 > [Polymer descriptor fusion](descriptors.md#polymer-descriptor-fusion).
 
 > **Robust feature preprocessing:** when the feature transformer is fit, any
