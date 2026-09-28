@@ -144,7 +144,9 @@ def train_models(
     # ------------------------------------------------------------------
     if tml_models:
         tml_cfg = TrainTMLConfig(
-            train_tml=st.session_state[TrainTMLStateKeys.TrainTML], selected_models=tml_models
+            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
+            selected_models=tml_models,
+            hpo_n_folds=int(st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5)),
         )
         save_options(path=tml_training_opts_path, options=tml_cfg)
 
