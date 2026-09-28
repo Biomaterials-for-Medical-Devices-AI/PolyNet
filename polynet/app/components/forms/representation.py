@@ -8,6 +8,7 @@ import streamlit as st
 from polynet.app.options.allowable_sets import atom_properties, bond_features
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.utils import keep_only_numerical_columns
+from polynet.config.constants import FINGERPRINT_DEFAULTS
 from polynet.config.enums import (
     AtomBondDescriptorDictKey,
     AtomFeature,
@@ -198,12 +199,41 @@ def molecular_descriptor_representation(
             key=DescriptorCalculationStateKeys.Morganfp,
             disabled=False,
         ):
-            descriptors_dict[MolecularDescriptor.Morgan] = True
+            morgan_defaults = FINGERPRINT_DEFAULTS[MolecularDescriptor.Morgan]
+            fp_col, radius_col = st.columns(2)
+            descriptors_dict[MolecularDescriptor.Morgan] = {
+                "fp_size": fp_col.number_input(
+                    "Morgan fingerprint size (bins)",
+                    min_value=1,
+                    value=morgan_defaults["fp_size"],
+                    step=1,
+                    key=DescriptorCalculationStateKeys.MorganFPSize,
+                    help="Length of the count fingerprint vector (default 2048).",
+                ),
+                "radius": radius_col.number_input(
+                    "Morgan radius",
+                    min_value=0,
+                    value=morgan_defaults["radius"],
+                    step=1,
+                    key=DescriptorCalculationStateKeys.MorganRadius,
+                    help="Size of the atom environments encoded (default 3, ECFP6-like; "
+                    "radius 2 corresponds to ECFP4).",
+                ),
+            }
 
         if st.checkbox(
             "Calculate RDKit fingerprints", value=False, key=DescriptorCalculationStateKeys.RDKitfp
         ):
-            descriptors_dict[MolecularDescriptor.RDKitFP] = True
+            descriptors_dict[MolecularDescriptor.RDKitFP] = {
+                "fp_size": st.number_input(
+                    "RDKit fingerprint size (bins)",
+                    min_value=1,
+                    value=FINGERPRINT_DEFAULTS[MolecularDescriptor.RDKitFP]["fp_size"],
+                    step=1,
+                    key=DescriptorCalculationStateKeys.RDKitFPSize,
+                    help="Length of the count fingerprint vector (default 2048).",
+                ),
+            }
 
         st.markdown("### PolyMetriX Descriptors")
 
