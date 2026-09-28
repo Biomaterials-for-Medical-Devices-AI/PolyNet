@@ -11,7 +11,7 @@
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
 
 <p align="center">
-  <img src="static/polynet.png" alt="PolyNet logo" width="400"/>
+  <img src="polynet/app/static/polynet.png" alt="PolyNet logo" width="400"/>
 </p>
 
 **PolyNet** is a Python library for polymer property prediction using graph neural networks (GNNs) and traditional machine learning (TML). It provides a complete, configurable pipeline — from raw SMILES strings to trained models, evaluation metrics, result plots, and atom-level explainability — designed for polymer informatics research.
@@ -160,6 +160,12 @@ python scripts/run_pipeline.py --config configs/experiment.yaml
 All outputs are written to the directory specified by `experiment.output_dir` in the config.
 
 ### Streamlit GUI
+
+```bash
+polynet
+```
+
+This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py

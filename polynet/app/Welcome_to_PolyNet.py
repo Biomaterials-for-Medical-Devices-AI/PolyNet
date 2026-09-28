@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 
 # Set page title and layout
@@ -8,7 +10,7 @@ st.set_page_config(page_title="PolyNet", page_icon="🧪")
 st.title("Welcome to PolyNet!")
 
 # Load and display the logo
-st.image("static/polynet.png", width=300)
+st.image(str(Path(__file__).parent / "static" / "polynet.png"), width=300)
 
 # Description of the app
 st.markdown(
