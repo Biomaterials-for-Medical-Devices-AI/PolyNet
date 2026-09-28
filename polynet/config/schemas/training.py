@@ -73,7 +73,6 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=HpoSplitStrategy.CrossValidation,
         description="Split strategy used inside the HPO loop.",
     )
-    hpo_n_folds: int = Field(default=5, ge=2, description="Folds for CrossValidation HPO strategy.")
     hpo_val_fraction: float = Field(
         default=0.2, gt=0.0, lt=1.0, description="Val fraction for Holdout / RepeatedHoldout HPO."
     )
@@ -207,11 +206,9 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         shuffled CV) is run over the search grid defined in
         ``config/search_grid.py`` for each selected model.
     hpo_n_folds:
+        Inherited from ``HyperparamOptimConfig`` (shared with GNN training).
         Number of cross-validation folds used to score each configuration
-        during TML hyperparameter search (default 5, minimum 2). Folds are
-        shuffled, and stratified for classification. Checked against the data
-        at training time: ``k`` may not exceed the number of training samples
-        or, for classification, the size of the smallest class.
+        (default 5, minimum 2).
     """
 
     train_tml: bool = Field(
@@ -220,11 +217,6 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
     selected_models: dict[TraditionalMLModel, dict] | None = Field(
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
-    )
-    hpo_n_folds: int = Field(
-        default=5,
-        ge=2,
-        description="Number of shuffled CV folds used to score TML HPO configurations.",
     )
 
     @model_validator(mode="after")

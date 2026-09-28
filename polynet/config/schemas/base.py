@@ -16,6 +16,13 @@ class HyperparamOptimConfig(BaseModel):
 
     Inherit from this alongside ``BaseModel`` for any model type that can
     run a randomised search or similar optimisation strategy.
+
+    ``hpo_n_folds`` is shared by the GNN and TML pipelines: both score
+    hyperparameter configurations by shuffled K-fold cross-validation
+    (stratified for classification) on the training + validation samples of
+    each split. Only ``k >= 2`` can be checked here; the data-dependent rules
+    (``k`` vs. number of samples and smallest class) are checked once the data
+    is split, by ``polynet.pipeline.validate_hpo_folds``.
     """
 
     hyperparameter_optimisation: bool = Field(
@@ -25,6 +32,11 @@ class HyperparamOptimConfig(BaseModel):
             "When True, the search grid defined in ``config/search_grids.py`` "
             "is used for the selected model."
         ),
+    )
+    hpo_n_folds: int = Field(
+        default=5,
+        ge=2,
+        description="Number of shuffled cross-validation folds used to score HPO configurations.",
     )
 
 
