@@ -195,29 +195,6 @@ def _build_preprocessing_config(cfg: dict) -> FeatureTransformConfig:
     return FeatureTransformConfig.model_validate(cfg["feature_preprocessing"])
 
 
-def _validate_tml_hpo_folds(cfg: dict, desc_dfs: dict, data_cfg, split_indexes: tuple) -> None:
-    """
-    Check ``tml_models.hpo_n_folds`` against every split before training starts.
-
-    Only relevant when at least one TML model has an empty block (automatic
-    HPO). Raises ``ValueError`` (stopping the run) if ``k`` is impossible for
-    the data, instead of letting the TML stage fail after GNN training.
-    """
-    from polynet.training.tml import validate_hpo_n_folds_for_splits
-
-    tml_cfg = _build_tml_config(cfg)
-    if not any(not params for params in (tml_cfg.selected_models or {}).values()):
-        return
-    # Descriptor frames are indexed like the splits, with the target as last column.
-    y = next(iter(desc_dfs.values())).iloc[:, -1]
-    validate_hpo_n_folds_for_splits(
-        n_folds=tml_cfg.hpo_n_folds,
-        y=y,
-        train_val_test_idxs=split_indexes,
-        problem_type=data_cfg.problem_type,
-    )
-
-
 def _resolve_preprocessing_config(
     cfg: dict, train_tml: bool, gnn_polymer_descriptors: bool
 ) -> FeatureTransformConfig | None:
@@ -391,6 +368,7 @@ def main() -> None:
         run_tml_inference,
         train_gnn,
         train_tml,
+        validate_hpo_folds,
     )
 
     args = parse_args()
@@ -513,8 +491,13 @@ def main() -> None:
         save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
 
     # Config errors must stop the run before any (possibly long) training starts.
-    if tml_enabled and desc_dfs is not None:
-        _validate_tml_hpo_folds(cfg, desc_dfs, data_cfg, split_indexes)
+    validate_hpo_folds(
+        data=df,
+        data_cfg=data_cfg,
+        split_indexes=split_indexes,
+        tml_cfg=_build_tml_config(cfg) if tml_enabled and desc_dfs is not None else None,
+        gnn_cfg=_build_gnn_config(cfg) if gnn_enabled and dataset is not None else None,
+    )
 
     all_predictions = []
     all_trained_models = {}
