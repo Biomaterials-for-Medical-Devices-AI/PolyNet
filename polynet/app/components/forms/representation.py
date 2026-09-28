@@ -8,7 +8,6 @@ import streamlit as st
 from polynet.app.options.allowable_sets import atom_properties, bond_features
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.utils import keep_only_numerical_columns
-from polynet.config.constants import FINGERPRINT_DEFAULTS
 from polynet.config.enums import (
     AtomBondDescriptorDictKey,
     AtomFeature,
@@ -19,6 +18,7 @@ from polynet.config.enums import (
     StringRepresentation,
 )
 from polynet.config.schemas.data import DataConfig
+from polynet.config.schemas.fingerprints import MorganFingerprintConfig, RDKitFingerprintConfig
 from polynet.featurizer.pmx import (
     BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY,
     CHEMICAL_FEATURIZER_REGISTRY,
@@ -199,13 +199,13 @@ def molecular_descriptor_representation(
             key=DescriptorCalculationStateKeys.Morganfp,
             disabled=False,
         ):
-            morgan_defaults = FINGERPRINT_DEFAULTS[MolecularDescriptor.Morgan]
+            morgan_defaults = MorganFingerprintConfig()
             fp_col, radius_col = st.columns(2)
             descriptors_dict[MolecularDescriptor.Morgan] = {
                 "fp_size": fp_col.number_input(
                     "Morgan fingerprint size (bins)",
                     min_value=1,
-                    value=morgan_defaults["fp_size"],
+                    value=morgan_defaults.fp_size,
                     step=1,
                     key=DescriptorCalculationStateKeys.MorganFPSize,
                     help="Length of the count fingerprint vector (default 2048).",
@@ -213,7 +213,7 @@ def molecular_descriptor_representation(
                 "radius": radius_col.number_input(
                     "Morgan radius",
                     min_value=0,
-                    value=morgan_defaults["radius"],
+                    value=morgan_defaults.radius,
                     step=1,
                     key=DescriptorCalculationStateKeys.MorganRadius,
                     help="Size of the atom environments encoded (default 3, ECFP6-like; "
@@ -228,7 +228,7 @@ def molecular_descriptor_representation(
                 "fp_size": st.number_input(
                     "RDKit fingerprint size (bins)",
                     min_value=1,
-                    value=FINGERPRINT_DEFAULTS[MolecularDescriptor.RDKitFP]["fp_size"],
+                    value=RDKitFingerprintConfig().fp_size,
                     step=1,
                     key=DescriptorCalculationStateKeys.RDKitFPSize,
                     help="Length of the count fingerprint vector (default 2048).",
