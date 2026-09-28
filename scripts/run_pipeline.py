@@ -368,8 +368,8 @@ def main() -> None:
         run_tml_inference,
         train_gnn,
         train_tml,
-        validate_hpo_folds,
     )
+    from polynet.utils.validation import validate_hpo_folds
 
     args = parse_args()
     root = Path(args.root).resolve()

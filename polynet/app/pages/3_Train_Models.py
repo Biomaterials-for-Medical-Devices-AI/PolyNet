@@ -61,8 +61,8 @@ from polynet.pipeline import (
     run_tml_inference,
     train_gnn,
     train_tml,
-    validate_hpo_folds,
 )
+from polynet.utils.validation import validate_hpo_folds
 
 
 def train_models(
