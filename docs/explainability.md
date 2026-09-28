@@ -29,7 +29,7 @@ fields.
 Each fragment's importance is the change in prediction when that fragment is masked
 from the graph pooling step: attribution = `Y_pred_full − Y_pred_masked` for each
 fragment occurrence. Fragments come from BRICS or Murcko-scaffold fragmentation, and
-attributions are aggregated to functional-group level.
+attributions are aggregated per fragment.
 
 - **Global** — a fragment-attribution distribution plot. `plot_type` selects
   `ridge`, `bar`, or `strip`.
