@@ -29,6 +29,7 @@ from pathlib import Path
 import pandas as pd
 
 from polynet.config.enums import ProblemType
+from polynet.utils.validation import find_duplicate_ids
 
 logger = logging.getLogger(__name__)
 
@@ -108,10 +109,12 @@ def load_dataset(
                 "Rows with null IDs may cause issues downstream."
             )
 
-        if not df[id_col].is_unique:
+        duplicates = find_duplicate_ids(df[id_col])
+        if duplicates:
             raise ValueError(
-                f"ID column '{id_col}' contains duplicate values. "
-                "IDs must be unique to be used as an index."
+                f"ID column '{id_col}' contains {len(duplicates)} duplicated value(s), e.g. "
+                f"{', '.join(map(str, duplicates[:5]))}. IDs must be unique: fix the IDs, or "
+                "remove id_col from the config to number the samples by row order."
             )
 
         df = df.set_index(id_col, drop=True)
