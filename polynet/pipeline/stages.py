@@ -354,6 +354,7 @@ def train_gnn(
         hpo_val_fraction=gnn_cfg.hpo_val_fraction,
         hpo_n_repeats=gnn_cfg.hpo_n_repeats,
         polymer_descriptor_scaler=polymer_descriptor_scaler,
+        optimisation=gnn_cfg.optimisation,
     )
 
     for model_name, model in trained_models.items():
@@ -1060,7 +1061,8 @@ def run_explainability(
     """
     Run chemistry-masking explainability and save plots and CSVs to disk.
 
-    Implements the Wellawatte et al. (2023) fragment-masking approach:
+    Implements the substructure-masking approach of Wu et al., Nat. Commun. 14, 2585
+    (2023), https://doi.org/10.1038/s41467-023-38192-3:
     for each fragment, atoms are removed from the pre-pooling embedding and
     attribution is defined as ``Y_pred_full − Y_pred_masked``.
 
