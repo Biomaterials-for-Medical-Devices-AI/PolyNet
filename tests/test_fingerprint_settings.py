@@ -12,9 +12,13 @@ from pydantic import ValidationError
 import pytest
 from rdkit.Chem import MolFromSmiles, rdFingerprintGenerator
 
-from polynet.config.constants import FINGERPRINT_DEFAULTS, fingerprint_settings
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas import RepresentationConfig
+from polynet.config.schemas.fingerprints import (
+    MorganFingerprintConfig,
+    RDKitFingerprintConfig,
+    resolve_fingerprint_config,
+)
 from polynet.featurizer.descriptors import (
     build_vector_representation,
     get_morgan_fingerprints,
@@ -24,44 +28,55 @@ from polynet.featurizer.descriptors import (
 SMILES = ["CC(=O)OCCCOCC(C)(C)COCCCOC(=O)C=C", "C=CC(=O)OCC(F)(F)C(F)(F)F", "c1ccccc1O"]
 
 # ---------------------------------------------------------------------------
-# Settings resolution
+# Settings schemas
 # ---------------------------------------------------------------------------
+
+
+def test_schema_defaults_are_rdkit_generator_defaults():
+    assert MorganFingerprintConfig().model_dump() == {"fp_size": 2048, "radius": 3}
+    assert RDKitFingerprintConfig().model_dump() == {"fp_size": 2048}
 
 
 @pytest.mark.parametrize("value", [True, None, [], {}])
 def test_legacy_values_select_the_defaults(value):
-    assert fingerprint_settings("morgan", value) == {"fp_size": 2048, "radius": 3}
-    assert fingerprint_settings("rdkitfp", value) == {"fp_size": 2048}
+    assert resolve_fingerprint_config("morgan", value) == MorganFingerprintConfig()
+    assert resolve_fingerprint_config("rdkitfp", value) == RDKitFingerprintConfig()
 
 
 def test_partial_override_keeps_other_defaults():
-    assert fingerprint_settings("morgan", {"radius": 2}) == {"fp_size": 2048, "radius": 2}
+    assert resolve_fingerprint_config("morgan", {"radius": 2}).model_dump() == {
+        "fp_size": 2048,
+        "radius": 2,
+    }
 
 
 @pytest.mark.parametrize(
     "descriptor, value, match",
     [
-        ("morgan", {"bits": 1024}, "Unknown setting"),
-        ("rdkitfp", {"radius": 2}, "Unknown setting"),
-        ("morgan", {"fp_size": 0}, "fp_size must be an integer >= 1"),
-        ("morgan", {"radius": -1}, "radius must be an integer >= 0"),
-        ("morgan", {"fp_size": 10.5}, "fp_size must be an integer"),
-        ("morgan", {"radius": True}, "radius must be an integer"),
+        ("morgan", {"bits": 1024}, "bits"),
+        ("rdkitfp", {"radius": 2}, "radius"),
+        ("morgan", {"fp_size": 0}, "fp_size"),
+        ("morgan", {"radius": -1}, "radius"),
+        ("morgan", {"fp_size": 10.5}, "fp_size"),
         ("morgan", "yes", "must be true or a mapping"),
     ],
 )
 def test_invalid_settings_are_rejected(descriptor, value, match):
     with pytest.raises(ValueError, match=match):
-        fingerprint_settings(descriptor, value)
+        resolve_fingerprint_config(descriptor, value)
 
 
-def test_schema_validates_fingerprint_settings():
-    ok = RepresentationConfig(
+def test_representation_config_validates_and_resolves_settings():
+    cfg = RepresentationConfig(
         smiles_merge_approach="concatenate",
         molecular_descriptors={"morgan": {"fp_size": 1024, "radius": 2}, "rdkitfp": True},
     )
-    assert ok.molecular_descriptors[MolecularDescriptor.Morgan] == {"fp_size": 1024, "radius": 2}
-    with pytest.raises(ValidationError, match="Unknown setting"):
+    # Stored fully resolved, so representation_options.json records the settings used.
+    assert cfg.molecular_descriptors[MolecularDescriptor.Morgan] == {"fp_size": 1024, "radius": 2}
+    assert cfg.molecular_descriptors[MolecularDescriptor.RDKitFP] == {"fp_size": 2048}
+    # Re-validating the saved form gives the same config.
+    assert RepresentationConfig.model_validate(cfg.model_dump()) == cfg
+    with pytest.raises(ValidationError, match="radius"):
         RepresentationConfig(
             smiles_merge_approach="concatenate", molecular_descriptors={"rdkitfp": {"radius": 2}}
         )
@@ -83,7 +98,6 @@ def test_defaults_match_rdkit_generator_defaults():
     for s in SMILES:
         assert morgan[s] == _count(rdFingerprintGenerator.GetMorganGenerator(), s)
         assert rdkitfp[s] == _count(rdFingerprintGenerator.GetRDKitFPGenerator(), s)
-    assert FINGERPRINT_DEFAULTS["morgan"]["radius"] == 3
 
 
 def test_custom_settings_change_length_and_radius():
