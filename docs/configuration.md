@@ -122,13 +122,21 @@ descriptor fusion mechanism, and the PolyMetriX modes are documented in
 
 ```yaml
 splitting:
-  split_type: "TrainValTest"       # TrainValTest | LeaveOneOut
-  split_method: "Random"           # Random | Scaffold
-  n_bootstrap_iterations: 3
+  split_type: "train_val_test"     # the only implemented split type
+  split_method: "random"           # random | stratified (by target; recommended for classification)
+  n_bootstrap_iterations: 3        # number of repeated random splits
   val_ratio: 0.15
   test_ratio: 0.15
   train_set_balance: null          # Optional: balance training set (0.0–1.0)
 ```
+
+**Split type.** Only `train_val_test` is implemented: for each of the
+`n_bootstrap_iterations` repeated random splits (seed `random_seed + i`), a test set of
+`test_ratio` is held out and a validation set of `val_ratio` is drawn from the rest.
+The other values of the `SplitType` enum (`train_test`, `cross_validation`,
+`nested_cross_validation`, `leave_one_out`) are reserved for future work: a config that
+uses them is rejected at load time with an error explaining that only `train_val_test`
+is available. The GUI offers only `train_val_test`.
 
 **Class balancing (`train_set_balance`, binary classification).** For each split:
 
