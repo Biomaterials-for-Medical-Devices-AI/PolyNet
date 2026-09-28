@@ -174,3 +174,27 @@ def validate_hpo_folds(
             problem_type=data_cfg.problem_type,
             setting_name=setting_name,
         )
+
+
+# ---------------------------------------------------------------------------
+# Sample identifiers
+# ---------------------------------------------------------------------------
+
+
+def find_duplicate_ids(ids) -> list:
+    """
+    Return the identifier values that appear more than once.
+
+    Parameters
+    ----------
+    ids:
+        Sample identifiers (e.g. the ``id_col`` column).
+
+    Returns
+    -------
+    list
+        Each duplicated value once, in order of first appearance; empty when
+        all identifiers are unique.
+    """
+    ids = pd.Series(ids)
+    return ids[ids.duplicated(keep="first")].drop_duplicates().tolist()
