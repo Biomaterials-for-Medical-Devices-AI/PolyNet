@@ -18,6 +18,10 @@ Import directly from this package for convenience::
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.explainability import ExplainabilityConfig
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
+from polynet.config.schemas.fingerprints import (
+    MorganFingerprintConfig,
+    RDKitFingerprintConfig,
+)
 from polynet.config.schemas.general import GeneralConfig
 from polynet.config.schemas.plotting import PlottingConfig
 from polynet.config.schemas.representation import RepresentationConfig
@@ -35,6 +39,8 @@ __all__ = [
     "ExplainabilityConfig",
     "GeneralConfig",
     "FeatureTransformConfig",
+    "MorganFingerprintConfig",
+    "RDKitFingerprintConfig",
     "PlottingConfig",
     "RepresentationConfig",
     "SplitConfig",
