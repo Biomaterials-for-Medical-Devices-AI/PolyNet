@@ -24,9 +24,12 @@ class SplitConfig(PolynetBaseModel):
         How samples are assigned to splits — randomly or stratified by
         the target variable (stratified is recommended for classification).
     train_set_balance:
-        Fraction of the training set retained after any balancing step.
-        Must be in (0, 1]. Only relevant when class imbalance correction
-        is applied.
+        Desired proportion of the minority class after undersampling the
+        majority class (e.g. ``0.5`` for 50/50). Must be in (0, 1]; ``None``
+        or ``1.0`` disables balancing. Only relevant for binary
+        classification. Applied to the non-test data before the validation
+        split, so training and validation are balanced and the test set keeps
+        the original class distribution (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163).
     test_ratio:
         Fraction of the full dataset reserved for the test set.
         Must be in (0, 1).
@@ -49,7 +52,8 @@ class SplitConfig(PolynetBaseModel):
         default=1.0,
         gt=0.0,
         le=1.0,
-        description="Ratio of labels in binary classification after balancing.",
+        description="Minority-class proportion of the training and validation sets after "
+        "balancing (the test set keeps the original distribution).",
     )
     test_ratio: float = Field(..., gt=0.0, lt=1.0, description="Fraction of data for the test set.")
     val_ratio: float = Field(

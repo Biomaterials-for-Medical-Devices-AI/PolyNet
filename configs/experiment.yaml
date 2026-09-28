@@ -120,7 +120,10 @@ splitting:
   val_ratio: 0.15
   n_bootstrap_iterations: 2        # number of train/val/test splits to generate
 
-  # Optional: balance training set for imbalanced classification
+  # Optional: balance imbalanced binary classification data by undersampling the
+  # majority class to this minority proportion. Applied before the validation
+  # split: train and validation are balanced, the test set keeps the original
+  # distribution (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163).
   # train_set_balance: 0.5
 
 # -----------------------------------------------------------------------------

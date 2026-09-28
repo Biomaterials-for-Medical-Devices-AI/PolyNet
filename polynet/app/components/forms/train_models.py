@@ -676,6 +676,10 @@ def split_data_form(problem_type: ProblemType):
                 options=[0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65],
                 value=0.5,
                 key=GeneralConfigStateKeys.DesiredProportion,
+                help="Proportion of the minority class after undersampling the majority "
+                "class. Balancing is applied before the validation split, so training and "
+                "validation sets are balanced; the test set keeps the original class "
+                "distribution (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163).",
             )
 
     else:

@@ -122,9 +122,12 @@ def get_data_split_indices(
     split_method:
         Whether to split randomly or stratified by the target variable.
     train_set_balance:
-        Fraction of the training set to retain after class balancing.
-        A value of ``1.0`` disables balancing. Only meaningful for
-        classification tasks.
+        Desired proportion of the minority class after undersampling the
+        majority class (e.g. ``0.5`` for 50/50). ``None`` or ``1.0`` disables
+        balancing. Only meaningful for binary classification. Balancing is
+        applied to the non-test data *before* the validation set is drawn, so
+        training and validation are balanced and only the test set keeps the
+        original class distribution (see ``_train_val_test_indices``).
     random_seed:
         Base random seed. Each bootstrap iteration uses ``random_seed + i``
         to ensure reproducibility while varying the split.
@@ -197,7 +200,20 @@ def _train_val_test_indices(
     train_set_balance: float | None,
     random_seed: int,
 ) -> tuple[list[list[int]], list[list[int]], list[list[int]]]:
-    """Compute indices for TrainValTest with bootstrap repetitions."""
+    """
+    Compute indices for TrainValTest with repeated random splits.
+
+    For each iteration (seed ``random_seed + i``):
+
+    1. hold out the test set from the full dataset;
+    2. optionally balance the remaining data by undersampling its majority
+       class to ``train_set_balance``;
+    3. carve the validation set out of the (balanced) remaining data.
+
+    As a result, training and validation sets are both balanced, while the
+    test set keeps the original class distribution. This follows the
+    protocol of ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163, and is intentional.
+    """
 
     train_data_idxs: list[list[int]] = []
     val_data_idxs: list[list[int]] = []
@@ -216,7 +232,9 @@ def _train_val_test_indices(
             stratify=data[target_variable_col] if use_stratify else None,
         )
 
-        # Step 2: optional class balancing on training data
+        # Step 2: optional class balancing of the non-test data (before the
+        # validation split, so train and validation are both balanced; test
+        # keeps the original distribution — see the docstring)
         if train_set_balance is not None and train_set_balance < 1.0:
             train_data = class_balancer(
                 data=train_data,

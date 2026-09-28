@@ -94,6 +94,19 @@ splitting:
   train_set_balance: null          # Optional: balance training set (0.0–1.0)
 ```
 
+**Class balancing (`train_set_balance`, binary classification).** For each split:
+
+1. the test set is held out from the full dataset;
+2. the remaining data is balanced by randomly undersampling the majority class until
+   the minority class makes up `train_set_balance` of it (e.g. `0.5` → 50/50);
+3. the validation set is drawn from this balanced data.
+
+Training and validation sets are therefore **both balanced**, and only the **test set
+keeps the original class distribution**. This follows the protocol of
+*ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163*. Undersampling uses the split's seed, so splits are reproducible. Note that
+undersampling removes samples before the validation split, so the training and
+validation sets are smaller than `1 − test_ratio` of the dataset would suggest.
+
 ## `gnn_training`
 
 Each architecture block lists its hyperparameters. Leave the block empty (`{}`) to
