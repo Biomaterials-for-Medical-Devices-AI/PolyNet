@@ -450,8 +450,19 @@ def main() -> None:
         target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_gnn_options.json", gnn_cfg)
         try:
+            # Polymer descriptors use the same scaler as the tabular features.
+            gnn_preprocessing_cfg = (
+                _build_preprocessing_config(cfg) if cfg.get("feature_preprocessing") else None
+            )
             gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
-                dataset, split_indexes, data_cfg, gnn_cfg, random_seed, out_dir, target_cfg
+                dataset,
+                split_indexes,
+                data_cfg,
+                gnn_cfg,
+                random_seed,
+                out_dir,
+                target_cfg,
+                preprocessing_cfg=gnn_preprocessing_cfg,
             )
             done(t0)
 
