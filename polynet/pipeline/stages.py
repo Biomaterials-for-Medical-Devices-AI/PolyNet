@@ -497,6 +497,7 @@ def train_tml(
         random_seed=random_seed,
         train_val_test_idxs=split_indexes,
         target_transform=target_cfg.strategy,
+        hpo_n_folds=tml_cfg.hpo_n_folds,
     )
 
     for model_name, model in trained.items():
