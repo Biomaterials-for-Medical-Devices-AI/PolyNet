@@ -58,6 +58,9 @@ representations:
   # --- Vector descriptors (for TML models) ---
   molecular_descriptors: {
     "rdkit": "all",   # compute all RDKit descriptors
+    # "morgan": true,   # Morgan count fingerprints (defaults: fp_size 2048, radius 3), or
+    # "morgan": {"fp_size": 1024, "radius": 2},
+    # "rdkitfp": {"fp_size": 2048},
     "polybert": true,
     "polymetrix": {
       "side_chain": [
