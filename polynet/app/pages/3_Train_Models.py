@@ -31,6 +31,7 @@ from polynet.app.options.file_paths import (
     target_transform_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
+    hpo_search_spaces_path,
 )
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
@@ -64,6 +65,7 @@ from polynet.pipeline import (
     train_gnn,
     train_tml,
 )
+from polynet.config.search_grid import effective_search_spaces
 from polynet.utils.validation import validate_hpo_folds
 
 
@@ -100,6 +102,8 @@ def train_models(
         gnn_training_opts_path.unlink()
     if target_transform_opts_path.exists():
         target_transform_opts_path.unlink()
+    if hpo_search_spaces_path(experiment_path).exists():
+        hpo_search_spaces_path(experiment_path).unlink()
     if ml_results_dir.exists():
         rmtree(ml_results_dir)
     if split_cfg_path.exists():
@@ -169,6 +173,13 @@ def train_models(
     except ValueError as e:
         st.error(str(e))
         st.stop()
+
+    # Provenance: the merged HPO search spaces (defaults + hpo_search_grid).
+    search_spaces = effective_search_spaces(
+        data_options.problem_type, gnn_cfg=gnn_cfg, tml_cfg=tml_cfg
+    )
+    if search_spaces:
+        save_options(hpo_search_spaces_path(experiment_path), search_spaces)
 
     # Create directory to save plots
     plots_dir = plots_directory(experiment_path=experiment_path)
