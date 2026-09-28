@@ -37,8 +37,21 @@ def train_TML_models(problem_type: ProblemType) -> dict:
         hyperparameter_tunning = st.checkbox(
             "Perform hyperparameter tuning",
             key=TrainTMLStateKeys.PerformHyperparameterTuning,
-            help="If enabled, the hyperparameters of the models will be tuned using a grid search. This may take a long time depending on the number of models and hyperparameters selected.",
+            help="If enabled, the hyperparameters of the models will be tuned with a randomised search (30 configurations sampled from a predefined grid, scored by k-fold shuffled cross-validation). This may take a long time depending on the number of models selected.",
         )
+
+        if hyperparameter_tunning:
+            st.number_input(
+                "Number of cross-validation folds (k)",
+                min_value=2,
+                value=5,
+                step=1,
+                key=TrainTMLStateKeys.HPONumFolds,
+                help="Folds used to score each configuration (shuffled; stratified for "
+                "classification). k must not exceed the number of training samples or, for "
+                "classification, the size of the smallest class — this is checked before "
+                "training starts.",
+            )
 
         st.markdown(
             """
@@ -422,7 +435,7 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     hyperparameter_tunning = st.checkbox(
         "Perform hyperparameter tuning",
         key=TrainGNNStateKeys.HypTunning,
-        help="If enabled, hyperparameters will be tuned via grid search (can be slow).",
+        help="If enabled, hyperparameters will be tuned by randomly sampling configurations from a predefined search grid with Ray Tune (can be slow).",
     )
 
     st.markdown("### Select the GNN convolutional layers you want to train")
