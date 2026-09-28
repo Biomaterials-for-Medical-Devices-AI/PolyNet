@@ -219,6 +219,11 @@ def train_models(
             random_seed=general_experiment_options.random_seed,
             out_dir=experiment_path,
             target_cfg=target_cfg,
+            # Polymer descriptors use the tabular scaler when TML is configured
+            # (otherwise ``train_gnn`` falls back to standard scaling).
+            preprocessing_cfg=(
+                preprocessing_cfg if isinstance(preprocessing_cfg, FeatureTransformConfig) else None
+            ),
         )
 
         gnn_predictions_df = run_gnn_inference(
