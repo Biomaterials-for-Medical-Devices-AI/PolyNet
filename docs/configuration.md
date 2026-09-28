@@ -191,7 +191,7 @@ train+val data is partitioned inside each trial.
 | Parameter | Default | Applies to | Description |
 |---|---|---|---|
 | `hpo_split_strategy` | `cross_validation` | all | Split strategy for HPO trials |
-| `hpo_n_folds` | `5` | `cross_validation` | Number of CV folds |
+| `hpo_n_folds` | `5` | `cross_validation` | Number of CV folds `k` (shuffled; stratified for classification). See [Choosing the number of folds](#choosing-the-number-of-folds-hpo_n_folds). |
 | `hpo_val_fraction` | `0.2` | `holdout`, `repeated_holdout` | Fraction of data held out for validation |
 | `hpo_n_repeats` | `3` | `repeated_holdout` | Number of independent random splits |
 
@@ -256,10 +256,33 @@ target cannot produce biased folds.
 
 | Parameter | Default | Description |
 |---|---|---|
-| `hpo_n_folds` | `5` | Number of CV folds `k`. Must be ≥ 2 (checked at config load). Before any model is trained, `k` is also checked against every split: it may not exceed the number of training samples, and for classification it may not exceed the size of the smallest class (stratified folds need every class in every fold). An invalid `k` stops the run with an error stating the allowed range. |
+| `hpo_n_folds` | `5` | Number of CV folds `k`. See [Choosing the number of folds](#choosing-the-number-of-folds-hpo_n_folds). |
 
 In the GUI, the fold count appears under *Perform hyperparameter tuning* on the Train
 Models page.
+
+### Choosing the number of folds (`hpo_n_folds`)
+
+`gnn_training.hpo_n_folds` and `tml_models.hpo_n_folds` are the same setting, shared by
+both pipelines: each scores hyperparameter configurations by shuffled `k`-fold
+cross-validation (stratified for classification) on the **training + validation**
+samples of every split, using the same fold splitter. `k` is checked in two places:
+
+1. **At config load** — `k ≥ 2`.
+2. **After the data is split, before any model is trained** — for every split, `k` may
+   not exceed the number of training + validation samples, and for classification it
+   may not exceed the size of the smallest class (stratified folds need every class in
+   every fold).
+
+The second check only runs for a pipeline that will actually cross-validate: TML when a
+model block is empty (`{}`), GNN when an architecture block is empty and
+`hpo_split_strategy` is `cross_validation`. An invalid `k` stops the run (CLI) or shows
+an error (GUI) naming the setting, the split and the allowed range, e.g.:
+
+```
+gnn_training.hpo_n_folds=40 is invalid for split 1: 40 folds exceed the size of the
+smallest class (class 0 has 29 samples). ... choose between 2 and 29 folds.
+```
 
 TML models require a [`feature_preprocessing`](#feature_preprocessing) section.
 
