@@ -35,18 +35,17 @@ from torch_geometric.loader import DataLoader
 from polynet.config.enums import (
     HpoSplitStrategy,
     Network,
-    Optimizer,
     ProblemType,
-    Scheduler,
     TrainingParam,
     TransformDescriptor,
 )
+from polynet.config.schemas.training import GNNOptimisationConfig
 from polynet.config.search_grid import get_gnn_search_grid
-from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
-from polynet.factories.optimizer import create_optimizer, create_scheduler
+from polynet.factories.optimizer import step_scheduler
 from polynet.training.cv import make_kfold
 from polynet.training.gnn import (
+    build_optimisation,
     eval_network,
     fit_polymer_descriptor_scaler,
     n_polymer_descriptors_of,
@@ -138,6 +137,7 @@ def gnn_hyp_opt(
     val_fraction: float = 0.2,
     n_repeats: int = 3,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
@@ -181,6 +181,10 @@ def gnn_hyp_opt(
     polymer_descriptor_scaler:
         Scaling strategy for polymer descriptors. Within each trial the
         scaler is fitted on the training part of every HPO split only.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss used in every
+        trial (the same settings as final training). ``None`` uses the
+        defaults (Adam, ReduceLROnPlateau, RMSE).
 
     Returns
     -------
@@ -249,6 +253,7 @@ def gnn_hyp_opt(
             network=gnn_arch,
             problem_type=problem_type,
             polymer_descriptor_scaler=polymer_descriptor_scaler,
+            optimisation=optimisation,
         ),
         config=tune_config,
         num_samples=num_samples,
@@ -283,6 +288,7 @@ def _gnn_target_function(
     network: Network,
     problem_type: ProblemType,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
 ) -> None:
     """
     Ray Tune objective function — trains a GNN and reports validation loss.
@@ -302,8 +308,6 @@ def _gnn_target_function(
     lr = cfg.pop(TrainingParam.LearningRate)
     batch_size = cfg.pop(TrainingParam.BatchSize)
     cfg.pop(TrainingParam.AsymmetricLossStrength, None)
-
-    loss_fn = create_loss(problem_type)
 
     if strategy == HpoSplitStrategy.CrossValidation:
         # Original behaviour: train each fold fully, report once at end.
@@ -334,16 +338,15 @@ def _gnn_target_function(
                 fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
             )
 
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model, lr=lr, problem_type=problem_type, optimisation=optimisation
             )
 
             best_val_loss = float("inf")
             for _ in range(1, 251):
                 train_network(model, train_loader, loss_fn, optimizer, device)
                 val_loss = eval_network(model, val_loader, loss_fn, device)
-                scheduler.step(val_loss)
+                step_scheduler(scheduler, val_loss)
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
 
@@ -384,9 +387,8 @@ def _gnn_target_function(
                 fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
             )
 
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model, lr=lr, problem_type=problem_type, optimisation=optimisation
             )
             split_data.append((model, train_loader, val_loader, optimizer, scheduler))
 
@@ -396,7 +398,7 @@ def _gnn_target_function(
             for k, (model, train_loader, val_loader, optimizer, scheduler) in enumerate(split_data):
                 train_network(model, train_loader, loss_fn, optimizer, device)
                 val_loss = eval_network(model, val_loader, loss_fn, device)
-                scheduler.step(val_loss)
+                step_scheduler(scheduler, val_loss)
                 if val_loss < best_val_losses[k]:
                     best_val_losses[k] = val_loss
 
