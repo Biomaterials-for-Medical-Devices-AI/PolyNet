@@ -6,6 +6,7 @@ scored with the shared shuffled K-fold splitter and the user's ``k``.
 """
 
 from unittest import mock
+import types
 
 import numpy as np
 import pandas as pd
@@ -25,7 +26,9 @@ def _run(n_folds: int = 5, random_seed: int = 3):
     train_df = pd.DataFrame(rng.normal(size=(40, 3)), columns=["a", "b", "c"])
     train_df["y"] = np.sort(rng.normal(size=40))  # sorted target
 
-    fake_search = mock.MagicMock(best_params_={}, best_estimator_="best")
+    fake_search = mock.MagicMock(
+        best_params_={}, best_estimator_=types.SimpleNamespace(), best_score_=0.5
+    )
     with mock.patch.object(tml, "RandomizedSearchCV", return_value=fake_search) as rscv:
         best = tml._run_random_search(
             model=mock.MagicMock(),
@@ -45,7 +48,7 @@ def test_random_search_uses_shuffled_cv_and_returns_best_estimator():
     assert kwargs["cv"].shuffle is True and kwargs["cv"].random_state == 3
     assert kwargs["n_iter"] == 30
     assert kwargs["random_state"] == 3
-    assert best == "best"
+    assert best.polynet_hpo_["n_iter"] == 30 and best.polynet_hpo_["best_cv_score"] == 0.5
 
 
 def test_random_search_uses_user_fold_count():

@@ -172,6 +172,12 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
         params = dict(arch_params) if arch_params else {}
         layers[net] = {_KEY_MAP.get(k, k): v for k, v in params.items()}
 
+    # Same key spelling as the architecture blocks (LearningRate / BatchSize).
+    search_grid = {
+        key: {_KEY_MAP.get(p, p): v for p, v in (params or {}).items()}
+        for key, params in (gnn_dict.get("hpo_search_grid") or {}).items()
+    }
+
     epochs = cfg.get("training", {}).get("epochs", 250)
     return TrainGNNConfig(
         train_gnn=gnn_dict.get("train_gnn", True),
@@ -183,6 +189,8 @@ def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
         hpo_val_fraction=gnn_dict.get("hpo_val_fraction", 0.2),
         hpo_n_repeats=gnn_dict.get("hpo_n_repeats", 3),
         optimisation=gnn_dict.get("optimisation") or {},
+        hpo_num_samples=gnn_dict.get("hpo_num_samples", 150),
+        hpo_search_grid=search_grid,
     )
 
 

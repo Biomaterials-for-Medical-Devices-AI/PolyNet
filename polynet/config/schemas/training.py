@@ -20,7 +20,18 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TransformDescriptor,
 )
-from polynet.config.schemas.base import HyperparamOptimConfig, PolynetBaseModel
+from polynet.config.schemas.base import (
+    HyperparamOptimConfig,
+    PolynetBaseModel,
+    check_grid_parameters,
+)
+from polynet.config.search_grid import (
+    RESERVED_GNN_GRID_KEYS,
+    RESERVED_TML_GRID_KEYS,
+    SHARED_GNN_GRID_KEY,
+    gnn_grid_parameters,
+    shared_gnn_grid_parameters,
+)
 
 # ---------------------------------------------------------------------------
 # GNN optimisation settings
@@ -188,6 +199,47 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
     )
 
     @model_validator(mode="after")
+    def validate_hpo_search_grid(self) -> "TrainGNNConfig":
+        """
+        Check ``hpo_search_grid``: keys are selected architectures or ``shared``,
+        parameters are in that architecture's default grid, candidates are
+        non-empty lists. Warn when a grid can never be used.
+        """
+        selected = {net.value: net for net in self.gnn_convolutional_layers}
+        for key, params in self.hpo_search_grid.items():
+            where = f"gnn_training.hpo_search_grid.{key}"
+            if key == SHARED_GNN_GRID_KEY:
+                allowed = shared_gnn_grid_parameters()
+            elif key in selected:
+                allowed = gnn_grid_parameters(selected[key])
+            else:
+                raise ValueError(
+                    f"gnn_training.hpo_search_grid has an entry for '{key}', which is not a "
+                    f"selected architecture. Use one of {sorted(selected)} or "
+                    f"'{SHARED_GNN_GRID_KEY}'."
+                )
+            check_grid_parameters(where, params, allowed, RESERVED_GNN_GRID_KEYS)
+
+            if key in selected and self.gnn_convolutional_layers[selected[key]]:
+                warnings.warn(
+                    f"{where} has no effect: '{key}' has explicit hyperparameters, so HPO "
+                    "does not run for it. Leave its gnn_convolutional_layers block empty "
+                    "({}) to search it.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        if SHARED_GNN_GRID_KEY in self.hpo_search_grid and all(
+            self.gnn_convolutional_layers.values()
+        ):
+            warnings.warn(
+                f"gnn_training.hpo_search_grid.{SHARED_GNN_GRID_KEY} has no effect: every "
+                "architecture has explicit hyperparameters, so HPO does not run.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self
+
+    @model_validator(mode="after")
     def layers_required_when_training(self) -> "TrainGNNConfig":
         if self.train_gnn and not self.gnn_convolutional_layers:
             raise ValueError(
@@ -325,6 +377,47 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
     )
+
+    hpo_num_samples: int = Field(
+        default=30,
+        ge=1,
+        description="Configurations sampled by RandomizedSearchCV (n_iter) per HPO run.",
+    )
+
+    @model_validator(mode="after")
+    def validate_hpo_search_grid(self) -> "TrainTMLConfig":
+        """
+        Check ``hpo_search_grid``: keys are selected models, parameters are
+        constructor parameters of that model's estimator(s), candidates are
+        non-empty lists. Warn when a grid can never be used.
+        """
+        # Deferred import: polynet.training imports this schema module.
+        from polynet.training.tml import _TML_REGISTRY
+
+        selected = {m.value: m for m in (self.selected_models or {})}
+        for key, params in self.hpo_search_grid.items():
+            where = f"tml_models.hpo_search_grid.{key}"
+            if key not in selected:
+                raise ValueError(
+                    f"tml_models.hpo_search_grid has an entry for '{key}', which is not a "
+                    f"selected model. Use one of {sorted(selected)}."
+                )
+            model = selected[key]
+            # Classifier and regressor may differ; accept parameters of either.
+            allowed = set().union(
+                *(cls().get_params() for (m, _), cls in _TML_REGISTRY.items() if m == model)
+            )
+            check_grid_parameters(where, params, allowed, RESERVED_TML_GRID_KEYS)
+
+            if self.selected_models[model]:
+                warnings.warn(
+                    f"{where} has no effect: '{key}' has explicit hyperparameters, so HPO "
+                    "does not run for it. Leave its selected_models block empty ({}) to "
+                    "search it.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
 
     @model_validator(mode="after")
     def models_required_when_training(self) -> "TrainTMLConfig":

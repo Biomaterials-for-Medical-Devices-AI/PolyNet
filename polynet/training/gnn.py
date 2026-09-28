@@ -209,6 +209,8 @@ def train_gnn_ensemble(
     hpo_n_repeats: int = 3,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
     optimisation: GNNOptimisationConfig | None = None,
+    hpo_num_samples: int = 150,
+    hpo_search_grid: dict | None = None,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -263,6 +265,11 @@ def train_gnn_ensemble(
         Optimiser, learning-rate scheduler and regression loss, used for the
         final models and for every HPO trial. ``None`` uses the defaults
         (Adam, ReduceLROnPlateau, RMSE).
+    hpo_num_samples:
+        Number of configurations Ray Tune samples per HPO run.
+    hpo_search_grid:
+        User search-grid candidates (``gnn_training.hpo_search_grid``), merged
+        on top of the default grid.
 
     Returns
     -------
@@ -347,7 +354,7 @@ def train_gnn_ensemble(
                     gnn_arch=gnn_arch,
                     dataset=train_set + val_set,
                     num_classes=int(num_classes),
-                    num_samples=150,
+                    num_samples=hpo_num_samples,
                     iteration=iteration,
                     problem_type=problem_type,
                     random_seed=seed,
@@ -357,6 +364,7 @@ def train_gnn_ensemble(
                     n_repeats=hpo_n_repeats,
                     polymer_descriptor_scaler=polymer_descriptor_scaler,
                     optimisation=optimisation,
+                    custom_grid=hpo_search_grid,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")

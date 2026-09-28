@@ -1,7 +1,8 @@
 """
-polynet.config.search_grids
-============================
-Default hyperparameter search grids for grid-search optimisation.
+polynet.config.search_grid
+===========================
+Default hyperparameter search grids for hyperparameter optimisation (HPO),
+and the merge of user-supplied grids (``hpo_search_grid``) on top of them.
 
 Design notes
 ------------
@@ -12,11 +13,16 @@ Design notes
 * GNN and TML grids are looked up by separate functions to keep the API
   clear and avoid a single overloaded function that accepts both model
   families.
-* These grids represent sensible defaults. Users can override them by
-  supplying a custom grid to the trainer directly.
+* These grids represent sensible defaults. Users can override individual
+  parameters with ``gnn_training.hpo_search_grid`` / ``tml_models.hpo_search_grid``:
+  a supplied parameter *replaces* the default candidates, every other parameter
+  keeps its defaults (see ``merge_search_grid``).
+* Values PolyNet sets itself (``RESERVED_GNN_GRID_KEYS`` /
+  ``RESERVED_TML_GRID_KEYS``) cannot be overridden.
 """
 
 import copy
+import math
 
 from polynet.config.enums import (
     ApplyWeightingToGraph,
@@ -107,13 +113,67 @@ _GNN_SPECIFIC_GRIDS: dict[Network, dict] = {
 }
 
 
+# Parameters injected by PolyNet that user grids may not override.
+# ``AsymmetricLossStrength`` is excluded because HPO trials currently train
+# without class weights, so tuning it would have no effect.
+RESERVED_GNN_GRID_KEYS = frozenset({TrainingParam.Seed, TrainingParam.AsymmetricLossStrength})
+RESERVED_TML_GRID_KEYS = frozenset({"random_state", "probability"})
+
+# Key of ``gnn_training.hpo_search_grid`` applied to every architecture.
+SHARED_GNN_GRID_KEY = "shared"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
+def merge_search_grid(default: dict, *overrides: dict | None) -> dict:
+    """
+    Return ``default`` with the parameters of each override replacing its candidates.
+
+    Overrides are applied in order (later ones win). Parameters not present in
+    any override keep their default candidates. Neither input is modified.
+
+    Parameters
+    ----------
+    default:
+        Default grid ``{param: [candidates]}``.
+    *overrides:
+        User grids ``{param: [candidates]}``; ``None`` entries are skipped.
+
+    Returns
+    -------
+    dict
+        The merged grid.
+    """
+    merged = copy.deepcopy(default)
+    for override in overrides:
+        for param, values in (override or {}).items():
+            merged[param] = list(values)
+    return merged
+
+
+def n_grid_combinations(grid: dict) -> int:
+    """Number of distinct configurations in a grid (product of the candidate counts)."""
+    return math.prod(len(v) if isinstance(v, list) else 1 for v in grid.values())
+
+
+def gnn_grid_parameters(network: Network) -> set[str]:
+    """Parameters a user grid may set for ``network`` (its default grid minus reserved keys)."""
+    return set(get_gnn_search_grid(network, random_seed=0)) - RESERVED_GNN_GRID_KEYS
+
+
+def shared_gnn_grid_parameters() -> set[str]:
+    """Parameters the ``shared`` entry of a user GNN grid may set."""
+    return set(_GNN_SHARED_GRID) - RESERVED_GNN_GRID_KEYS
+
+
 def get_tml_search_grid(
-    model: TraditionalMLModel, problem_type: ProblemType, random_seed: int
+    model: TraditionalMLModel,
+    problem_type: ProblemType,
+    random_seed: int,
+    custom_grid: dict | None = None,
 ) -> dict:
     """
     Return a hyperparameter search grid for a traditional ML model.
@@ -130,6 +190,10 @@ def get_tml_search_grid(
         support both regression and classification (e.g. LinearRegression).
     random_seed:
         Injected into the grid as ``random_state`` where applicable.
+    custom_grid:
+        Optional user grid for this model (``tml_models.hpo_search_grid[model]``).
+        Its parameters replace the default candidates; ``random_state`` /
+        ``probability`` are always set by PolyNet.
 
     Returns
     -------
@@ -141,6 +205,7 @@ def get_tml_search_grid(
     ValueError
         If the model is not recognised.
     """
+    user = custom_grid or {}
     match model:
         case TraditionalMLModel.LinearRegression:
             grid = copy.deepcopy(
@@ -173,11 +238,17 @@ def get_tml_search_grid(
                 f"Available models: {[m.value for m in TraditionalMLModel]}"
             )
 
-    return grid
+    # User candidates replace the defaults; PolyNet-injected values stay authoritative.
+    return merge_search_grid(
+        grid, {k: v for k, v in user.items() if k not in RESERVED_TML_GRID_KEYS}
+    )
 
 
 def get_gnn_search_grid(
-    network: Network, random_seed: int, problem_type: ProblemType | None = None
+    network: Network,
+    random_seed: int,
+    problem_type: ProblemType | None = None,
+    custom_grid: dict | None = None,
 ) -> dict:
     """
     Return a hyperparameter search grid for a GNN architecture.
@@ -191,6 +262,11 @@ def get_gnn_search_grid(
         The GNN architecture to retrieve a grid for.
     random_seed:
         Injected into the grid as ``TrainingParam.Seed``.
+    custom_grid:
+        Optional ``gnn_training.hpo_search_grid``. Its ``shared`` entry and the
+        entry for ``network`` replace the default candidates of the parameters
+        they set (the architecture entry wins over ``shared``). The seed is
+        always set by PolyNet.
 
     Returns
     -------
@@ -212,5 +288,14 @@ def get_gnn_search_grid(
     shared = copy.deepcopy(_GNN_SHARED_GRID)
     if problem_type == ProblemType.Classification:
         shared[TrainingParam.AsymmetricLossStrength] = [None, 0.25, 0.5, 0.75, 1.0]
-    grid = {**specific, **shared, TrainingParam.Seed: [random_seed]}
+    grid = {**specific, **shared}
+    user = custom_grid or {}
+    grid = merge_search_grid(
+        grid,
+        *(
+            {k: v for k, v in (user.get(key) or {}).items() if k not in RESERVED_GNN_GRID_KEYS}
+            for key in (SHARED_GNN_GRID_KEY, network.value)
+        ),
+    )
+    grid[TrainingParam.Seed] = [random_seed]
     return grid

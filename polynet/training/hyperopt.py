@@ -18,6 +18,8 @@ Public API
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -138,19 +140,24 @@ def gnn_hyp_opt(
     n_repeats: int = 3,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
     optimisation: GNNOptimisationConfig | None = None,
+    custom_grid: dict | None = None,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
 
-    If a results CSV already exists for this architecture and iteration,
-    the best previously found configuration is loaded and returned
-    without re-running the search.
+    Results are cached under a directory named after the architecture and a
+    hash of every setting that affects the search (the merged grid including
+    the seed, ``num_samples``, the HPO split settings, the optimisation
+    settings and the descriptor scaler). If that cache exists, the best
+    configuration is loaded instead of re-running the search; any changed
+    setting gives a new hash, so stale results are never reused. The searched
+    space is written to ``search_space.json`` in the same directory.
 
     Parameters
     ----------
     exp_path:
         Root experiment directory. HPO results are stored under
-        ``exp_path/gnn_hyp_opt/iteration_{iteration}/{arch}/``.
+        ``exp_path/gnn_hyp_opt/iteration_{iteration}/{arch}_{hash}/``.
     gnn_arch:
         The GNN architecture to tune.
     dataset:
@@ -185,6 +192,9 @@ def gnn_hyp_opt(
         Optimiser, learning-rate scheduler and regression loss used in every
         trial (the same settings as final training). ``None`` uses the
         defaults (Adam, ReduceLROnPlateau, RMSE).
+    custom_grid:
+        ``gnn_training.hpo_search_grid``; merged on top of the default grid
+        (see ``polynet.config.search_grid.get_gnn_search_grid``).
 
     Returns
     -------
@@ -194,14 +204,37 @@ def gnn_hyp_opt(
     """
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
 
-    hop_results_path = Path(exp_path) / "gnn_hyp_opt" / f"iteration_{iteration}"
-    results_csv = hop_results_path / gnn_arch.value / f"{gnn_arch.value}.csv"
+    config = get_gnn_search_grid(
+        network=gnn_arch, random_seed=random_seed, custom_grid=custom_grid
+    )
+    search_space = {
+        "architecture": gnn_arch.value,
+        "search_grid": config,
+        "num_samples": num_samples,
+        "hpo_split_strategy": HpoSplitStrategy(hpo_split_strategy).value,
+        "n_folds": n_folds,
+        "val_fraction": val_fraction,
+        "n_repeats": n_repeats,
+        "optimisation": (optimisation or GNNOptimisationConfig()).model_dump(mode="json"),
+        "polymer_descriptor_scaler": str(polymer_descriptor_scaler),
+    }
+    run_name = f"{gnn_arch.value}_{search_cache_key(search_space)}"
 
-    config = get_gnn_search_grid(network=gnn_arch, random_seed=random_seed)
+    hop_results_path = Path(exp_path) / "gnn_hyp_opt" / f"iteration_{iteration}"
+    run_dir = hop_results_path / run_name
+    results_csv = run_dir / f"{gnn_arch.value}.csv"
 
     if results_csv.exists():
-        logger.info(f"Found existing HPO results at {results_csv}. Loading best config.")
-        return _load_best_config(hop_results_path, gnn_arch, config)
+        logger.info(f"Found HPO results for the same search at {results_csv}. Loading best config.")
+        return _load_best_config(results_csv, config)
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "search_space.json", "w") as f:
+        json.dump(search_space, f, indent=2, default=str)
+    logger.info(
+        f"HPO for {gnn_arch.value} (iteration {iteration}): {num_samples} samples, "
+        f"search space saved to {run_dir / 'search_space.json'}."
+    )
 
     # --- Split indices ---
     splits = _build_splits(
@@ -260,7 +293,7 @@ def gnn_hyp_opt(
         scheduler=asha,
         progress_reporter=reporter,
         storage_path=hop_results_path.resolve(),
-        name=gnn_arch.value,
+        name=run_name,
         resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
 
@@ -416,16 +449,33 @@ def _gnn_target_function(
 # ---------------------------------------------------------------------------
 
 
-def _load_best_config(hop_results_path: Path, gnn_arch: Network, config_keys: dict) -> dict:
+def search_cache_key(search_space: dict) -> str:
+    """
+    Short, stable hash of the settings that define an HPO search.
+
+    Parameters
+    ----------
+    search_space:
+        JSON-serialisable description of the search (grid, sample count,
+        split and training settings). Enum values are serialised as strings.
+
+    Returns
+    -------
+    str
+        First 10 hex characters of the SHA-256 of the canonical JSON.
+    """
+    canonical = json.dumps(search_space, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:10]
+
+
+def _load_best_config(results_csv: Path, config_keys: dict) -> dict:
     """
     Load the best hyperparameter configuration from a saved CSV.
 
     Parameters
     ----------
-    hop_results_path:
-        Base path where HPO results are stored.
-    gnn_arch:
-        GNN architecture whose results to load.
+    results_csv:
+        Ray Tune results table saved by ``gnn_hyp_opt``.
     config_keys:
         Dict whose keys are the hyperparameter names to look up.
         Used to construct column names (``config/{param}``).
@@ -442,8 +492,6 @@ def _load_best_config(hop_results_path: Path, gnn_arch: Network, config_keys: di
     FileNotFoundError
         If the results CSV does not exist.
     """
-    results_csv = hop_results_path / gnn_arch.value / f"{gnn_arch.value}.csv"
-
     if not results_csv.exists():
         raise FileNotFoundError(f"HPO results file not found: {results_csv}")
 

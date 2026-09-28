@@ -33,7 +33,7 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TransformDescriptor,
 )
-from polynet.config.search_grid import get_tml_search_grid
+from polynet.config.search_grid import get_tml_search_grid, n_grid_combinations
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
 from polynet.training.cv import make_kfold
@@ -145,6 +145,8 @@ def train_tml_ensemble(
     train_val_test_idxs: tuple[list, list | None, list],
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
     hpo_n_folds: int = 5,
+    hpo_num_samples: int = 30,
+    hpo_search_grid: dict | None = None,
 ) -> tuple[dict, dict, dict, dict]:
     """
     Train an ensemble of TML models across all bootstrap iterations.
@@ -182,6 +184,14 @@ def train_tml_ensemble(
         fitted on the training set only; ``training_data`` always stores
         the original (unscaled) target values so that ``y_true`` in the
         predictions DataFrame is always in the original range.
+    hpo_n_folds:
+        Cross-validation folds used to score HPO configurations.
+    hpo_num_samples:
+        Configurations sampled per randomised search (``n_iter``); capped at
+        the number of distinct grid combinations.
+    hpo_search_grid:
+        User search-grid candidates keyed by model name
+        (``tml_models.hpo_search_grid``), merged on top of the default grids.
 
     Returns
     -------
@@ -294,6 +304,8 @@ def train_tml_ensemble(
                         problem_type=problem_type,
                         random_seed=seed,
                         n_folds=hpo_n_folds,
+                        n_iter=hpo_num_samples,
+                        custom_grid=(hpo_search_grid or {}).get(model_id.value),
                     )
                 else:
                     logger.info(f"Fitting {model_id.value} (iteration {iteration}, {df_name})...")
@@ -305,6 +317,39 @@ def train_tml_ensemble(
     return trained_models, training_data, scalers, target_scalers
 
 
+def tml_search_space(
+    model_id: TraditionalMLModel,
+    problem_type: ProblemType,
+    random_seed: int,
+    n_iter: int,
+    custom_grid: dict | None = None,
+) -> tuple[dict, int]:
+    """
+    Return the grid and number of samples for a TML randomised search.
+
+    The grid is the default grid of ``model_id`` with the user candidates
+    (``custom_grid``) merged on top. ``n_iter`` is capped at the number of
+    distinct grid combinations — sampling more would only repeat
+    configurations — with a warning.
+
+    Returns
+    -------
+    tuple[dict, int]
+        ``(grid, n_iter_used)``.
+    """
+    grid = get_tml_search_grid(
+        model=model_id, problem_type=problem_type, random_seed=random_seed, custom_grid=custom_grid
+    )
+    n_combinations = n_grid_combinations(grid)
+    if n_iter > n_combinations:
+        logger.warning(
+            f"hpo_num_samples={n_iter} exceeds the {n_combinations} distinct configurations of "
+            f"the {model_id.value} search grid; sampling all {n_combinations} instead."
+        )
+        n_iter = n_combinations
+    return grid, n_iter
+
+
 def _run_random_search(
     model,
     model_id: TraditionalMLModel,
@@ -312,13 +357,18 @@ def _run_random_search(
     problem_type: ProblemType,
     random_seed: int,
     n_folds: int = 5,
+    n_iter: int = 30,
+    custom_grid: dict | None = None,
 ) -> object:
     """
     Tune a TML model with a randomised hyperparameter search.
 
-    Samples 30 configurations from the model's search grid
-    (``get_tml_search_grid``) with ``RandomizedSearchCV`` and scores them by
-    ``n_folds``-fold shuffled cross-validation (stratified for classification).
+    Samples ``n_iter`` configurations from the model's search grid (defaults
+    merged with ``custom_grid``, see ``tml_search_space``) with
+    ``RandomizedSearchCV`` and scores them by ``n_folds``-fold shuffled
+    cross-validation (stratified for classification). A summary of the search
+    is attached to the returned estimator as ``polynet_hpo_`` (search grid,
+    samples used, folds, best parameters and CV score) for provenance.
 
     Parameters
     ----------
@@ -335,26 +385,35 @@ def _run_random_search(
     n_folds:
         Number of CV folds. Checked against the data before training starts
         (``polynet.utils.validation.validate_hpo_folds``).
+    n_iter:
+        Number of configurations to sample (``tml_models.hpo_num_samples``);
+        capped at the number of distinct grid combinations.
+    custom_grid:
+        User candidates for this model (``tml_models.hpo_search_grid[model]``).
 
     Returns
     -------
     object
         The best estimator, refitted on the full ``train_df``.
     """
-    param_grid = get_tml_search_grid(
-        model=model_id, problem_type=problem_type, random_seed=random_seed
+    param_grid, n_iter = tml_search_space(
+        model_id=model_id,
+        problem_type=problem_type,
+        random_seed=random_seed,
+        n_iter=n_iter,
+        custom_grid=custom_grid,
     )
     cv = make_kfold(problem_type=problem_type, n_folds=n_folds, random_seed=random_seed)
 
     logger.info(
         f"Running RandomizedSearchCV for {model_id.value} "
-        f"({n_folds}-fold CV, seed={random_seed})..."
+        f"({n_iter} samples, {n_folds}-fold CV, seed={random_seed})..."
     )
 
     random_search = RandomizedSearchCV(
         estimator=model,
         param_distributions=param_grid,
-        n_iter=30,
+        n_iter=n_iter,
         cv=cv,
         random_state=random_seed,
         n_jobs=-1,
@@ -362,4 +421,13 @@ def _run_random_search(
     random_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
     logger.info(f"Best params for {model_id.value}: {random_search.best_params_}")
-    return random_search.best_estimator_
+    best = random_search.best_estimator_
+    best.polynet_hpo_ = {
+        "search_grid": param_grid,
+        "n_iter": n_iter,
+        "n_folds": n_folds,
+        "seed": random_seed,
+        "best_params": random_search.best_params_,
+        "best_cv_score": float(random_search.best_score_),
+    }
+    return best

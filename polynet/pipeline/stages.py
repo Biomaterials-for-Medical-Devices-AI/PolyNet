@@ -356,6 +356,8 @@ def train_gnn(
         hpo_n_repeats=gnn_cfg.hpo_n_repeats,
         polymer_descriptor_scaler=polymer_descriptor_scaler,
         optimisation=gnn_cfg.optimisation,
+        hpo_num_samples=gnn_cfg.hpo_num_samples,
+        hpo_search_grid=gnn_cfg.hpo_search_grid,
     )
 
     for model_name, model in trained_models.items():
@@ -500,10 +502,22 @@ def train_tml(
         train_val_test_idxs=split_indexes,
         target_transform=target_cfg.strategy,
         hpo_n_folds=tml_cfg.hpo_n_folds,
+        hpo_num_samples=tml_cfg.hpo_num_samples,
+        hpo_search_grid=tml_cfg.hpo_search_grid,
     )
 
     for model_name, model in trained.items():
         joblib.dump(model, models_dir / f"{model_name}.joblib")
+
+    # Provenance of automatic HPO: searched grid, samples used, best parameters.
+    hpo_records = {n: m.polynet_hpo_ for n, m in trained.items() if hasattr(m, "polynet_hpo_")}
+    if hpo_records:
+        hpo_dir = out_dir / "tml_hyp_opt"
+        hpo_dir.mkdir(parents=True, exist_ok=True)
+        for model_name, record in hpo_records.items():
+            with open(hpo_dir / f"{model_name}.json", "w") as f:
+                json.dump(record, f, indent=2, default=str)
+        logger.info(f"TML HPO search spaces and best parameters saved to {hpo_dir}.")
     if scalers:
         for scaler_name, scaler in scalers.items():
             joblib.dump(scaler, models_dir / f"{scaler_name}.pkl")

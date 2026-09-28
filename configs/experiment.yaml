@@ -166,6 +166,14 @@ gnn_training:
 
     # MPNN: {}   # empty = trigger HPO
 
+  # Optional: automatic HPO sample count and custom search candidates (only used for
+  # architectures with an empty block, {}). A listed parameter replaces the default
+  # candidates; unlisted parameters keep their defaults. See docs/configuration.md.
+  # hpo_num_samples: 150
+  # hpo_search_grid:
+  #   shared: {embedding_dim: [64, 128], LearningRate: [0.001, 0.01]}
+  #   GAT: {num_heads: [2, 4, 8]}
+
   # Optional: optimiser, learning-rate scheduler and loss for every GNN (final training
   # and HPO trials). Defaults shown; see docs/configuration.md for all options.
   # optimisation:
@@ -205,6 +213,9 @@ feature_preprocessing:
 tml_models:
   train_tml: true
   hpo_n_folds: 5   # CV folds for automatic HPO (>= 2; <= smallest class size for classification)
+  # hpo_num_samples: 30          # configurations sampled per search (RandomizedSearchCV n_iter)
+  # hpo_search_grid:             # custom candidates for models with an empty block ({})
+  #   random_forest: {n_estimators: [200, 500], max_depth: [null, 10]}
 
   selected_models:
     random_forest:

@@ -186,6 +186,8 @@ gnn_training:
   hpo_n_folds: 5                          # folds used by cross_validation
   hpo_val_fraction: 0.2                   # val fraction used by holdout / repeated_holdout
   hpo_n_repeats: 3                        # number of random splits for repeated_holdout
+  hpo_num_samples: 150                    # configurations sampled per HPO run
+  hpo_search_grid: {}                     # optional custom candidates, see below
 
   # Optimiser, scheduler and loss (optional — all fields below show their defaults)
   optimisation:
@@ -242,14 +244,16 @@ the GNN section of the Train Models page.
 |---|---|---|
 | `cross_att` | `false` | Enable cross-monomer attention |
 | `apply_weighting_to_graph` | `"PerMonomerPooling"` | One of: `PerMonomerPooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `BeforePooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), or `BeforeMPP` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs) |
-| `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Automatically explored by HPO over `[null, 0.25, 0.5, 0.75, 1.0]` for classification tasks. Ignored for regression. |
+| `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Ignored for regression. Not currently tuned by automatic HPO (trials train without class weights), so it cannot be put in `hpo_search_grid`. |
 
 ## Automatic HPO configuration
 
 HPO is triggered automatically for any architecture whose parameter block is left
-empty (`{}`). Ray Tune samples 150 random configurations from the search grid and
-evaluates them using one of three **split strategies** that control how the
-train+val data is partitioned inside each trial.
+empty (`{}`). Ray Tune samples `hpo_num_samples` (default 150) random configurations
+from the search grid and evaluates them using one of three **split strategies** that
+control how the train+val data is partitioned inside each trial. The search grid is the
+default grid of `polynet/config/search_grid.py`, optionally customised with
+`hpo_search_grid` — see [Custom search grids](#custom-search-grids-hpo_search_grid).
 
 ### Split strategies
 
@@ -319,10 +323,64 @@ gnn_training:
   hpo_n_folds: 5
 ```
 
-> **Note:** HPO results are cached to `{output_dir}/gnn_hyp_opt/iteration_{n}/{arch}/{arch}.csv`.
-> If this file already exists when the pipeline is re-run, the cached best
-> configuration is reloaded without repeating the search — delete the file to force a
-> fresh run.
+> **Note:** HPO results are cached to
+> `{output_dir}/gnn_hyp_opt/iteration_{n}/{arch}_{hash}/{arch}.csv`, next to a
+> `search_space.json` that records the searched grid and settings. The `{hash}` is
+> computed from everything that defines the search — the merged grid (including the
+> seed), `hpo_num_samples`, the HPO split settings, the `optimisation` settings and the
+> polymer-descriptor scaler. Re-running the same search reloads the cached best
+> configuration; changing any of these starts a new search in a new directory, so
+> stale results are never reused. Delete the directory to force a fresh run. (Caches
+> written before this scheme are not reused.)
+
+### Custom search grids (`hpo_search_grid`)
+
+Both `gnn_training` and `tml_models` accept `hpo_search_grid` to replace the default
+candidates of individual parameters, and `hpo_num_samples` to set how many
+configurations are sampled:
+
+```yaml
+gnn_training:
+  gnn_convolutional_layers:
+    GCN: {}                              # empty block → HPO
+    GAT: {}
+  hpo_num_samples: 50                    # default 150
+  hpo_search_grid:
+    shared:                              # applies to every architecture
+      embedding_dim: [64, 128]
+      LearningRate: [0.001, 0.01]
+    GAT:                                 # architecture-specific (wins over shared)
+      num_heads: [2, 4, 8]
+
+tml_models:
+  selected_models:
+    random_forest: {}                    # empty block → HPO
+  hpo_num_samples: 20                    # default 30 (RandomizedSearchCV n_iter)
+  hpo_search_grid:
+    random_forest:
+      n_estimators: [200, 500, 1000]
+      max_depth: [null, 10, 20]
+```
+
+- **Merge.** A parameter you list *replaces* the default candidates for that parameter;
+  every parameter you do not list keeps its default candidates. For GNNs the order is
+  default ← `shared` ← architecture entry. The random seed (`seed`, `random_state`,
+  and `probability` for classification SVMs) is always set by PolyNet.
+- **Validation at config load.** GNN keys must be selected architectures (or `shared`)
+  and their parameters must be in that architecture's default grid; TML keys must be
+  selected models and their parameters must be constructor parameters of the model's
+  estimator. Every value must be a non-empty list. Unknown names, unknown parameters,
+  reserved parameters and empty lists are errors listing the allowed values. A grid for
+  a model that has explicit hyperparameters (so HPO does not run for it) triggers a
+  warning.
+- **Sample counts.** `hpo_num_samples` must be ≥ 1. For TML it is capped, with a
+  warning, at the number of distinct grid combinations (sampling more would only
+  repeat configurations).
+- **Provenance.** The settings are saved in `config_used.yaml` and in
+  `train_gnn_options.json` / `train_tml_options.json`. The merged GNN grid is written
+  to `gnn_hyp_opt/iteration_{n}/{arch}_{hash}/search_space.json`; for TML, the merged
+  grid, the number of samples used, the folds and the best parameters of each tuned
+  model are written to `tml_hyp_opt/{model}-{representation}_{iteration}.json`.
 
 ## `tml_models`
 
@@ -339,7 +397,7 @@ tml_models:
 `LogisticRegression`, `LinearRegression`
 
 **Automatic HPO:** leave a model's block empty (`{}`) to tune it automatically.
-`RandomizedSearchCV` samples 30 configurations from the model's default search grid
+`RandomizedSearchCV` samples `hpo_num_samples` (default 30) configurations from the model's search grid
 (`polynet/config/search_grid.py`) and scores them by `hpo_n_folds`-fold
 cross-validation on the training (+ validation) samples of each split. Folds are always
 shuffled (stratified for classification) with the split's seed, so a dataset sorted by
@@ -348,6 +406,8 @@ target cannot produce biased folds.
 | Parameter | Default | Description |
 |---|---|---|
 | `hpo_n_folds` | `5` | Number of CV folds `k`. See [Choosing the number of folds](#choosing-the-number-of-folds-hpo_n_folds). |
+| `hpo_num_samples` | `30` | Configurations sampled per search (`n_iter`), capped at the number of grid combinations. |
+| `hpo_search_grid` | `{}` | Custom candidates per model. See [Custom search grids](#custom-search-grids-hpo_search_grid). |
 
 In the GUI, the fold count appears under *Perform hyperparameter tuning* on the Train
 Models page.
