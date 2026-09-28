@@ -28,7 +28,7 @@ from ray import tune
 from ray.air import session
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
-from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 import torch
 from torch_geometric.loader import DataLoader
 
@@ -45,6 +45,7 @@ from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import create_optimizer, create_scheduler
+from polynet.training.cv import make_kfold
 from polynet.training.gnn import (
     eval_network,
     fit_polymer_descriptor_scaler,
@@ -99,11 +100,7 @@ def _build_splits(
     stratify = y if problem_type == ProblemType.Classification else None
 
     if strategy == HpoSplitStrategy.CrossValidation:
-        cv = (
-            StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-            if problem_type == ProblemType.Classification
-            else KFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-        )
+        cv = make_kfold(problem_type=problem_type, n_folds=n_folds, random_seed=random_seed)
         return [(tr.tolist(), va.tolist()) for tr, va in cv.split(np.zeros(n), y)]
 
     if strategy == HpoSplitStrategy.Holdout:
