@@ -1,8 +1,9 @@
 # Descriptors
 
 PolyNet builds fixed-length vector representations for traditional ML and graph
-representations for GNNs. This document covers two cross-cutting topics:
+representations for GNNs. This document covers three cross-cutting topics:
 
+- [Count fingerprints (Morgan, RDKit)](#count-fingerprints-morgan-rdkit) — fingerprint size and radius
 - [Polymer descriptor fusion](#polymer-descriptor-fusion) — injecting given polymer-level features
 - [PolyMetriX descriptors](#polymetrix-descriptors) — polymer-aware chemical descriptors
 
@@ -15,6 +16,31 @@ representations for GNNs. This document covers two cross-cutting topics:
 > unaffected.
 
 ---
+
+## Count fingerprints (Morgan, RDKit)
+
+`morgan` and `rdkitfp` compute RDKit **count** fingerprints for each monomer (via
+`rdFingerprintGenerator`), which are then merged per polymer like any other descriptor.
+Set the value to `true` (or `[]`) for the defaults, or to a mapping to change them:
+
+| Descriptor | Setting | Default | Meaning |
+|---|---|---|---|
+| `morgan` | `fp_size` | `2048` | Length of the fingerprint vector (number of bins) |
+| `morgan` | `radius` | `3` | Radius of the atom environments (3 ≈ ECFP6, 2 ≈ ECFP4) |
+| `rdkitfp` | `fp_size` | `2048` | Length of the fingerprint vector |
+
+```yaml
+representations:
+  molecular_descriptors:
+    morgan: {fp_size: 1024, radius: 2}
+    rdkitfp: true
+```
+
+The defaults are RDKit's own generator defaults, which PolyNet has always used — note
+that the default Morgan radius is **3**, not 2. Unknown settings or non-positive values
+are rejected at config load. The settings are saved in `representation_options.json`
+and reused when predicting new data. In the GUI they appear on the Representation page
+under each fingerprint checkbox.
 
 ## Polymer descriptor fusion
 

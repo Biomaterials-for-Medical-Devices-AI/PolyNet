@@ -55,7 +55,9 @@ representations:
     monomer2_smiles: "weight_fraction_2"
   molecular_descriptors:
     RDKit: []                      # Include RDKit descriptors
-    Morgan: []                     # Morgan fingerprints
+    Morgan: []                     # Morgan count fingerprints, defaults (2048 bins, radius 3)
+    # Morgan: {fp_size: 1024, radius: 2}   # …or with custom settings (radius 2 ≈ ECFP4)
+    # RDKitFP: {fp_size: 2048}             # RDKit count fingerprints (fp_size only)
     PolyBERT: []                   # PolyBERT fingerprints (requires psmiles)
     PolyMetriX:                    # PolyMetriX polymer-aware descriptors (requires polymetrix)
       # Each of side_chain / backbone / polymer accepts either a list of
