@@ -46,7 +46,7 @@ polynet/
 │   ├── metrics.py          # evaluation metrics
 │   └── hyperopt.py         # gnn_hyp_opt() — Ray Tune + ASHA HPO for GNN
 │
-├── inference/       # Prediction assembly + unseen-data prediction (predict_unseen_*)
+├── inference/       # Prediction assembly, unseen-data prediction (predict_unseen_*), split ensembles (ensemble.py)
 ├── pipeline/        # Shared pipeline stage functions (stages.py)
 ├── explainability/  # Attribution
 │   ├── masking.py          # GNN chemistry-masking attribution

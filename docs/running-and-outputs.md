@@ -103,11 +103,39 @@ Outputs are written to `{output_dir}/unseen_predictions/{filename}/`:
 ```
 results/my_experiment/unseen_predictions/new_polymers/
 ├── predictions.csv          # Per-model predictions + ensemble columns
-├── metrics.json             # Per-model metrics (only when target column is present)
+├── metrics.json             # Per-model and ensemble metrics (only when target column is present)
 └── representation/
     └── GNN/
         └── raw/             # Raw graph data used by the GNN featuriser
 ```
+
+### Ensemble predictions
+
+An experiment trains one model per repeated random split for every GNN architecture
+and every TML model × representation. When predicting new data, the models trained on
+the different splits are combined into **ensembles**:
+
+| Ensemble | Members |
+|---|---|
+| `{arch} Ensemble` (e.g. `GCN Ensemble`) | One GNN architecture, all splits |
+| `GNN Ensemble` | All GNN architectures, all splits |
+| `{model}-{representation} Ensemble` (e.g. `random forest-rdkit Ensemble`) | One TML model on one representation, all splits |
+
+Columns added to `predictions.csv` for each ensemble:
+
+| Task | Columns | Meaning |
+|---|---|---|
+| Regression | `{name} Ensemble Predicted {target}` | Mean of the member predictions |
+| | `{name} Ensemble Std {target}` | Standard deviation of the member predictions (population, `ddof=0`) — the spread between members, not a calibrated uncertainty |
+| Classification | `{name} Ensemble Predicted {target}` | Majority vote of the members (ties go to the smallest class label) |
+| | `{name} Ensemble Vote Fraction {target}` | Share of members that voted for the ensemble class |
+
+Ensembles need at least two members, i.e. `n_bootstrap_iterations ≥ 2` (with an even
+number of splits, classification ties are possible). When the target column is present,
+`metrics.json` holds the per-split metrics under `"1"`, `"2"`, … and the ensemble
+metrics under `"ensemble"`, keyed by ensemble name. Classification ensembles only have
+hard votes, so probability-based metrics (AUROC) are `null` for them. In the GUI the
+ensembles appear as separate rows of the metrics tables.
 
 The same `predict_external` function is used by both the CLI and the Streamlit app,
 guaranteeing identical results regardless of entry point.
