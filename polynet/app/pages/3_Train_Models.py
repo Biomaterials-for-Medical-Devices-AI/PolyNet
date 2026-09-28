@@ -61,6 +61,7 @@ from polynet.pipeline import (
     run_tml_inference,
     train_gnn,
     train_tml,
+    validate_hpo_folds,
 )
 
 
@@ -133,6 +134,38 @@ def train_models(
         out_dir=experiment_path,
     )
 
+    tml_cfg = (
+        TrainTMLConfig(
+            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
+            selected_models=tml_models,
+            hpo_n_folds=int(st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5)),
+        )
+        if tml_models
+        else None
+    )
+    gnn_cfg = (
+        TrainGNNConfig(
+            train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
+            gnn_convolutional_layers=gnn_conv_params,
+            share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
+        )
+        if gnn_conv_params
+        else None
+    )
+
+    # Check the HPO fold count against the data before any training starts.
+    try:
+        validate_hpo_folds(
+            data=data,
+            data_cfg=data_options,
+            split_indexes=train_val_test_idxs,
+            tml_cfg=tml_cfg,
+            gnn_cfg=gnn_cfg,
+        )
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
+
     # Create directory to save plots
     plots_dir = plots_directory(experiment_path=experiment_path)
     plots_dir.mkdir(parents=True)
@@ -143,11 +176,6 @@ def train_models(
     # TML training
     # ------------------------------------------------------------------
     if tml_models:
-        tml_cfg = TrainTMLConfig(
-            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
-            selected_models=tml_models,
-            hpo_n_folds=int(st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5)),
-        )
         save_options(path=tml_training_opts_path, options=tml_cfg)
 
         # load descriptor DataFrames from disk (saved by Page 2)
@@ -197,11 +225,6 @@ def train_models(
     # GNN training
     # ------------------------------------------------------------------
     if gnn_conv_params:
-        gnn_cfg = TrainGNNConfig(
-            train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
-            gnn_convolutional_layers=gnn_conv_params,
-            share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
-        )
         save_options(path=gnn_training_opts_path, options=gnn_cfg)
 
         dataset = CustomPolymerGraph(
