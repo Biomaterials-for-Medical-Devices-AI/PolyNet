@@ -10,8 +10,11 @@ from polynet.config.enums import (
     ArchitectureParam,
     FeatureSelection,
     Network,
+    Optimizer,
     Pooling,
     ProblemType,
+    RegressionLoss,
+    Scheduler,
     SplitMethod,
     SplitType,
     TargetTransformDescriptor,
@@ -22,6 +25,7 @@ from polynet.config.enums import (
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
+from polynet.config.schemas.training import GNNOptimisationConfig
 
 
 def train_TML_models(problem_type: ProblemType) -> dict:
@@ -536,6 +540,114 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
             gnn_conv_params[net].update(shared_params)
 
     return gnn_conv_params
+
+
+def gnn_optimisation_widgets(problem_type: ProblemType) -> GNNOptimisationConfig:
+    """
+    Render the "Advanced training options" expander for GNNs.
+
+    Lets the user choose the optimiser, the learning-rate scheduler (with only
+    the parameters that scheduler uses) and, for regression, the loss. The
+    defaults reproduce PolyNet's historical settings (Adam, ReduceLROnPlateau
+    with factor 0.9 / patience 15 / min_lr 1e-8, RMSE loss). The same
+    settings are used for final training and for every HPO trial.
+
+    Parameters
+    ----------
+    problem_type:
+        Classification or regression (the loss choice is regression-only).
+
+    Returns
+    -------
+    GNNOptimisationConfig
+        The selected settings.
+    """
+    defaults = GNNOptimisationConfig()
+    options: dict = {}
+
+    with st.expander("Advanced training options (optimiser, scheduler, loss)", expanded=False):
+        st.caption(
+            "Applied to final training and to every hyperparameter-optimisation trial. "
+            "The defaults reproduce PolyNet's standard settings."
+        )
+        options["optimizer"] = st.selectbox(
+            "Optimiser",
+            options=list(Optimizer),
+            index=list(Optimizer).index(defaults.optimizer),
+            key=TrainGNNStateKeys.Optimizer,
+        )
+        scheduler = st.selectbox(
+            "Learning-rate scheduler",
+            options=list(Scheduler),
+            index=list(Scheduler).index(defaults.scheduler),
+            key=TrainGNNStateKeys.Scheduler,
+            help="reduce_lr_on_plateau lowers the learning rate when the validation loss "
+            "stops improving; the other schedulers decay it on a fixed epoch schedule.",
+        )
+        options["scheduler"] = scheduler
+        options["scheduler_factor"] = st.number_input(
+            "Decay factor (gamma)",
+            min_value=0.01,
+            max_value=0.99,
+            value=defaults.scheduler_factor,
+            step=0.01,
+            key=TrainGNNStateKeys.SchedulerFactor,
+            help="The learning rate is multiplied by this factor at each decay.",
+        )
+        if scheduler == Scheduler.ReduceLROnPlateau:
+            options["scheduler_patience"] = st.number_input(
+                "Patience (epochs)",
+                min_value=0,
+                value=defaults.scheduler_patience,
+                step=1,
+                key=TrainGNNStateKeys.SchedulerPatience,
+            )
+            options["scheduler_min_lr"] = st.number_input(
+                "Minimum learning rate",
+                min_value=0.0,
+                value=defaults.scheduler_min_lr,
+                format="%.1e",
+                key=TrainGNNStateKeys.SchedulerMinLR,
+            )
+        elif scheduler == Scheduler.StepLR:
+            options["scheduler_step_size"] = st.number_input(
+                "Decay every N epochs",
+                min_value=1,
+                value=defaults.scheduler_step_size,
+                step=1,
+                key=TrainGNNStateKeys.SchedulerStepSize,
+            )
+        elif scheduler == Scheduler.MultiStepLR:
+            milestones = st.text_input(
+                "Decay at epochs (comma-separated)",
+                value=", ".join(str(m) for m in defaults.scheduler_milestones),
+                key=TrainGNNStateKeys.SchedulerMilestones,
+            )
+            try:
+                options["scheduler_milestones"] = [
+                    int(m) for m in milestones.replace(" ", "").split(",") if m
+                ]
+            except ValueError:
+                st.error("Milestones must be whole numbers separated by commas, e.g. 30, 60, 90.")
+                st.stop()
+
+        if problem_type == ProblemType.Regression:
+            options["regression_loss"] = st.selectbox(
+                "Regression loss",
+                options=list(RegressionLoss),
+                index=list(RegressionLoss).index(defaults.regression_loss),
+                key=TrainGNNStateKeys.RegressionLoss,
+                help="rmse: root mean squared error (default); mse: mean squared error; "
+                "mae: mean absolute error (less sensitive to outliers).",
+            )
+        else:
+            st.caption("Classification models are trained with cross-entropy loss.")
+
+    try:
+        return GNNOptimisationConfig(**options)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
 
 
 def GNN_shared_params_form(
