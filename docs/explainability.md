@@ -155,8 +155,10 @@ the normalisation strategy does not require recomputation.
 
 The Analyse Results page can statistically compare model predictions and metrics:
 
-- **Predictions** — pairwise McNemar tests (classification) or Wilcoxon tests on
-  residuals (regression).
+- **Predictions** — pairwise McNemar tests (classification) or paired Wilcoxon
+  signed-rank tests on the per-sample **absolute errors** `|y_true − y_pred|`
+  (regression). Comparing absolute errors tests for a difference in accuracy;
+  signed residuals would only test for a difference in bias.
 - **Metrics** — pairwise Wilcoxon tests across bootstrap iterations, plus box plots of
   the bootstrap metric distributions.
 
