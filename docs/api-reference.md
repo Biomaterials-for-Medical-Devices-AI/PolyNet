@@ -52,7 +52,7 @@ polynet/
 │   ├── masking.py          # GNN chemistry-masking attribution
 │   ├── explain.py          # compute_global_attribution(), compute_local_attribution() (GNN)
 │   ├── shap_explain.py     # compute_global_shap_attribution(), compute_local_shap_attribution() (TML)
-│   ├── embeddings.py       # Graph embedding extraction (PCA, t-SNE)
+│   ├── embeddings.py       # Graph embedding extraction (PCA, t-SNE) — not currently exposed in the GUI
 │   └── visualization.py    # Shared plotting helpers
 │
 ├── plotting/        # Data-exploration plots

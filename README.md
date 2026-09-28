@@ -49,7 +49,6 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 - **TML SHAP explainability** — SHAP-based attribution for all traditional ML models using auto-selected explainers (`TreeExplainer` for RF/XGBoost, `LinearExplainer` for linear models, `KernelExplainer` for SVM); global summaries and per-instance plots are rendered with the native `shap` package (beeswarm / bar / violin and waterfall / force / bar); SHAP values are cached to CSV and reused across runs
 - **Configurable explanation display** — view local explanations averaged across the model ensemble or as one plot per model × molecule, with selectable attribution normalisation (local / per-model / global / none)
 - **Statistical model comparison** — pairwise McNemar (classification) and Wilcoxon signed-rank tests on absolute errors (regression) on the Analyse Results page; metric-level comparison across repeated splits with Wilcoxon or the Nadeau–Bengio corrected resampled t-test; multiple-comparison correction (Holm-Bonferroni, Bonferroni, Benjamini-Hochberg)
-- **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
 - **Single-command pipeline** — YAML config file drives the entire workflow; no code changes between experiments
 - **GUI-independent core** — all pipeline stages are importable from `polynet` without Streamlit

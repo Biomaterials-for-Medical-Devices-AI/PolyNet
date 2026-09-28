@@ -37,11 +37,9 @@ st.markdown(
     """
 In this section, you can explain the predictions of the GNN models. You can select the model you want to explain, the set of data you want to explain, and the specific datapoints you want to explain.
 
-We different explanation levels, including explaining general trends in the model, explanation of the molecular embedding, and the explanation of specific datapoints.
+We offer different explanation levels, including explaining general trends in the model and the explanation of specific datapoints.
 
 To explain the models or specific instances, you can select the explainability algorithm you want to use, the node features you want to explain, and the colors for the positive and negative explanations. The explanations will be displayed as plots.
-
-For the molecular embedding, you can choose what method of dimensionality reduction to use to get a 2D projection from them. Further, you can select from different options to colour the projection plot, giving insighits about how the model is organising the latent space.
 """
 )
 
