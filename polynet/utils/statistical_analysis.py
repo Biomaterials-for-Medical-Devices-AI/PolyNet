@@ -97,7 +97,13 @@ def metrics_pvalue_matrix(metrics_dict, test="wilcoxon"):
 
 def regression_pvalue_matrix(y_true, predictions, test="wilcoxon"):
     """
-    Compare regression models pairwise using statistical tests on residuals.
+    Compare regression models pairwise using paired tests on absolute errors.
+
+    For each sample the absolute error ``|y_true - y_pred|`` of each model is
+    computed, and the paired absolute errors of every pair of models are
+    compared. This tests for a difference in accuracy; comparing signed
+    residuals instead would only test for a difference in bias, so two
+    unbiased models of very different accuracy would look alike.
 
     Parameters
     ----------
@@ -106,32 +112,36 @@ def regression_pvalue_matrix(y_true, predictions, test="wilcoxon"):
     predictions : np.ndarray of shape (n_models, n_samples)
         Predictions from each model.
     test : str
-        Which test to use: 'wilcoxon' (default, non-parametric) or 'ttest'.
+        Which paired test to apply to the absolute errors: 'wilcoxon'
+        (default, Wilcoxon signed-rank, non-parametric) or 'ttest'
+        (paired t-test).
 
     Returns
     -------
     p_matrix : np.ndarray of shape (n_models, n_models)
-        Matrix of p-values for pairwise model comparisons.
+        Symmetric matrix of p-values for pairwise model comparisons, with
+        ones on the diagonal.
     """
+    if test not in ("wilcoxon", "ttest"):
+        raise ValueError("test must be 'wilcoxon' or 'ttest'")
 
+    y_true = np.asarray(y_true, dtype=float)
+    predictions = np.asarray(predictions, dtype=float)
     n_models = predictions.shape[0]
     p_matrix = np.ones((n_models, n_models))
 
     for i in range(n_models):
-        for j in range(n_models):
-            if i != j:
-                # residuals (errors) for each model
-                e1 = y_true - predictions[i]
-                e2 = y_true - predictions[j]
+        for j in range(i + 1, n_models):
+            # absolute errors for each model
+            e1 = np.abs(y_true - predictions[i])
+            e2 = np.abs(y_true - predictions[j])
 
-                if test == "wilcoxon":
-                    stat, p = wilcoxon(e1, e2)
-                elif test == "ttest":
-                    stat, p = ttest_rel(e1, e2)
-                else:
-                    raise ValueError("test must be 'wilcoxon' or 'ttest'")
+            if test == "wilcoxon":
+                _, p = wilcoxon(e1, e2)
+            else:
+                _, p = ttest_rel(e1, e2)
 
-                p_matrix[i, j] = p
+            p_matrix[i, j] = p_matrix[j, i] = p
 
     return p_matrix
 
