@@ -164,19 +164,27 @@ training:
   epochs: 250
 
 # -----------------------------------------------------------------------------
-# TML models
-# Traditional ML models trained on descriptor vectors.
-# Only active when representations.descriptors.enabled is true.
-# Leave the block empty ({}) to trigger GridSearchCV HPO.
+# Feature preprocessing (pipeline-wide)
+# The scaler applies to every tabular feature: the molecular descriptors of the
+# TML models AND the representations.polymer_descriptors concatenated to the GNN
+# graph embedding. It is fitted on the training set of each split.
+# Selectors (feature selection) apply to TML models only.
+# Only needed when TML models are trained or GNNs use polymer_descriptors.
 # -----------------------------------------------------------------------------
 feature_preprocessing:
-  scaler: "standard_scaler"
+  scaler: "standard_scaler"   # no_transformation | standard_scaler | min_max_scaler | robust_scaler | power_transformer | quantile_transformer | normalizer
   selectors:
     variance:
       threshold: 0.05
     correlation:
       threshold: 0.95
 
+# -----------------------------------------------------------------------------
+# TML models
+# Traditional ML models trained on descriptor vectors.
+# Only active when representations.descriptors.enabled is true.
+# Leave the block empty ({}) to trigger GridSearchCV HPO.
+# -----------------------------------------------------------------------------
 tml_models:
   train_tml: true
 
