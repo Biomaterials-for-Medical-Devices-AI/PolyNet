@@ -14,9 +14,9 @@ YAML layout::
       # "all" explains every trained architecture.
       models: "all"
 
-      # Which bootstrap iterations to explain (0-based indices matching training).
+      # Which splits to explain, numbered from 1 like the model files (GCN_1, ...).
       # "all" explains every trained iteration.
-      # [0, 2] explains only iterations 0 and 2.
+      # [1, 3] explains only splits 1 and 3.
       bootstraps: "all"
 
       # Molecular fragmentation strategy.
@@ -56,7 +56,7 @@ from polynet.config.enums import (
     FragmentationMethod,
     ImportanceNormalisationMethod,
 )
-from polynet.config.schemas.base import PolynetBaseModel
+from polynet.config.schemas.base import PolynetBaseModel, ids_as_strings
 
 
 class ExplainabilityConfig(PolynetBaseModel):
@@ -74,11 +74,11 @@ class ExplainabilityConfig(PolynetBaseModel):
         ``gnn_training.gnn_convolutional_layers`` keys, e.g. ``GCN``).
         Use ``"all"`` to explain every trained architecture.
     bootstraps:
-        Bootstrap iteration indices to explain (0-based, matching the
-        training loop).  Use ``"all"`` for all iterations, or supply a
-        list such as ``[0, 2]``.  Combined with ``models`` as a
-        cross-product — e.g. ``models: [GCN, GAT]`` × ``bootstraps: [0, 2]``
-        explains GCN_0, GCN_2, GAT_0, GAT_2.
+        Split numbers to explain, counted from 1 like the model files
+        (``GCN_1``) and ``metrics.json``.  Use ``"all"`` for all splits, or
+        supply a list such as ``[1, 3]``.  Combined with ``models`` as a
+        cross-product — e.g. ``models: [GCN, GAT]`` × ``bootstraps: [1, 3]``
+        explains GCN_1, GCN_3, GAT_1, GAT_3.
     fragmentation:
         Fragmentation strategy used to decompose monomers into fragments.
     explain_set:
@@ -111,6 +111,11 @@ class ExplainabilityConfig(PolynetBaseModel):
     plot_type: AttributionPlotType = AttributionPlotType.Ridge
     top_n: int | None = 10
     local_explain_mol_ids: list[str] | None = None
+
+    @field_validator("local_explain_mol_ids", mode="before")
+    @classmethod
+    def mol_ids_as_strings(cls, value):
+        return ids_as_strings(value)
 
     @field_validator("algorithm")
     @classmethod

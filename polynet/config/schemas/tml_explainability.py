@@ -16,7 +16,7 @@ YAML layout::
       # "all" explains every trained descriptor.
       representations: "all"
 
-      # Bootstrap iteration indices to explain (0-based).
+      # Splits to explain, numbered from 1 like the model files.
       # "all" explains every trained iteration.
       bootstraps: "all"
 
@@ -51,7 +51,9 @@ from __future__ import annotations
 from typing import Literal, Union
 
 from polynet.config.enums import ImportanceNormalisationMethod, ShapGlobalPlotType
-from polynet.config.schemas.base import PolynetBaseModel
+from pydantic import field_validator
+
+from polynet.config.schemas.base import PolynetBaseModel, ids_as_strings
 
 
 class TMLExplainabilityConfig(PolynetBaseModel):
@@ -69,8 +71,9 @@ class TMLExplainabilityConfig(PolynetBaseModel):
         Descriptor names to explain (e.g. ``["morgan", "rdkit"]``).
         Use ``"all"`` to explain every trained descriptor.
     bootstraps:
-        Bootstrap iteration indices to explain (0-based, matching training).
-        Use ``"all"`` for all iterations, or supply a list such as ``[0, 2]``.
+        Split numbers to explain, counted from 1 like the model files
+        (``random_forest-rdkit_1``) and ``metrics.json``.  Use ``"all"`` for
+        all splits, or supply a list such as ``[1, 3]``.
     explain_set:
         Which data split to draw samples from for the global distribution
         plot.  ``"all"`` takes the union of train, validation, and test sets
@@ -106,3 +109,8 @@ class TMLExplainabilityConfig(PolynetBaseModel):
     top_n: int | None = 10
     local_explain_sample_ids: list[str] | None = None
     local_plot_type: Literal["waterfall", "force", "bar"] = "waterfall"
+
+    @field_validator("local_explain_sample_ids", mode="before")
+    @classmethod
+    def sample_ids_as_strings(cls, value):
+        return ids_as_strings(value)
