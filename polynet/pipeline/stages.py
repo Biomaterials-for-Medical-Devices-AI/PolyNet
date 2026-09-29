@@ -1118,6 +1118,11 @@ def run_explainability(
         Per-fragment attribution table for each molecule.
     """
     from polynet.explainability import compute_global_attribution, compute_local_attribution
+    from polynet.explainability.selection import (
+        match_dataset_ids,
+        select_splits,
+        split_index_of_model,
+    )
     from polynet.visualization.utils import save_plot
 
     explain_dir = out_dir / "explanations"
@@ -1129,16 +1134,7 @@ def run_explainability(
     # ------------------------------------------------------------------
     # 1. Resolve which model instances to explain
     # ------------------------------------------------------------------
-    if exp_cfg.bootstraps == "all":
-        selected_iters = set(range(n_iters))
-    else:
-        selected_iters = {i for i in exp_cfg.bootstraps if i < n_iters}
-        invalid = set(exp_cfg.bootstraps) - selected_iters
-        if invalid:
-            logger.warning(
-                f"Bootstrap indices {sorted(invalid)} are out of range "
-                f"(only {n_iters} iteration(s) trained). They will be skipped."
-            )
+    selected_splits = select_splits(exp_cfg.bootstraps, n_iters)
 
     if exp_cfg.models == "all":
         selected_archs = {key.split("_", 1)[0] for key in trained_models}
@@ -1156,7 +1152,8 @@ def run_explainability(
     models_to_explain = {
         key: model
         for key, model in trained_models.items()
-        if key.split("_", 1)[0] in selected_archs and int(key.split("_", 1)[1]) in selected_iters
+        if key.split("_", 1)[0] in selected_archs
+        and split_index_of_model(key) in selected_splits
     }
 
     if not models_to_explain:
@@ -1178,7 +1175,7 @@ def run_explainability(
     mol_id_set: set[str] = set()
 
     def _collect(idx_lists):
-        for i in sorted(selected_iters):
+        for i in selected_splits:
             if i < len(idx_lists):
                 mol_id_set.update(str(idx) for idx in idx_lists[i])
 
@@ -1189,7 +1186,7 @@ def run_explainability(
     if exp_cfg.explain_set in ("validation", "all"):
         _collect(val_idxs)
 
-    explain_mol_ids = sorted(mol_id_set)
+    explain_mol_ids = match_dataset_ids(dataset, sorted(mol_id_set), "molecule")
     logger.info(f"Explaining {len(explain_mol_ids)} molecule(s) from '{exp_cfg.explain_set}' set.")
 
     if not explain_mol_ids:
@@ -1231,7 +1228,9 @@ def run_explainability(
         logger.info("No local_explain_mol_ids set — skipping per-molecule heatmaps.")
         return
 
-    local_mol_ids = [str(m) for m in exp_cfg.local_explain_mol_ids]
+    local_mol_ids = match_dataset_ids(
+        dataset, exp_cfg.local_explain_mol_ids, "local_explain_mol_ids"
+    )
     logger.info(
         f"Computing per-molecule attribution heatmaps for {len(local_mol_ids)} molecule(s)…"
     )
@@ -1309,6 +1308,7 @@ def run_tml_explainability(
         compute_global_shap_attribution,
         compute_local_shap_attribution,
     )
+    from polynet.explainability.selection import select_splits, split_index_of_model
     from polynet.visualization.utils import save_plot
 
     explain_dir = out_dir / "explanations" / "tml"
@@ -1320,21 +1320,9 @@ def run_tml_explainability(
     # ------------------------------------------------------------------
     # 1. Filter models by config
     # ------------------------------------------------------------------
-    if tml_exp_cfg.bootstraps == "all":
-        selected_iters = set(range(n_iters))
-    else:
-        selected_iters = {i for i in tml_exp_cfg.bootstraps if i < n_iters}
-        invalid = set(tml_exp_cfg.bootstraps) - selected_iters
-        if invalid:
-            logger.warning(
-                f"Bootstrap indices {sorted(invalid)} are out of range "
-                f"(only {n_iters} iteration(s) trained). They will be skipped."
-            )
+    selected_splits = select_splits(tml_exp_cfg.bootstraps, n_iters)
 
     # Parse model log names: "{ModelType}-{descriptor}_{iter}"
-    def _iter_of(key: str) -> int:
-        return int(key.rsplit("_", 1)[1])
-
     def _model_type_of(key: str) -> str:
         return key.split("-", 1)[0]
 
@@ -1373,7 +1361,7 @@ def run_tml_explainability(
         for key, model in tml_trained.items()
         if _model_type_of(key) in selected_model_types
         and _descriptor_of(key) in selected_reprs
-        and _iter_of(key) in selected_iters
+        and split_index_of_model(key) in selected_splits
     }
 
     if not models_to_explain:
@@ -1395,7 +1383,7 @@ def run_tml_explainability(
     sample_id_set: set[str] = set()
 
     def _collect(idx_lists):
-        for i in sorted(selected_iters):
+        for i in selected_splits:
             if i < len(idx_lists):
                 sample_id_set.update(str(idx) for idx in idx_lists[i])
 
