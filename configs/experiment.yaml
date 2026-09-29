@@ -246,12 +246,12 @@ explainability:
   models: "all"
   # models: [GCN, GAT]
 
-  # Which bootstrap iteration indices to explain (0-based, matching training).
-  # "all" explains every trained iteration.
+  # Which splits to explain, numbered from 1 like the model files (GCN_1, GCN_2, ...).
+  # "all" explains every trained split.
   # Combined with models as a cross-product:
-  #   models: [GCN, GAT] + bootstraps: [0, 2]  →  GCN_0, GCN_2, GAT_0, GAT_2
+  #   models: [GCN, GAT] + bootstraps: [1, 3]  →  GCN_1, GCN_3, GAT_1, GAT_3
   bootstraps: "all"
-  # bootstraps: [0, 1]
+  # bootstraps: [1, 2]
 
   # Molecular fragmentation strategy.
   fragmentation: "brics"             # brics | murcko_scaffold
@@ -293,8 +293,8 @@ tml_explainability:
   # "all" explains every trained descriptor.
   representations: "all"
 
-  # Bootstrap iteration indices to explain (0-based).
-  # "all" explains every trained iteration.
+  # Splits to explain, numbered from 1 like the model files (e.g. random_forest-rdkit_1).
+  # "all" explains every trained split.
   bootstraps: "all"
 
   # Data split to draw samples from for the global distribution plot.

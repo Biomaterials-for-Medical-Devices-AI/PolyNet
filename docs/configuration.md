@@ -522,7 +522,8 @@ explainability:
   # Which GNN architectures to explain (must match gnn_training keys).
   models: "all"             # or: [GCN, GAT]
 
-  # Which bootstrap iterations to explain (1-based, matching model filenames).
+  # Which splits to explain, numbered from 1 like the model files (e.g. GCN_1),
+  # metrics.json and the bootstrap_iteration column.
   bootstraps: "all"         # or: [1, 2]
 
   fragmentation: "brics"    # brics | murcko_scaffold
@@ -556,7 +557,8 @@ tml_explainability:
   # Which descriptor representations to explain (must match representations.molecular_descriptors keys).
   representations: "all"    # or: [Morgan, RDKit]
 
-  # Which bootstrap iterations to explain (1-based, matching model filenames).
+  # Which splits to explain, numbered from 1 like the model files (e.g. GCN_1),
+  # metrics.json and the bootstrap_iteration column.
   bootstraps: "all"         # or: [1, 2]
 
   explain_set: "test"       # train | validation | test | all  — controls the global summary plot
