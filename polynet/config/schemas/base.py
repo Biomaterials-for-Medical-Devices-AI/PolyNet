@@ -59,6 +59,18 @@ class HyperparamOptimConfig(BaseModel):
     )
 
 
+def ids_as_strings(value: Any) -> Any:
+    """
+    Turn a list of sample IDs into strings (``pydantic`` "before" validator helper).
+
+    YAML reads unquoted numeric IDs (``[0, 12]``) as integers; sample IDs are
+    compared as strings, so both ``[0, 12]`` and ``["0", "12"]`` are accepted.
+    """
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return value
+
+
 def check_grid_parameters(
     where: str, params: dict[str, Any], allowed: set[str], reserved: frozenset[str]
 ) -> None:
