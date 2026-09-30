@@ -78,7 +78,10 @@ from polynet.data.preprocessing import class_balancer
 
 
 def _raw_split(
-    data: pd.DataFrame, test_size: float, random_state: int, stratify: pd.Series | None = None
+    data: pd.DataFrame,
+    test_size: float | int,
+    random_state: int,
+    stratify: pd.Series | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Thin wrapper around ``sklearn.train_test_split`` that preserves the
@@ -86,6 +89,51 @@ def _raw_split(
     throughout the pipeline.
     """
     return train_test_split(data, test_size=test_size, random_state=random_state, stratify=stratify)
+
+
+def validation_set_size(
+    n_remaining: int, n_total: int, val_ratio: float, test_ratio: float
+) -> int:
+    """
+    Number of validation samples to draw from the data left after the test split.
+
+    ``val_ratio`` and ``test_ratio`` are fractions of the full dataset, so
+    ``test_ratio=0.1, val_ratio=0.1`` gives an 80/10/10 split. The validation
+    set is therefore ``val_ratio / (1 − test_ratio)`` of the remaining data.
+    When class balancing has removed samples from the remaining data, the same
+    fraction is applied to what is left, so training and validation keep the
+    requested train:validation proportion.
+
+    Parameters
+    ----------
+    n_remaining : int
+        Number of samples left after holding out the test set (and after
+        balancing, if any).
+    n_total : int
+        Number of samples in the full dataset.
+    val_ratio : float
+        Fraction of the full dataset for validation.
+    test_ratio : float
+        Fraction of the full dataset for testing.
+
+    Returns
+    -------
+    int
+        Validation set size, at least 1 and leaving at least 1 training sample.
+
+    Raises
+    ------
+    ValueError
+        If fewer than 2 samples remain, so training and validation cannot both
+        be non-empty.
+    """
+    if n_remaining < 2:
+        raise ValueError(
+            f"Only {n_remaining} sample(s) left after holding out the test set "
+            f"(dataset of {n_total}); cannot create training and validation sets."
+        )
+    n_val = round(n_remaining * val_ratio / (1.0 - test_ratio))
+    return min(max(n_val, 1), n_remaining - 1)
 
 
 def get_data_split_indices(
@@ -208,7 +256,8 @@ def _train_val_test_indices(
     1. hold out the test set from the full dataset;
     2. optionally balance the remaining data by undersampling its majority
        class to ``train_set_balance``;
-    3. carve the validation set out of the (balanced) remaining data.
+    3. carve the validation set out of the (balanced) remaining data; its size
+       is ``val_ratio`` of the full dataset (see ``validation_set_size``).
 
     As a result, training and validation sets are both balanced, while the
     test set keeps the original class distribution. This follows the
@@ -243,10 +292,11 @@ def _train_val_test_indices(
                 random_state=seed,
             )
 
-        # Step 3: carve validation set out of training data
+        # Step 3: carve validation set out of training data. val_ratio is a
+        # fraction of the full dataset (80/10/10 means 10 % validation).
         train_data, val_data = _raw_split(
             data=train_data,
-            test_size=val_ratio,
+            test_size=validation_set_size(len(train_data), len(data), val_ratio, test_ratio),
             random_state=seed,
             stratify=train_data[target_variable_col] if use_stratify else None,
         )

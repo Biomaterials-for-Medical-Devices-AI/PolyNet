@@ -152,7 +152,7 @@ def _make_split_cfg():
         split_type=SplitType.TrainValTest,
         split_method=SplitMethod.Random,
         test_ratio=0.2,
-        val_ratio=0.2,
+        val_ratio=0.16,
         n_bootstrap_iterations=1,
     )
 

@@ -125,14 +125,23 @@ splitting:
   split_type: "train_val_test"     # the only implemented split type
   split_method: "random"           # random | stratified (by target; recommended for classification)
   n_bootstrap_iterations: 3        # number of repeated random splits
-  val_ratio: 0.15
-  test_ratio: 0.15
+  val_ratio: 0.15                  # fraction of the full dataset (70/15/15 here)
+  test_ratio: 0.15                 # fraction of the full dataset
   train_set_balance: null          # Optional: balance training set (0.0–1.0)
 ```
 
 **Split type.** Only `train_val_test` is implemented: for each of the
 `n_bootstrap_iterations` repeated random splits (seed `random_seed + i`), a test set of
 `test_ratio` is held out and a validation set of `val_ratio` is drawn from the rest.
+
+**Split ratios.** `test_ratio` and `val_ratio` are both fractions of the **full
+dataset**, and the training set gets the rest: `test_ratio: 0.1` and `val_ratio: 0.1`
+give an 80/10/10 split. Their sum must be below 1. Sizes are rounded to whole samples.
+
+> **Changed behaviour.** Earlier versions applied `val_ratio` to the data left after
+> the test split, so `test_ratio: 0.15, val_ratio: 0.15` gave ≈ 72/13/15. To reproduce
+> the splits of an older experiment, use `val_ratio = old_val_ratio × (1 − test_ratio)`
+> (e.g. 0.15 × 0.85 = 0.1275).
 The other values of the `SplitType` enum (`train_test`, `cross_validation`,
 `nested_cross_validation`, `leave_one_out`) are reserved for future work: a config that
 uses them is rejected at load time with an error explaining that only `train_val_test`
@@ -143,13 +152,14 @@ is available. The GUI offers only `train_val_test`.
 1. the test set is held out from the full dataset;
 2. the remaining data is balanced by randomly undersampling the majority class until
    the minority class makes up `train_set_balance` of it (e.g. `0.5` → 50/50);
-3. the validation set is drawn from this balanced data.
+3. the validation set is drawn from this balanced data, keeping the requested
+   training:validation proportion (`(1 − test_ratio − val_ratio) : val_ratio`).
 
 Training and validation sets are therefore **both balanced**, and only the **test set
 keeps the original class distribution**. This follows the protocol of
 *ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163*. Undersampling uses the split's seed, so splits are reproducible. Note that
 undersampling removes samples before the validation split, so the training and
-validation sets are smaller than `1 − test_ratio` of the dataset would suggest.
+validation sets are smaller than their ratios of the full dataset would suggest.
 
 ## `gnn_training`
 

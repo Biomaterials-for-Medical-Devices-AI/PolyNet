@@ -119,8 +119,8 @@ splitting:
   split_type: "train_val_test"     # the only implemented split type
   split_method: "random"           # random | stratified (by target; recommended for classification)
   train_set_balance: null
-  test_ratio: 0.15
-  val_ratio: 0.15
+  test_ratio: 0.15                 # fraction of the full dataset
+  val_ratio: 0.15                  # fraction of the full dataset (→ 70/15/15 split)
   n_bootstrap_iterations: 2        # number of train/val/test splits to generate
 
   # Optional: balance imbalanced binary classification data by undersampling the

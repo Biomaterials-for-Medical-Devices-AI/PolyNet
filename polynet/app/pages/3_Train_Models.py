@@ -407,7 +407,7 @@ if experiment_name:
         )
 
     st.markdown("## Data Splitting Options")
-    split_data_form(problem_type=data_opts.problem_type)
+    valid_split = split_data_form(problem_type=data_opts.problem_type)
 
     # ------------------------------------------------------------------
     # Target variable scaling (regression only)
@@ -417,7 +417,7 @@ if experiment_name:
         st.markdown("## Target Variable Scaling")
         target_cfg = target_transform_widget()
 
-    if gnn_conv_params or tml_models:
+    if (gnn_conv_params or tml_models) and valid_split:
         disabled = False
     else:
         disabled = True

@@ -762,7 +762,15 @@ def GNN_shared_params_form(
     return shared_params
 
 
-def split_data_form(problem_type: ProblemType):
+def split_data_form(problem_type: ProblemType) -> bool:
+    """
+    Data splitting widgets.
+
+    Returns
+    -------
+    bool
+        Whether the chosen ratios leave data for training.
+    """
 
     split_type = st.selectbox(
         "Select the split method",
@@ -811,18 +819,36 @@ def split_data_form(problem_type: ProblemType):
             key=GeneralConfigStateKeys.BootstrapIterations,
         )
 
-    st.slider(
+    test_ratio = st.slider(
         "Select the test split ratio",
         min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.TestSize,
+        help="Fraction of the full dataset held out for testing.",
     )
 
-    st.slider(
+    val_ratio = st.slider(
         "Select the validation split ratio",
         min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.ValidationSize,
+        help="Fraction of the full dataset used for validation (e.g. test 0.1 and "
+        "validation 0.1 give an 80/10/10 split).",
     )
+
+    train_ratio = 1.0 - test_ratio - val_ratio
+    if train_ratio <= 0:
+        st.error(
+            f"Test ({test_ratio:.0%}) and validation ({val_ratio:.0%}) ratios add up to "
+            f"{test_ratio + val_ratio:.0%}, leaving no data for training. Their sum must be "
+            "below 100%."
+        )
+        return False
+
+    st.caption(
+        f"Split: {train_ratio:.0%} training / {val_ratio:.0%} validation / "
+        f"{test_ratio:.0%} test of the full dataset."
+    )
+    return True

@@ -36,9 +36,10 @@ class SplitConfig(PolynetBaseModel):
         Fraction of the full dataset reserved for the test set.
         Must be in (0, 1).
     val_ratio:
-        Fraction of the full dataset reserved for the validation set.
-        Must be in (0, 1). Only used when ``split_type`` includes a
-        validation split (e.g. TrainValTest).
+        Fraction of the full dataset reserved for the validation set, so
+        ``test_ratio=0.1, val_ratio=0.1`` gives an 80/10/10 split. Must be in
+        (0, 1), and ``test_ratio + val_ratio`` must be below 1. Only used when
+        ``split_type`` includes a validation split (e.g. TrainValTest).
     random_seed:
         Global random seed for reproducibility across all stochastic steps.
     n_bootstrap_iterations:
@@ -57,9 +58,14 @@ class SplitConfig(PolynetBaseModel):
         description="Minority-class proportion of the training and validation sets after "
         "balancing (the test set keeps the original distribution).",
     )
-    test_ratio: float = Field(..., gt=0.0, lt=1.0, description="Fraction of data for the test set.")
+    test_ratio: float = Field(
+        ..., gt=0.0, lt=1.0, description="Fraction of the full dataset for the test set."
+    )
     val_ratio: float = Field(
-        default=0.1, gt=0.0, lt=1.0, description="Fraction of data for the validation set."
+        default=0.1,
+        gt=0.0,
+        lt=1.0,
+        description="Fraction of the full dataset for the validation set.",
     )
     n_bootstrap_iterations: int = Field(
         default=1, ge=1, description="Number of bootstrap repetitions."
