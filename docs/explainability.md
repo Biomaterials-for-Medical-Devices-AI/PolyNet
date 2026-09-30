@@ -55,6 +55,13 @@ Implementation notes:
 
 - Masking deletes (rather than zeros) the fragment's nodes from pooling, so the mean
   denominator / max candidate set reflect only the remaining nodes.
+- The remaining nodes are pooled with the model's own pooling step, including its
+  monomer weighting (`apply_weighting_to_graph`): the weighted mean of
+  `before_pooling` and the per-monomer pooling of `per_monomer_pooling`. Masking
+  nothing therefore gives exactly the model's prediction, so the attribution only
+  reflects the removed fragment. (Before this was fixed, masked copolymers were
+  pooled with a plain unweighted pool, which added an offset unrelated to the
+  fragment.)
 - Atom indices are mapped through the graph's per-node `monomer_id`, so attribution
   works correctly even when PSMILES wildcard (`*`) atoms were stripped during
   featurisation and the graph has fewer nodes than the RDKit molecule.
@@ -159,7 +166,8 @@ Attributions are computed once and reused:
 
 - **GNN** — raw masking attributions are written to a JSON cache under
   `explanations/`. Re-running reuses cached `(model, molecule, fragmentation, class)`
-  entries.
+  entries. The cache records the version of the masking computation; a cache written
+  by an older version is discarded (with a warning) and recomputed.
 - **TML** — SHAP values are written to `explanations/shap_{descriptor}.csv` (one file
   per descriptor) and reused on subsequent runs.
 

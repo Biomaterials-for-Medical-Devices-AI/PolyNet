@@ -63,8 +63,11 @@ from polynet.config.enums import (
 from polynet.config.paths import explanation_json_file_path, explanation_parent_directory
 from polynet.explainability.attributions import deep_update
 from polynet.explainability.masking import (
+    MASKING_CACHE_VERSION,
+    MASKING_CACHE_VERSION_KEY,
     calculate_masking_attributions,
     fragment_attributions_to_distribution,
+    load_masking_cache,
     merge_fragment_attributions,
 )
 from polynet.explainability.visualization import (
@@ -237,7 +240,7 @@ def compute_and_cache_masking(
     explanation_file = explanation_json_file_path(experiment_path=cache_root)
     if explanation_file.exists():
         with open(explanation_file) as f:
-            existing_explanations = json.load(f)
+            existing_explanations = load_masking_cache(json.load(f))
     else:
         existing_explanations = {}
 
@@ -256,6 +259,7 @@ def compute_and_cache_masking(
     )
 
     combined_explanations = deep_update(existing_explanations, node_masks)
+    combined_explanations[MASKING_CACHE_VERSION_KEY] = MASKING_CACHE_VERSION
     with open(explanation_file, "w") as f:
         json.dump(combined_explanations, f, indent=4)
 
