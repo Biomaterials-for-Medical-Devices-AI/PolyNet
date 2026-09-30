@@ -1120,6 +1120,7 @@ def run_explainability(
     from polynet.explainability import compute_global_attribution, compute_local_attribution
     from polynet.explainability.selection import (
         match_dataset_ids,
+        samples_per_model,
         select_splits,
         split_index_of_model,
     )
@@ -1208,6 +1209,8 @@ def run_explainability(
         target_class=exp_cfg.target_class,
         top_n=exp_cfg.top_n,
         plot_type=exp_cfg.plot_type,
+        # Each model explains only its own split's explain_set molecules.
+        mols_per_model=samples_per_model(models_to_explain, split_indexes, exp_cfg.explain_set),
     )
 
     if global_result.warning:
@@ -1308,7 +1311,13 @@ def run_tml_explainability(
         compute_global_shap_attribution,
         compute_local_shap_attribution,
     )
-    from polynet.explainability.selection import select_splits, split_index_of_model
+    from polynet.explainability.selection import (
+        TML_VALIDATION_IS_TRAINING_WARNING,
+        samples_per_model,
+        select_splits,
+        split_index_of_model,
+        tml_explain_set_includes_validation,
+    )
     from polynet.visualization.utils import save_plot
 
     explain_dir = out_dir / "explanations" / "tml"
@@ -1398,6 +1407,8 @@ def run_tml_explainability(
     logger.info(
         f"Explaining {len(explain_sample_ids)} sample(s) from '{tml_exp_cfg.explain_set}' set."
     )
+    if tml_explain_set_includes_validation(tml_exp_cfg.explain_set):
+        logger.warning(TML_VALIDATION_IS_TRAINING_WARNING)
 
     if not explain_sample_ids:
         logger.warning("No samples to explain. Skipping TML explainability stage.")
@@ -1417,6 +1428,10 @@ def run_tml_explainability(
         target_class=tml_exp_cfg.target_class,
         top_n=tml_exp_cfg.top_n,
         plot_type=tml_exp_cfg.plot_type,
+        # Each model explains only its own split's explain_set samples.
+        samples_per_model=samples_per_model(
+            models_to_explain, split_indexes, tml_exp_cfg.explain_set
+        ),
     )
 
     for descriptor, result in global_results.items():

@@ -262,7 +262,12 @@ def compute_and_cache_masking(
     return combined_explanations
 
 
-def build_display_data(combined_explanations: dict, models: dict, mol_ids: list) -> dict:
+def build_display_data(
+    combined_explanations: dict,
+    models: dict,
+    mol_ids: list,
+    mols_per_model: dict[str, set[str]] | None = None,
+) -> dict:
     """
     Filter the full cache to only the requested models and molecule IDs.
 
@@ -277,6 +282,10 @@ def build_display_data(combined_explanations: dict, models: dict, mol_ids: list)
         ``{"{model_name}_{number}": model}`` — only these model instances are kept.
     mol_ids:
         Only molecules whose ID appears in this list are included.
+    mols_per_model:
+        Optional ``{model_log_name: {molecule IDs}}`` further restricting each
+        model to its own molecules (e.g. the test set of its split, see
+        ``polynet.explainability.selection.samples_per_model``).
 
     Returns
     -------
@@ -287,9 +296,12 @@ def build_display_data(combined_explanations: dict, models: dict, mol_ids: list)
     display_data: dict = {}
     for model_log_name in models.keys():
         model_name, model_number = model_log_name.split("_", 1)
+        allowed = mol_id_set
+        if mols_per_model is not None:
+            allowed = mol_id_set & {str(m) for m in mols_per_model.get(model_log_name, ())}
         mol_cache = combined_explanations.get(model_name, {}).get(model_number, {})
         for mol_id, mol_entry in mol_cache.items():
-            if str(mol_id) in mol_id_set:
+            if str(mol_id) in allowed:
                 (display_data.setdefault(model_name, {}).setdefault(model_number, {}))[
                     mol_id
                 ] = mol_entry
@@ -366,6 +378,7 @@ def compute_global_attribution(
     top_n: int | None = None,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     cache_root: Path | None = None,
+    mols_per_model: dict[str, set[str]] | None = None,
 ) -> GlobalAttributionResult:
     """
     Compute the population-level fragment attribution plot.
@@ -400,6 +413,11 @@ def compute_global_attribution(
         If set, show only the top-N and bottom-N fragments by mean attribution.
     plot_type:
         ``Ridge`` (KDE rows), ``Bar`` (mean ± CI), or ``Strip`` (jittered points).
+    mols_per_model:
+        Optional ``{model_log_name: {molecule IDs}}``: each model only explains
+        the molecules listed for it (intersected with ``explain_mols``), e.g.
+        the test set of its own split. ``None`` explains every molecule with
+        every model.
 
     Returns
     -------
@@ -407,18 +425,34 @@ def compute_global_attribution(
         Contains the figure and summary statistics.  Check ``.warning`` before
         rendering the figure — it is ``None`` when attributions were found.
     """
-    combined_explanations = compute_and_cache_masking(
-        models=models,
-        experiment_path=experiment_path,
-        dataset=dataset,
-        explain_mols=explain_mols,
-        problem_type=problem_type,
-        fragmentation_approach=fragmentation_approach,
-        target_class=target_class,
-        cache_root=cache_root,
-    )
+    # Compute masking only for the (model, molecule) pairs that will be shown:
+    # models sharing the same molecule list are computed together. Each call
+    # returns the whole (updated) cache, so the last one holds every group.
+    groups: dict[tuple, list[str]] = {}
+    for key in models:
+        mols = (
+            tuple(explain_mols)
+            if mols_per_model is None
+            else tuple(m for m in explain_mols if str(m) in mols_per_model.get(key, set()))
+        )
+        groups.setdefault(mols, []).append(key)
 
-    display_data = build_display_data(combined_explanations, models, explain_mols)
+    combined_explanations: dict = {}
+    for mols, keys in groups.items():
+        if not mols:
+            continue
+        combined_explanations = compute_and_cache_masking(
+            models={k: models[k] for k in keys},
+            experiment_path=experiment_path,
+            dataset=dataset,
+            explain_mols=list(mols),
+            problem_type=problem_type,
+            fragmentation_approach=fragmentation_approach,
+            target_class=target_class,
+            cache_root=cache_root,
+        )
+
+    display_data = build_display_data(combined_explanations, models, explain_mols, mols_per_model)
 
     fk = _frag_key(fragmentation_approach)
     ck = _class_key(target_class)

@@ -42,8 +42,13 @@ def explain_tml_global(
     plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
     cache_root: Path | None = None,
     target_col: str | None = None,
+    samples_per_model: dict[str, set[str]] | None = None,
 ) -> None:
-    """Compute and render the global SHAP summary (one section per descriptor)."""
+    """Compute and render the global SHAP summary (one section per descriptor).
+
+    ``samples_per_model`` restricts each model to its own samples (e.g. the
+    test set of its split); ``None`` explains every sample with every model.
+    """
     results: dict[str, GlobalAttributionResult] = compute_global_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,
@@ -58,6 +63,7 @@ def explain_tml_global(
         plot_type=plot_type,
         cache_root=cache_root,
         target_col=target_col,
+        samples_per_model=samples_per_model,
     )
 
     for descriptor, result in results.items():

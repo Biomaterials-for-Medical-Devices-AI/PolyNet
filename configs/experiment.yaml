@@ -298,6 +298,8 @@ tml_explainability:
   bootstraps: "all"
 
   # Data split to draw samples from for the global distribution plot.
+  # TML models are trained on train + validation, so "validation" (and "all")
+  # explain training data; use "test" for unseen samples.
   explain_set: "test"              # train | validation | test | all
 
   # Normalisation applied to SHAP scores before plotting.

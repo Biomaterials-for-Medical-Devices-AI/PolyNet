@@ -80,6 +80,32 @@ def match_dataset_ids(dataset, ids: list, what: str) -> list:
 _SET_POSITIONS = {"train": 0, "validation": 1, "test": 2}
 _GUI_SET_NAMES = {DataSet.Training, DataSet.Validation, DataSet.Test}
 
+TML_VALIDATION_IS_TRAINING_WARNING = (
+    "Traditional ML models are trained on the training and validation samples "
+    "together, so validation samples are not held out for these models: their SHAP "
+    "values describe data the model was fitted on. Use the test set to explain "
+    "predictions on unseen samples."
+)
+
+
+def tml_explain_set_includes_validation(explain_set: str | None) -> bool:
+    """
+    Whether a TML explain set contains validation samples.
+
+    Parameters
+    ----------
+    explain_set : str or None
+        CLI name (``"train"``, ``"validation"``, ``"test"``, ``"all"``) or GUI
+        label (``DataSet.Validation``, ``"All"``, ...).
+
+    Returns
+    -------
+    bool
+        True for the validation set and for ``"all"``; these samples were part
+        of TML training.
+    """
+    return explain_set is not None and str(explain_set).lower() in {"validation", "all"}
+
 
 def samples_per_model(model_keys, split_indexes: tuple, explain_set: str) -> dict[str, set[str]]:
     """

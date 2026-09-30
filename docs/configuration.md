@@ -527,7 +527,7 @@ explainability:
   bootstraps: "all"         # or: [1, 2]
 
   fragmentation: "brics"    # brics | murcko_scaffold
-  explain_set: "test"       # train | validation | test | all  — controls the global distribution plot
+  explain_set: "test"       # train | validation | test | all  — global plot; each model uses its own split's set
   normalisation: "per_model" # local | global | per_model | no_normalisation
   target_class: null        # null for regression; integer for classification
   plot_type: "ridge"        # ridge | bar | strip
@@ -561,7 +561,10 @@ tml_explainability:
   # metrics.json and the bootstrap_iteration column.
   bootstraps: "all"         # or: [1, 2]
 
-  explain_set: "test"       # train | validation | test | all  — controls the global summary plot
+  # train | validation | test | all  — global plot; each model uses its own split's set.
+  # TML models are trained on train + validation, so "validation" (and "all") explain
+  # training data; use "test" for unseen samples.
+  explain_set: "test"
   normalisation: "per_model" # local | global | per_model | no_normalisation
   target_class: null        # null for regression; integer class index for classification
   plot_type: "beeswarm"     # beeswarm | bar | violin  (native shap.summary_plot styles)

@@ -40,6 +40,17 @@ attributions are aggregated per fragment.
 `local_explain_mol_ids` selects which molecules get per-molecule heatmaps/CSVs (the
 local step is skipped entirely when `null`).
 
+**Each model explains only its own split.** Every model was trained on one repeated
+split, so in the global view a model only explains the `explain_set` molecules *of its
+own split* (e.g. its own test molecules) — never molecules that were in its training
+data. With several splits the distribution therefore pools each model's own held-out
+molecules. `explain_set: all` uses every molecule of the model's split. The same rule
+applies to the TML SHAP summary below, and to the GUI when a set (Training /
+Validation / Test) is selected; picking "All" or external data applies no restriction.
+Local (per-molecule) explanations are not restricted: they explain the molecules you
+list with every selected model, and the prediction breakdown shows which set the
+molecule was in for each model.
+
 Implementation notes:
 
 - Masking deletes (rather than zeros) the fragment's nodes from pooling, so the mean
@@ -71,6 +82,14 @@ Both views use the native `shap` package:
 
 `explain_set` selects the sample population for the global plot;
 `local_explain_sample_ids` selects which samples get per-instance plots.
+
+> **Warning — for TML, the validation set is training data.** Traditional ML models
+> are fitted on the training and validation samples together (the validation split
+> is only held out for GNNs). Explaining `explain_set: validation` (or `all`, or the
+> GUI "Validation" / "All" pills) therefore explains samples the TML model was
+> trained on, not held-out ones. Use `explain_set: test` to explain predictions on
+> unseen samples. The CLI logs and the GUI shows this warning when such a set is
+> selected.
 
 ## Normalisation strategies
 
