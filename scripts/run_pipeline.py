@@ -499,7 +499,12 @@ def main() -> None:
     # ------------------------------------------------------------------
     t0 = announce("4. Compute data splits")
     train_idxs, val_idxs, test_idxs = compute_data_splits(
-        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=random_seed, out_dir=out_dir
+        data=df,
+        data_cfg=data_cfg,
+        split_cfg=split_cfg,
+        random_seed=random_seed,
+        out_dir=out_dir,
+        weights_col=repr_cfg.weights_col,
     )
     split_indexes = (train_idxs, val_idxs, test_idxs)
     save_options(out_dir / "split_options.json", split_cfg)

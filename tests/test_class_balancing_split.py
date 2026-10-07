@@ -2,9 +2,9 @@
 tests/test_class_balancing_split.py
 ===================================
 Class balancing in TrainValTest splits follows ACS Appl. Mater. Interfaces
-2023, 15 (11), 14155–14163: the non-test data is balanced *before* the
-validation split, so training and validation are balanced and only the test
-set keeps the original class distribution.
+2023, 15 (11), 14155–14163: the training and validation sets are each
+balanced after the split, and only the test set keeps the original class
+distribution.
 """
 
 import logging

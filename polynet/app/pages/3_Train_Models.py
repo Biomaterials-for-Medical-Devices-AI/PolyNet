@@ -8,6 +8,7 @@ from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
     feature_transformer_widgets,
     gnn_optimisation_widgets,
+    sampling_fingerprint_from_state,
     split_data_form,
     target_transform_widget,
     train_GNN_models_form,
@@ -42,6 +43,7 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes
 from polynet.app.utils import save_data
+from polynet.config.enums import SplitSampler
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.schemas import (
@@ -118,6 +120,8 @@ def train_models(
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         n_bootstrap_iterations=st.session_state.get(GeneralConfigStateKeys.BootstrapIterations, 1),
+        sampler=st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random),
+        sampling_fingerprint=sampling_fingerprint_from_state(),
     )
     save_options(split_cfg_path, split_cfg)
     save_options(target_transform_opts_path, target_cfg)
@@ -139,6 +143,7 @@ def train_models(
         split_cfg=split_cfg,
         random_seed=general_experiment_options.random_seed,
         out_dir=experiment_path,
+        weights_col=representation_options.weights_col,
     )
 
     tml_cfg = (

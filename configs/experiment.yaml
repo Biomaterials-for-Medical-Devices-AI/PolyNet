@@ -123,10 +123,22 @@ splitting:
   val_ratio: 0.15                  # fraction of the full dataset (→ 70/15/15 split)
   n_bootstrap_iterations: 2        # number of train/val/test splits to generate
 
+  # astartes sampler drawing the sets (astartes default hyperparameters):
+  # random | kennard_stone | spxy | kmeans | optisim | target_property
+  sampler: "random"
+  # Fingerprint samplers (kennard_stone, spxy, kmeans, optisim) place each polymer by
+  # the ratio-weighted average of its monomers' fingerprints. Used for splitting only —
+  # it does not change the representations. Defaults: morgan, 2048, radius 3.
+  # sampling_fingerprint:
+  #   fingerprint: "morgan"          # morgan | rdkitfp | polybert
+  #   fp_size: 2048                  # morgan / rdkitfp only
+  #   radius: 3                      # morgan only
+
   # Optional: balance imbalanced binary classification data by undersampling the
-  # majority class to this minority proportion. Applied before the validation
-  # split: train and validation are balanced, the test set keeps the original
-  # distribution (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163).
+  # majority class to this minority proportion. Training and validation are each
+  # balanced after the split, the test set keeps the original distribution
+  # (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163). Use with
+  # split_method: stratified to keep the train:validation proportion.
   # train_set_balance: 0.5
 
 # -----------------------------------------------------------------------------

@@ -128,20 +128,73 @@ splitting:
   val_ratio: 0.15                  # fraction of the full dataset (70/15/15 here)
   test_ratio: 0.15                 # fraction of the full dataset
   train_set_balance: null          # Optional: balance training set (0.0–1.0)
+  sampler: "random"                # random | kennard_stone | spxy | kmeans | optisim | target_property
+  sampling_fingerprint:            # fingerprint samplers only; used for splitting only
+    fingerprint: "morgan"          # morgan | rdkitfp | polybert
+    fp_size: 2048                  # morgan / rdkitfp only
+    radius: 3                      # morgan only
 ```
 
 **Split type.** Only `train_val_test` is implemented: for each of the
-`n_bootstrap_iterations` repeated random splits (seed `random_seed + i`), a test set of
-`test_ratio` is held out and a validation set of `val_ratio` is drawn from the rest.
+`n_bootstrap_iterations` repeated random splits (seed `random_seed + i`), the full
+dataset is split into training, validation and test sets in one step with
+[astartes](https://github.com/JacksonBurns/astartes) (`train_val_test_split`,
+`sampler="random"`).
 
 **Split ratios.** `test_ratio` and `val_ratio` are both fractions of the **full
 dataset**, and the training set gets the rest: `test_ratio: 0.1` and `val_ratio: 0.1`
-give an 80/10/10 split. Their sum must be below 1. Sizes are rounded to whole samples.
+give an 80/10/10 split. Their sum must be below 1. Following astartes, the training and
+validation sizes are rounded **down** to whole samples and the test set takes the
+remaining samples (e.g. 37 samples at 70/15/15 → 25/5/7).
 
-> **Changed behaviour.** Earlier versions applied `val_ratio` to the data left after
-> the test split, so `test_ratio: 0.15, val_ratio: 0.15` gave ≈ 72/13/15. To reproduce
-> the splits of an older experiment, use `val_ratio = old_val_ratio × (1 − test_ratio)`
-> (e.g. 0.15 × 0.85 = 0.1275).
+**Split method.** `random` splits the whole dataset with the chosen sampler. `stratified`
+splits each class separately with the same sampler and merges the results, so the
+training, validation and test sets keep the class proportions (up to rounding within
+each class). Every class needs enough samples to appear in all three sets; otherwise the
+split stops with an error naming the class.
+
+**Sampler (`sampler`).** The sets are drawn with an [astartes](https://github.com/JacksonBurns/astartes)
+sampler, always with astartes' default hyperparameters:
+
+| `sampler` | Uses | Behaviour |
+|---|---|---|
+| `random` (default) | — | Random split. |
+| `kennard_stone` | sampling fingerprint | Training set chosen to span the fingerprint space; validation and test are the most "interpolated" polymers. Deterministic. |
+| `spxy` | sampling fingerprint + target | Kennard–Stone on joint fingerprint and target distances. Deterministic. |
+| `kmeans` | sampling fingerprint | k-means clusters (n/10 + 1); each cluster stays in one set (extrapolation). |
+| `optisim` | sampling fingerprint | OptiSim diverse clusters; each cluster stays in one set (extrapolation). |
+| `target_property` | target | Polymers sorted by target value; the extremes go to the test set. Deterministic. |
+
+- **Sampling fingerprint (`sampling_fingerprint`).** Fingerprint samplers place each polymer
+  by the ratio-weighted average of its monomers' fingerprints — the same computation as the
+  fingerprint representations, but with these settings:
+  - `morgan` / `rdkitfp`: count fingerprints with `fp_size` (and, for Morgan, `radius`);
+  - `polybert`: the 600-dimensional polyBERT embedding (`xushijie/polyBERT`, downloaded on
+    first use; no settings). polyBERT expects PSMILES; plain SMILES that cannot be
+    canonicalised as PSMILES are embedded as given, with a warning.
+
+  It is used **only for splitting** and never changes the representations. Without
+  `sampling_fingerprint`, Morgan with 2048 bins and radius 3 is used; with a sampler that
+  needs no fingerprint, it is ignored with a warning.
+- **Deterministic samplers** (`kennard_stone`, `spxy`, `target_property`) ignore the seed, so
+  all `n_bootstrap_iterations` repetitions use the same split. This is allowed, with a warning:
+  the models still differ between repetitions because each is trained with its own seed,
+  but models without randomness (e.g. linear regression) will be identical.
+- **Cluster samplers** (`kmeans`, `optisim`) keep each cluster in one set, so validation and
+  test can be smaller or larger than requested (astartes' message is logged); they can fail
+  on small datasets or small classes when a cluster is larger than the validation set.
+- `spxy` and `target_property` cannot be combined with `split_method: stratified` (the target
+  is constant within a class).
+- `dbscan` and `sphere_exclusion` are not offered: their default distance thresholds are far
+  below the typical distance between polymer count fingerprints, so they cannot fill the
+  sets.
+- **Provenance.** The sampler and sampling fingerprint are saved in `split_options.json`, and
+  `split_indices.json` has a `sampling` record (sampler, astartes version, fingerprint
+  settings, ratio columns).
+
+> **Changed behaviour.** Earlier versions drew the splits with scikit-learn, held out
+> the test set first and applied `val_ratio` to the remaining data. Experiments run with
+> those versions are not reproduced exactly.
 The other values of the `SplitType` enum (`train_test`, `cross_validation`,
 `nested_cross_validation`, `leave_one_out`) are reserved for future work: a config that
 uses them is rejected at load time with an error explaining that only `train_val_test`
@@ -149,17 +202,19 @@ is available. The GUI offers only `train_val_test`.
 
 **Class balancing (`train_set_balance`, binary classification).** For each split:
 
-1. the test set is held out from the full dataset;
-2. the remaining data is balanced by randomly undersampling the majority class until
-   the minority class makes up `train_set_balance` of it (e.g. `0.5` → 50/50);
-3. the validation set is drawn from this balanced data, keeping the requested
-   training:validation proportion (`(1 − test_ratio − val_ratio) : val_ratio`).
+1. the full dataset is split into training, validation and test sets as above;
+2. the training set and the validation set are **each** balanced by randomly
+   undersampling their majority class until the minority class makes up
+   `train_set_balance` of the set (e.g. `0.5` → 50/50).
 
 Training and validation sets are therefore **both balanced**, and only the **test set
 keeps the original class distribution**. This follows the protocol of
-*ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163*. Undersampling uses the split's seed, so splits are reproducible. Note that
-undersampling removes samples before the validation split, so the training and
-validation sets are smaller than their ratios of the full dataset would suggest.
+*ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163*. Undersampling uses the split's
+seed, so splits are reproducible. Undersampling removes samples, so the training and
+validation sets are smaller than their ratios of the full dataset would suggest. Use
+`split_method: stratified` with balancing: both sets then contain the same share of
+the minority class, so the training:validation proportion is kept after balancing (with
+`random`, the number of minority samples landing in validation varies between splits).
 
 ## `gnn_training`
 

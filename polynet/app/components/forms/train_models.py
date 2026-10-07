@@ -9,6 +9,7 @@ from polynet.config.enums import (
     ApplyWeightingToGraph,
     ArchitectureParam,
     FeatureSelection,
+    MolecularDescriptor,
     Network,
     Optimizer,
     Pooling,
@@ -16,6 +17,7 @@ from polynet.config.enums import (
     RegressionLoss,
     Scheduler,
     SplitMethod,
+    SplitSampler,
     SplitType,
     TargetTransformDescriptor,
     TraditionalMLModel,
@@ -25,6 +27,13 @@ from polynet.config.enums import (
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
+from polynet.config.constants import POLYBERT_MODEL
+from polynet.config.schemas.fingerprints import MorganFingerprintConfig, RDKitFingerprintConfig
+from polynet.config.schemas.split_data import (
+    DETERMINISTIC_SAMPLERS,
+    SAMPLERS_USING_FINGERPRINTS,
+    deterministic_sampler_warning,
+)
 from polynet.config.schemas.training import GNNOptimisationConfig
 
 
@@ -762,6 +771,105 @@ def GNN_shared_params_form(
     return shared_params
 
 
+_SAMPLER_HELP = {
+    SplitSampler.Random: "Random split.",
+    SplitSampler.KennardStone: "Kennard–Stone: training set spans the fingerprint space "
+    "(deterministic).",
+    SplitSampler.SPXY: "SPXY: like Kennard–Stone on fingerprints and target values "
+    "(deterministic).",
+    SplitSampler.KMeans: "k-means clusters of fingerprints; each cluster stays in one set.",
+    SplitSampler.OptiSim: "OptiSim diverse clusters of fingerprints; each cluster stays in one set.",
+    SplitSampler.TargetProperty: "Ordered by target value: extreme values go to the test "
+    "set (deterministic).",
+}
+
+
+def sampler_widgets() -> None:
+    """
+    astartes sampler and, for fingerprint samplers, the sampling fingerprint.
+
+    The sampling fingerprint is used only to split the data; it does not
+    change the representations.
+    """
+    sampler = st.selectbox(
+        "Select the sampler",
+        options=list(SplitSampler),
+        index=0,
+        key=GeneralConfigStateKeys.Sampler,
+        format_func=lambda s: s.value,
+        help="astartes sampler that draws the training, validation and test sets "
+        "(astartes default hyperparameters). "
+        + " ".join(f"{s.value}: {text}" for s, text in _SAMPLER_HELP.items()),
+    )
+    st.caption(_SAMPLER_HELP[sampler])
+
+    if sampler not in SAMPLERS_USING_FINGERPRINTS:
+        return
+    st.markdown(
+        "**Sampling fingerprint** — each monomer's fingerprint is weighted by its ratio, as "
+        "in the representations. Used only to split the data; it does not change the "
+        "representations."
+    )
+    cols = st.columns(3)
+    with cols[0]:
+        fingerprint = st.selectbox(
+            "Fingerprint",
+            options=[
+                MolecularDescriptor.Morgan,
+                MolecularDescriptor.RDKitFP,
+                MolecularDescriptor.PolyBERT,
+            ],
+            key=GeneralConfigStateKeys.SamplingFingerprint,
+            format_func=lambda f: f.value,
+        )
+    if fingerprint == MolecularDescriptor.PolyBERT:
+        st.caption(
+            f"polyBERT embedding ({POLYBERT_MODEL}, downloaded on first use). It expects "
+            "PSMILES; plain SMILES are embedded as given."
+        )
+        return
+    with cols[1]:
+        st.number_input(
+            "Fingerprint size",
+            min_value=1,
+            value=MorganFingerprintConfig().fp_size,
+            step=1,
+            key=GeneralConfigStateKeys.SamplingFpSize,
+        )
+    with cols[2]:
+        if fingerprint == MolecularDescriptor.Morgan:
+            st.number_input(
+                "Radius",
+                min_value=0,
+                value=MorganFingerprintConfig().radius,
+                step=1,
+                key=GeneralConfigStateKeys.SamplingFpRadius,
+            )
+
+
+def sampling_fingerprint_from_state() -> dict | None:
+    """The ``sampling_fingerprint`` settings chosen in ``sampler_widgets`` (``None`` if unused)."""
+    sampler = st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random)
+    if sampler not in SAMPLERS_USING_FINGERPRINTS:
+        return None
+    fingerprint = st.session_state.get(
+        GeneralConfigStateKeys.SamplingFingerprint, MolecularDescriptor.Morgan
+    )
+    if fingerprint == MolecularDescriptor.PolyBERT:
+        return {"fingerprint": fingerprint}
+    settings = {
+        "fingerprint": fingerprint,
+        "fp_size": st.session_state.get(
+            GeneralConfigStateKeys.SamplingFpSize, RDKitFingerprintConfig().fp_size
+        ),
+    }
+    if fingerprint == MolecularDescriptor.Morgan:
+        settings["radius"] = st.session_state.get(
+            GeneralConfigStateKeys.SamplingFpRadius, MorganFingerprintConfig().radius
+        )
+    return settings
+
+
 def split_data_form(problem_type: ProblemType) -> bool:
     """
     Data splitting widgets.
@@ -797,9 +905,9 @@ def split_data_form(problem_type: ProblemType) -> bool:
                 value=0.5,
                 key=GeneralConfigStateKeys.DesiredProportion,
                 help="Proportion of the minority class after undersampling the majority "
-                "class. Balancing is applied before the validation split, so training and "
-                "validation sets are balanced; the test set keeps the original class "
-                "distribution (ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163).",
+                "class. The training and validation sets are each balanced after the "
+                "split; the test set keeps the original class distribution (ACS Appl. "
+                "Mater. Interfaces 2023, 15 (11), 14155–14163).",
             )
 
     else:
@@ -811,13 +919,18 @@ def split_data_form(problem_type: ProblemType) -> bool:
             key=GeneralConfigStateKeys.SplitMethod,
         )
 
+    sampler_widgets()
+
     if split_type == SplitType.TrainValTest:
-        st.select_slider(
+        n_repetitions = st.select_slider(
             "Select the number of bootstrap iterations",
             options=list(range(1, 11)),
             value=1,
             key=GeneralConfigStateKeys.BootstrapIterations,
         )
+        sampler = st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random)
+        if sampler in DETERMINISTIC_SAMPLERS and n_repetitions > 1:
+            st.warning(deterministic_sampler_warning(sampler, n_repetitions))
 
     test_ratio = st.slider(
         "Select the test split ratio",

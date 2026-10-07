@@ -9,6 +9,9 @@ kept separate from ``enums.py`` because they are never selected by a user
 via the app or a YAML config.
 """
 
+# Hugging Face model used for polyBERT fingerprints (representations and sampling).
+POLYBERT_MODEL = "xushijie/polyBERT"
+
 # ---------------------------------------------------------------------------
 # Results dataframe column names
 # ---------------------------------------------------------------------------

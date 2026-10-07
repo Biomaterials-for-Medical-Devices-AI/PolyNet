@@ -56,6 +56,23 @@ class SplitMethod(StrEnum):
     Stratified = "stratified"
 
 
+class SplitSampler(StrEnum):
+    """
+    astartes sampler used to draw the train / validation / test sets.
+
+    ``dbscan`` and ``sphere_exclusion`` are not offered: their default distance
+    thresholds (eps 0.5, cutoff 0.25) are far below typical distances between
+    count fingerprints, so they cannot fill the sets.
+    """
+
+    Random = "random"
+    KennardStone = "kennard_stone"
+    SPXY = "spxy"
+    KMeans = "kmeans"
+    OptiSim = "optisim"
+    TargetProperty = "target_property"
+
+
 class HpoSplitStrategy(StrEnum):
     """Data split strategy used inside the GNN hyperparameter optimisation loop."""
 

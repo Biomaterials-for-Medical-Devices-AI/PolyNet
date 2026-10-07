@@ -169,6 +169,10 @@ class GeneralConfigStateKeys(StrEnum):
     ValidationSize = "ValidationSize"
     RandomSeed = "RandomSeed"
     BootstrapIterations = "BootstrapIterations"
+    Sampler = "Sampler"
+    SamplingFingerprint = "SamplingFingerprint"
+    SamplingFpSize = "SamplingFpSize"
+    SamplingFpRadius = "SamplingFpRadius"
 
     Stratify = "Stratify"
     Shuffle = "Shuffle"

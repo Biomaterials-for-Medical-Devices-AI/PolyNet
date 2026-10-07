@@ -133,7 +133,7 @@ def _generate_gnn_fixture(task: str, tmp_path: Path) -> dict:
         split_type=SplitType.TrainValTest,
         split_method=SplitMethod.Random,
         test_ratio=0.2,
-        val_ratio=0.16,
+        val_ratio=0.2,
         n_bootstrap_iterations=1,
     )
     gnn_cfg = TrainGNNConfig(
@@ -233,7 +233,7 @@ def _generate_tml_fixture(task: str, tmp_path: Path) -> dict:
         split_type=SplitType.TrainValTest,
         split_method=SplitMethod.Random,
         test_ratio=0.2,
-        val_ratio=0.16,
+        val_ratio=0.2,
         n_bootstrap_iterations=1,
     )
     tml_cfg = TrainTMLConfig(

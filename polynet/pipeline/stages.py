@@ -199,6 +199,7 @@ def compute_data_splits(
     split_cfg: SplitConfig,
     random_seed: int,
     out_dir: Path | None = None,
+    weights_col: dict[str, str] | None = None,
 ) -> tuple[list, list, list]:
     """
     Compute train/val/test split indices and optionally persist them to disk.
@@ -214,7 +215,11 @@ def compute_data_splits(
     random_seed:
         Global random seed for reproducibility.
     out_dir:
-        If provided, writes ``split_indices.json`` to this directory.
+        If provided, writes ``split_indices.json`` to this directory, with a
+        ``sampling`` record of the sampler and sampling fingerprint.
+    weights_col:
+        Ratio columns used to weight the monomer fingerprints of the
+        fingerprint samplers (``representations.weights_col``).
 
     Returns
     -------
@@ -222,6 +227,7 @@ def compute_data_splits(
         ``(train_idxs, val_idxs, test_idxs)`` — each a list of length
         ``n_bootstrap_iterations``.
     """
+    from polynet.data.sampling import sampling_features, sampling_metadata
     from polynet.factories.dataloader import get_data_split_indices
 
     train_idxs, val_idxs, test_idxs = get_data_split_indices(
@@ -234,6 +240,8 @@ def compute_data_splits(
         target_variable_col=data_cfg.target_variable_col,
         train_set_balance=split_cfg.train_set_balance,
         random_seed=random_seed,
+        sampler=split_cfg.sampler,
+        sampling_features=sampling_features(data, data_cfg.smiles_cols, weights_col, split_cfg),
     )
 
     for i, (tr, va, te) in enumerate(zip(train_idxs, val_idxs, test_idxs)):
@@ -247,6 +255,7 @@ def compute_data_splits(
                     "train": [list(map(str, s)) for s in train_idxs],
                     "val": [list(map(str, s)) for s in val_idxs],
                     "test": [list(map(str, s)) for s in test_idxs],
+                    "sampling": sampling_metadata(split_cfg, weights_col),
                 },
                 f,
                 indent=2,
