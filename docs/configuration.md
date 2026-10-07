@@ -298,7 +298,8 @@ Every key is checked when the config is loaded: a misspelt `gnn_training` key, a
 unknown parameter in an architecture block (including one that belongs to another
 architecture, e.g. `improved` outside `GCN`) or a key other than `epochs` in `training`
 stops the run with an error listing the allowed names. The number of epochs is set in
-`training.epochs` only.
+`training.epochs` only (in the GUI: *Number of training epochs* in the GNN section of the
+Train Models page); HPO trials train for the same number of epochs.
 
 **Architecture-specific parameters:**
 

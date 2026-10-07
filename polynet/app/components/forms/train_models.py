@@ -34,7 +34,7 @@ from polynet.config.schemas.split_data import (
     SAMPLERS_USING_FINGERPRINTS,
     deterministic_sampler_warning,
 )
-from polynet.config.schemas.training import GNNOptimisationConfig
+from polynet.config.schemas.training import GNNOptimisationConfig, TrainGNNConfig
 
 
 def train_TML_models(problem_type: ProblemType) -> dict:
@@ -459,6 +459,17 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
         "Perform hyperparameter tuning",
         key=TrainGNNStateKeys.HypTunning,
         help="If enabled, hyperparameters will be tuned by randomly sampling configurations from a predefined search grid with Ray Tune (can be slow).",
+    )
+
+    st.number_input(
+        "Number of training epochs",
+        min_value=1,
+        value=TrainGNNConfig.model_fields["epochs"].default,
+        step=10,
+        key=TrainGNNStateKeys.Epochs,
+        help="Epochs each GNN is trained for (the weights of the epoch with the lowest "
+        "validation loss are kept). Hyperparameter-tuning trials train for the same number "
+        "of epochs.",
     )
 
     st.markdown("### Select the GNN convolutional layers you want to train")

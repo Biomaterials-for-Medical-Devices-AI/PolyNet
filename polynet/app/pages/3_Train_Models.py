@@ -163,6 +163,11 @@ def train_models(
             train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
             gnn_convolutional_layers=gnn_conv_params,
             share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
+            epochs=int(
+                st.session_state.get(
+                    TrainGNNStateKeys.Epochs, TrainGNNConfig.model_fields["epochs"].default
+                )
+            ),
             optimisation=gnn_optimisation_cfg or GNNOptimisationConfig(),
         )
         if gnn_conv_params
