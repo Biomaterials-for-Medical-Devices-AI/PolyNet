@@ -84,15 +84,15 @@ use the training-split scaling; it is also written to
 descriptor containing `NaN`/`±inf` in the training set raises an error for GNNs (it
 cannot be dropped without changing the model input width).
 
-> **Known discrepancy (TML vs GNN scaling).** The scaling *strategy* is the same for both
-> model families, but the fitted parameters are not identical. TML models do not use a
-> validation set, so their `FeatureTransformer` is fitted on the **training + validation**
-> samples of each split. GNNs use the validation set to select the best epoch, so their
-> polymer descriptor scaler is fitted on the **training** samples only. The same
-> descriptor therefore ends up with slightly different scaled values in the two model
-> families (for example, a different median/IQR under `robust_scaler`). We are
-> evaluating how best to align the two (e.g. fitting both on the same samples) without
-> leaking validation information into GNN model selection.
+> **TML vs GNN scaling.** The scaling *strategy* is the same for both model families.
+> GNNs use the validation set to select the best epoch, so their polymer descriptor
+> scaler is fitted on the **training** samples only. By default
+> (`tml_models.include_validation_in_training: true`) TML models are trained on the
+> **training + validation** samples, and their `FeatureTransformer` is fitted on those
+> too, so the same descriptor ends up with slightly different scaled values in the two
+> model families (e.g. a different median/IQR under `robust_scaler`). Set
+> `include_validation_in_training: false` to train TML on the training samples only:
+> both families then see the same data and the scaled values are identical.
 
 ```
 GNN forward pass with polymer descriptors:

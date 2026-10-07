@@ -393,6 +393,12 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         Inherited from ``HyperparamOptimConfig`` (shared with GNN training).
         Number of cross-validation folds used to score each configuration
         (default 5, minimum 2).
+    include_validation_in_training:
+        If True (default), TML models are trained — and their feature
+        transformer, target scaler and hyperparameter search fitted — on the
+        training **and** validation samples of each split. If False, they use
+        the training samples only (the data GNNs train on) and the validation
+        samples are predicted and scored as a held-out validation set.
     """
 
     train_tml: bool = Field(
@@ -407,6 +413,11 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=30,
         ge=1,
         description="Configurations sampled by RandomizedSearchCV (n_iter) per HPO run.",
+    )
+    include_validation_in_training: bool = Field(
+        default=True,
+        description="Train TML models on training + validation samples (True) or on the "
+        "training samples only, like GNNs (False).",
     )
 
     @model_validator(mode="after")

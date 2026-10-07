@@ -147,6 +147,7 @@ def train_tml_ensemble(
     hpo_n_folds: int = 5,
     hpo_num_samples: int = 30,
     hpo_search_grid: dict | None = None,
+    include_validation_in_training: bool = True,
 ) -> tuple[dict, dict, dict, dict]:
     """
     Train an ensemble of TML models across all bootstrap iterations.
@@ -192,13 +193,20 @@ def train_tml_ensemble(
     hpo_search_grid:
         User search-grid candidates keyed by model name
         (``tml_models.hpo_search_grid``), merged on top of the default grids.
+    include_validation_in_training:
+        If True, the validation samples are added to the training samples
+        (feature transformer, target scaler, hyperparameter search and model
+        are fitted on both). If False, everything is fitted on the training
+        samples only and the validation samples are kept as a held-out set.
 
     Returns
     -------
     tuple[dict, dict, dict, dict]
         ``(trained_models, training_data, scalers, target_scalers)`` where:
         - ``trained_models``: ``{model_log_name: fitted_model}``
-        - ``training_data``: ``{log_name: (train_df, test_df)}``
+        - ``training_data``: ``{log_name: (train_df, val_df, test_df)}``;
+          ``val_df`` is ``None`` when the validation samples were used for
+          training
         - ``scalers``: ``{log_name: fitted_feature_scaler}`` or empty dict
         - ``target_scalers``: ``{log_name: TargetScaler}``
     """
@@ -212,6 +220,10 @@ def train_tml_ensemble(
         else target_transform
     )
 
+    logger.info(
+        "TML models are trained on the "
+        + ("training + validation samples." if include_validation_in_training else "training samples only (validation held out, as for GNNs).")
+    )
     train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
     trained_models: dict = {}
     training_data: dict = {}
@@ -222,9 +234,15 @@ def train_tml_ensemble(
         iteration = i + 1
         seed = random_seed + i
 
-        # TML does not use a separate validation set — merge val into train
+        # Either merge the validation samples into training, or keep them as a
+        # held-out set (training samples only, like the GNNs).
         val_idxs = pd.Index(val_idxs) if val_idxs is not None else pd.Index([])
-        combined_train_idxs = train_idxs.append(val_idxs)
+        if include_validation_in_training:
+            combined_train_idxs = pd.Index(train_idxs).append(val_idxs)
+            held_out_val_idxs = None
+        else:
+            combined_train_idxs = pd.Index(train_idxs)
+            held_out_val_idxs = val_idxs
 
         for df_name, df in dataframes.items():
             log_name = f"{df_name}_{iteration}"
@@ -258,10 +276,20 @@ def train_tml_ensemble(
             )
             test_df = pd.concat([X_test, y_test], axis=1)
 
+            val_df = None
+            if held_out_val_idxs is not None and len(held_out_val_idxs):
+                val_raw = df.loc[held_out_val_idxs]
+                X_val = pd.DataFrame(
+                    transformer.transform(val_raw.iloc[:, :-1]),
+                    index=held_out_val_idxs,
+                    columns=transformer.get_feature_names_out(),
+                )
+                val_df = pd.concat([X_val, val_raw.iloc[:, -1]], axis=1)
+
             scalers[log_name] = transformer
             # training_data always stores original (unscaled) y so that y_true
             # in the predictions DataFrame is always in the original target range.
-            training_data[log_name] = (train_df, test_df)
+            training_data[log_name] = (train_df, val_df, test_df)
 
             # Fit target scaler on training y; models are trained on scaled y.
             target_scaler = TargetScaler(strategy=target_transform)

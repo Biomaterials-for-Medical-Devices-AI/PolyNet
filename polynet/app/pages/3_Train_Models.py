@@ -151,6 +151,9 @@ def train_models(
             train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
             selected_models=tml_models,
             hpo_n_folds=int(st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5)),
+            include_validation_in_training=st.session_state.get(
+                TrainTMLStateKeys.IncludeValidation, True
+            ),
         )
         if tml_models
         else None
@@ -303,12 +306,13 @@ def train_models(
         label_col_name = get_true_label_column_name(
             target_variable_name=data_options.target_variable_name
         )
-        gnn_predictions_df = gnn_predictions_df.drop(columns=[label_col_name])
-
+        # Same merge as the CLI: the set label comes from the GNN predictions.
+        # TML reports the validation samples as Training when they were used
+        # for TML training, so merging on the set would drop them.
         predictions = pd.merge(
-            left=tml_predictions_df,
-            right=gnn_predictions_df,
-            on=[ResultColumn.INDEX, ResultColumn.SET, iterator],
+            left=gnn_predictions_df.drop(columns=[label_col_name]),
+            right=tml_predictions_df.drop(columns=[ResultColumn.SET]),
+            on=[ResultColumn.INDEX, iterator],
         )
 
         metrics = {}

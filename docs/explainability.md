@@ -90,13 +90,15 @@ Both views use the native `shap` package:
 `explain_set` selects the sample population for the global plot;
 `local_explain_sample_ids` selects which samples get per-instance plots.
 
-> **Warning — for TML, the validation set is training data.** Traditional ML models
-> are fitted on the training and validation samples together (the validation split
-> is only held out for GNNs). Explaining `explain_set: validation` (or `all`, or the
-> GUI "Validation" / "All" pills) therefore explains samples the TML model was
-> trained on, not held-out ones. Use `explain_set: test` to explain predictions on
-> unseen samples. The CLI logs and the GUI shows this warning when such a set is
-> selected.
+> **Warning — for TML, the validation set is training data by default.** With
+> `tml_models.include_validation_in_training: true` (the default), traditional ML
+> models are fitted on the training and validation samples together. Explaining
+> `explain_set: validation` (or `all`, or the GUI "Validation" / "All" pills) then
+> explains samples the TML model was trained on, not held-out ones; use
+> `explain_set: test` to explain predictions on unseen samples. The CLI logs and the
+> GUI shows this warning when such a set is selected. With
+> `include_validation_in_training: false` the validation samples are held out (as for
+> GNNs) and no warning is shown.
 
 ## Normalisation strategies
 

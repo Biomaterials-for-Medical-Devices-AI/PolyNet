@@ -47,6 +47,16 @@ def train_TML_models(problem_type: ProblemType) -> dict:
 
     if st.toggle("Train TML models", key=TrainTMLStateKeys.TrainTML):
 
+        st.toggle(
+            "Include the validation set in TML training",
+            value=True,
+            key=TrainTMLStateKeys.IncludeValidation,
+            help="On (default): TML models, their feature scaling and their hyperparameter "
+            "search use the training and validation samples of each split. Off: they use "
+            "the training samples only — the same data the GNNs train on — and the "
+            "validation samples are scored as a held-out validation set.",
+        )
+
         hyperparameter_tunning = st.checkbox(
             "Perform hyperparameter tuning",
             key=TrainTMLStateKeys.PerformHyperparameterTuning,

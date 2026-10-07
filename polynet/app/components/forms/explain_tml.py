@@ -162,6 +162,7 @@ def _tml_global_tab(
     preds: pd.DataFrame,
     data_options: DataConfig,
     cache_root: Path | None = None,
+    validation_in_training: bool = True,
 ) -> None:
     st.markdown(
         "**Which molecular features drive predictions across the population?**  \n"
@@ -186,7 +187,7 @@ def _tml_global_tab(
         MolsStateKey=TMLExplainStateKeys.GlobalTMLIDSelector,
     )
     explain_set = st.session_state.get(TMLExplainStateKeys.GlobalTMLExplainSet)
-    if tml_explain_set_includes_validation(explain_set):
+    if validation_in_training and tml_explain_set_includes_validation(explain_set):
         st.warning(TML_VALIDATION_IS_TRAINING_WARNING)
     per_model_samples = samples_per_model_from_predictions(
         predictions=preds_selected,
@@ -459,6 +460,7 @@ def explain_tml_form(
     data_options: DataConfig,
     preds: pd.DataFrame,
     cache_root: Path | None = None,
+    validation_in_training: bool = True,
 ) -> None:
     """
     Render the full TML SHAP explainability form with shared params + two tabs.
@@ -473,6 +475,10 @@ def explain_tml_form(
         Descriptor DataFrames keyed by descriptor name (e.g. ``"morgan"``).
     data_options:
         Data configuration (problem type, class names, etc.).
+    validation_in_training:
+        ``tml_models.include_validation_in_training`` of the experiment; when
+        True, explaining the validation set shows a warning (it is training
+        data for TML).
     preds:
         Predictions DataFrame with ``SET`` column and sample IDs as index.
     """
@@ -515,6 +521,7 @@ def explain_tml_form(
             preds=preds,
             data_options=data_options,
             cache_root=cache_root,
+            validation_in_training=validation_in_training,
         )
 
     with local_tab:

@@ -80,12 +80,15 @@ def check_n_folds_for_splits(
     train_val_test_idxs: tuple,
     problem_type: ProblemType,
     setting_name: str = "hpo_n_folds",
+    include_validation: bool = True,
 ) -> None:
     """
     Run ``check_n_folds`` on the hyperparameter-search samples of every split.
 
     Hyperparameter search runs on the training + validation samples of each
-    outer split, so ``k`` is checked against exactly those samples.
+    outer split (or on the training samples only, for TML models with
+    ``include_validation_in_training: false``), so ``k`` is checked against
+    exactly those samples.
 
     Parameters
     ----------
@@ -99,6 +102,8 @@ def check_n_folds_for_splits(
         Classification or regression.
     setting_name:
         Config field reported in the error message (e.g. ``"tml_models.hpo_n_folds"``).
+    include_validation:
+        Whether the search samples include the validation samples.
 
     Raises
     ------
@@ -108,7 +113,9 @@ def check_n_folds_for_splits(
     """
     train_ids, val_ids, _ = train_val_test_idxs
     for i, (train_idxs, val_idxs) in enumerate(zip(train_ids, val_ids), start=1):
-        hpo_idxs = pd.Index(train_idxs).append(pd.Index(val_idxs if val_idxs is not None else []))
+        hpo_idxs = pd.Index(train_idxs)
+        if include_validation and val_idxs is not None:
+            hpo_idxs = hpo_idxs.append(pd.Index(val_idxs))
         try:
             check_n_folds(n_folds=n_folds, y=y.loc[hpo_idxs], problem_type=problem_type)
         except ValueError as e:
@@ -127,7 +134,8 @@ def validate_hpo_folds(
 
     Both pipelines score hyperparameter configurations by shuffled K-fold
     cross-validation on the training + validation samples of each split
-    (``polynet.training.cv.make_kfold``). The schema already guarantees
+    (TML: training samples only when ``include_validation_in_training`` is
+    False; ``polynet.training.cv.make_kfold``). The schema already guarantees
     ``k >= 2``; this checks the rules that need the data. Call it after the
     data has been split and before any training starts.
 
@@ -157,22 +165,25 @@ def validate_hpo_folds(
     """
     checks = []
     if tml_cfg is not None and any(not p for p in (tml_cfg.selected_models or {}).values()):
-        checks.append(("tml_models.hpo_n_folds", tml_cfg.hpo_n_folds))
+        checks.append(
+            ("tml_models.hpo_n_folds", tml_cfg.hpo_n_folds, tml_cfg.include_validation_in_training)
+        )
     if (
         gnn_cfg is not None
         and gnn_cfg.hpo_split_strategy == HpoSplitStrategy.CrossValidation
         and any(not p for p in gnn_cfg.gnn_convolutional_layers.values())
     ):
-        checks.append(("gnn_training.hpo_n_folds", gnn_cfg.hpo_n_folds))
+        checks.append(("gnn_training.hpo_n_folds", gnn_cfg.hpo_n_folds, True))
 
     y = data[data_cfg.target_variable_col]
-    for setting_name, n_folds in checks:
+    for setting_name, n_folds, include_validation in checks:
         check_n_folds_for_splits(
             n_folds=n_folds,
             y=y,
             train_val_test_idxs=split_indexes,
             problem_type=data_cfg.problem_type,
             setting_name=setting_name,
+            include_validation=include_validation,
         )
 
 

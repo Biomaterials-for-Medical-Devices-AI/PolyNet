@@ -483,7 +483,18 @@ tml_models:
     - RandomForest
     - XGBoost
   hpo_n_folds: 5            # CV folds for automatic HPO (optional, default 5, min 2)
+  include_validation_in_training: true   # false: train on the training samples only (like GNNs)
 ```
+
+**Training data (`include_validation_in_training`).** TML models have no epochs to
+select, so by default (`true`) they are trained on the **training + validation** samples
+of each split, and their feature transformer, target scaler and hyperparameter search are
+fitted on those samples too; their predictions and metrics then report the validation
+samples as part of the training set. With `false`, everything is fitted on the
+**training samples only** — the same data the GNNs train on — and the validation samples
+are predicted and scored as a separate `Validation` set. Use `false` for a like-for-like
+comparison between TML models and GNNs. In the GUI this is the *Include the validation
+set in TML training* switch.
 
 **Available models:** `RandomForest`, `XGBoost`, `SupportVectorMachine`,
 `LogisticRegression`, `LinearRegression`
@@ -491,7 +502,8 @@ tml_models:
 **Automatic HPO:** leave a model's block empty (`{}`) to tune it automatically.
 `RandomizedSearchCV` samples `hpo_num_samples` (default 30) configurations from the model's search grid
 (`polynet/config/search_grid.py`) and scores them by `hpo_n_folds`-fold
-cross-validation on the training (+ validation) samples of each split. Folds are always
+cross-validation on the samples the model is trained on (training + validation by default,
+training only with `include_validation_in_training: false`). Folds are always
 shuffled (stratified for classification) with the split's seed, so a dataset sorted by
 target cannot produce biased folds.
 
@@ -650,8 +662,8 @@ tml_explainability:
   bootstraps: "all"         # or: [1, 2]
 
   # train | validation | test | all  — global plot; each model uses its own split's set.
-  # TML models are trained on train + validation, so "validation" (and "all") explain
-  # training data; use "test" for unseen samples.
+  # With tml_models.include_validation_in_training: true (default) TML models are trained
+  # on train + validation, so "validation" (and "all") explain training data; use "test".
   explain_set: "test"
   normalisation: "per_model" # local | global | per_model | no_normalisation
   target_class: null        # null for regression; integer class index for classification

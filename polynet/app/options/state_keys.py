@@ -80,6 +80,7 @@ class TrainTMLStateKeys(StrEnum):
     TrainTML = "TrainTML"
     PerformHyperparameterTuning = "PerformHyperparameterTuning"
     HPONumFolds = "TMLHPONumFolds"
+    IncludeValidation = "TMLIncludeValidation"
 
     TrainLinearRegression = "LinearRegression"
     TrainLogisticRegression = "LogisticRegression"

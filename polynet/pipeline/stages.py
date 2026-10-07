@@ -513,6 +513,7 @@ def train_tml(
         hpo_n_folds=tml_cfg.hpo_n_folds,
         hpo_num_samples=tml_cfg.hpo_num_samples,
         hpo_search_grid=tml_cfg.hpo_search_grid,
+        include_validation_in_training=tml_cfg.include_validation_in_training,
     )
 
     for model_name, model in trained.items():
@@ -1284,6 +1285,7 @@ def run_tml_explainability(
     data_cfg: DataConfig,
     tml_exp_cfg: TMLExplainabilityConfig,
     out_dir: Path,
+    validation_in_training: bool = True,
 ) -> None:
     """
     Run SHAP-based explainability for TML models and save outputs to disk.
@@ -1304,6 +1306,9 @@ def run_tml_explainability(
         ``TMLExplainabilityConfig`` instance.
     out_dir:
         Experiment root directory.  All outputs go to ``out_dir/explanations/tml/``.
+    validation_in_training:
+        ``tml_models.include_validation_in_training``: whether the validation
+        samples were TML training data (then explaining them is warned about).
 
     Outputs
     -------
@@ -1416,7 +1421,7 @@ def run_tml_explainability(
     logger.info(
         f"Explaining {len(explain_sample_ids)} sample(s) from '{tml_exp_cfg.explain_set}' set."
     )
-    if tml_explain_set_includes_validation(tml_exp_cfg.explain_set):
+    if validation_in_training and tml_explain_set_includes_validation(tml_exp_cfg.explain_set):
         logger.warning(TML_VALIDATION_IS_TRAINING_WARNING)
 
     if not explain_sample_ids:

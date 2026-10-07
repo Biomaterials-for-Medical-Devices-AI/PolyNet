@@ -684,7 +684,13 @@ def main() -> None:
         try:
             tml_explain_cfg = _build_tml_explainability_config(cfg)
             run_tml_explainability(
-                tml_trained, desc_dfs, split_indexes, data_cfg, tml_explain_cfg, out_dir
+                tml_trained,
+                desc_dfs,
+                split_indexes,
+                data_cfg,
+                tml_explain_cfg,
+                out_dir,
+                validation_in_training=_build_tml_config(cfg).include_validation_in_training,
             )
             done(t0)
         except Exception as e:

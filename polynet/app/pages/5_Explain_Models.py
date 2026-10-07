@@ -29,7 +29,13 @@ from polynet.app.services.explain_source import (
 )
 from polynet.app.services.model_training import load_dataframes
 from polynet.config.column_names import get_iterator_name
-from polynet.config.schemas import DataConfig, GeneralConfig, RepresentationConfig, SplitConfig
+from polynet.config.schemas import (
+    DataConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    SplitConfig,
+    TrainTMLConfig,
+)
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 
 st.header("Explain your models")
@@ -253,6 +259,9 @@ if experiment_name:
                     data_options=data_options,
                     preds=preds,
                     cache_root=source.cache_root,
+                    validation_in_training=load_options(
+                        path=path_to_train_tml_options, options_class=TrainTMLConfig
+                    ).include_validation_in_training,
                 )
     else:
         st.error(
