@@ -231,7 +231,7 @@ min_lr 1e-8, RMSE loss). The learning rate itself comes from each architecture b
 | `scheduler_min_lr` | `1e-8` | `reduce_lr_on_plateau` | Lower bound on the learning rate |
 | `scheduler_step_size` | `10` | `step_lr` | Decay every N epochs |
 | `scheduler_milestones` | `[30, 60, 90]` | `multi_step_lr` | Epochs at which to decay (strictly increasing) |
-| `regression_loss` | `rmse` | regression | `rmse` (root mean squared error per batch), `mse` or `mae` (mean absolute error, less sensitive to outliers). Classification always uses cross-entropy (with optional `AsymmetricLossStrength` class weights). |
+| `regression_loss` | `rmse` | regression | `rmse` (root mean squared error; per batch during training, over the whole set for validation/test), `mse` or `mae` (mean absolute error, less sensitive to outliers). Classification always uses cross-entropy (with optional `AsymmetricLossStrength` class weights). |
 
 Setting a scheduler parameter that the chosen scheduler does not use emits a warning at
 config-load time. In the GUI these options are under **Advanced training options** in
@@ -400,7 +400,9 @@ tml_models:
   value. Each trial trains with its own class weights (computed from the training part
   of each HPO split), but every trial is **scored with the unweighted** cross-entropy
   on its validation data, so trials with different weights are compared on the same
-  scale. To fix the strength while HPO tunes everything else, give a single value,
+  scale. Validation losses of HPO trials are computed over the whole validation set, so
+  they do not depend on the trial's batch size (with per-batch RMSE, smaller batches
+  used to give lower values and were favoured). To fix the strength while HPO tunes everything else, give a single value,
   e.g. `shared: {AsymmetricLossStrength: [0.5]}` (or `[null]` for no weighting).
   Candidates must be `null` or between 0 and 1. For regression the setting is ignored
   with a warning.

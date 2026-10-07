@@ -261,7 +261,7 @@ def test_gnn_hpo_trials_use_the_training_epochs(tmp_path):
 def test_trials_train_for_the_requested_epochs(monkeypatch):
     calls = []
     monkeypatch.setattr(hyperopt, "train_network", lambda *a, **k: calls.append(1))
-    monkeypatch.setattr(hyperopt, "eval_network", lambda *a, **k: 1.0)
+    monkeypatch.setattr(hyperopt, "evaluate_losses", lambda m, l, fns, d: [1.0] * len(fns))
     monkeypatch.setattr(hyperopt, "create_network", lambda **k: mock.MagicMock())
     monkeypatch.setattr(hyperopt, "fit_polymer_descriptor_scaler", lambda *a: None)
     monkeypatch.setattr(hyperopt, "n_polymer_descriptors_of", lambda g: 0)
@@ -346,7 +346,7 @@ def test_trials_train_weighted_but_are_scored_unweighted(monkeypatch):
     monkeypatch.setattr(hyperopt, "build_optimisation", fake_build_optimisation)
     monkeypatch.setattr(hyperopt, "train_network", lambda *a, **k: None)
     monkeypatch.setattr(
-        hyperopt, "eval_network", lambda m, l, loss_fn, d: scored.append(loss_fn) or 1.0
+        hyperopt, "evaluate_losses", lambda m, l, fns, d: scored.extend(fns) or [1.0] * len(fns)
     )
     monkeypatch.setattr(hyperopt, "create_network", lambda **k: mock.MagicMock())
     monkeypatch.setattr(hyperopt, "fit_polymer_descriptor_scaler", lambda *a: None)

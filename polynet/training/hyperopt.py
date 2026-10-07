@@ -50,7 +50,7 @@ from polynet.factories.loss import create_loss
 from polynet.training.gnn import (
     build_optimisation,
     class_weights_for,
-    eval_network,
+    evaluate_losses,
     fit_polymer_descriptor_scaler,
     n_polymer_descriptors_of,
     train_network,
@@ -332,11 +332,8 @@ def _validate(model, val_loader, loss_fn, score_fn, scheduler, device) -> float:
     in final training, weighted when class weights are used); the returned
     score is the unweighted ``score_fn``, comparable across trials.
     """
-    val_loss = eval_network(model, val_loader, score_fn, device)
-    weighted = getattr(loss_fn, "weight", None) is not None
-    step_scheduler(
-        scheduler, eval_network(model, val_loader, loss_fn, device) if weighted else val_loss
-    )
+    val_loss, training_val_loss = evaluate_losses(model, val_loader, [score_fn, loss_fn], device)
+    step_scheduler(scheduler, training_val_loss)
     return val_loss
 
 

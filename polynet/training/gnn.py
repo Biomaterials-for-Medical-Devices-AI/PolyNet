@@ -608,7 +608,13 @@ def eval_network(
     model: Module, loader: DataLoader, loss_fn: Module, device: str | torch.device
 ) -> float:
     """
-    Evaluate a model on a DataLoader and return the mean loss.
+    Evaluate a model on a DataLoader and return its loss over the whole set.
+
+    Predictions for every sample are collected first and the loss is computed
+    once over all of them, so the value does not depend on the batch size:
+    RMSE is the RMSE of the set (not a mean of per-batch RMSEs, which with a
+    batch size of 1 would be the MAE), and MSE, MAE and cross-entropy are the
+    usual set means.
 
     Parameters
     ----------
@@ -624,27 +630,57 @@ def eval_network(
     Returns
     -------
     float
-        Mean loss per sample.
+        Loss over the whole set.
+    """
+    return evaluate_losses(model, loader, [loss_fn], device)[0]
+
+
+def evaluate_losses(
+    model: Module, loader: DataLoader, loss_fns: list[Module], device: str | torch.device
+) -> list[float]:
+    """
+    Losses of one model over a whole set, for several loss functions.
+
+    The model is run once; each loss is computed over all predictions (see
+    ``eval_network``).
+
+    Parameters
+    ----------
+    model:
+        GNN model.
+    loader:
+        DataLoader for the evaluation set.
+    loss_fns:
+        Loss functions to compute.
+    device:
+        Target device.
+
+    Returns
+    -------
+    list[float]
+        One loss per entry of ``loss_fns``.
     """
     model.eval()
-    total_loss = 0.0
+    outputs, targets = [], []
 
     with torch.no_grad():
         for batch in loader:
             batch = batch.to(device)
-            out = model(
-                x=batch.x,
-                edge_index=batch.edge_index,
-                batch_index=batch.batch,
-                edge_attr=batch.edge_attr,
-                monomer_weight=getattr(batch, "weight_monomer", None),
-                monomer_id=getattr(batch, "monomer_id", None),
-                polymer_descriptors=getattr(batch, "polymer_descriptors", None),
+            outputs.append(
+                model(
+                    x=batch.x,
+                    edge_index=batch.edge_index,
+                    batch_index=batch.batch,
+                    edge_attr=batch.edge_attr,
+                    monomer_weight=getattr(batch, "weight_monomer", None),
+                    monomer_id=getattr(batch, "monomer_id", None),
+                    polymer_descriptors=getattr(batch, "polymer_descriptors", None),
+                )
             )
-            loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
-            total_loss += loss.item() * batch.num_graphs
+            targets.append(batch.y)
 
-    return total_loss / len(loader.dataset)
+        out, y = torch.cat(outputs), torch.cat(targets)
+        return [_compute_loss(out, y, loss_fn, model.problem_type).item() for loss_fn in loss_fns]
 
 
 def _compute_loss(

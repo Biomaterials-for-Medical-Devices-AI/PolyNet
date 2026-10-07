@@ -258,10 +258,13 @@ training, validation and test loss after every epoch.
   (`gnn_training.optimisation.regression_loss`, RMSE by default; cross-entropy for
   classification). With `target_transform` enabled they are in the *scaled* target
   units. The training curve is the mean of the per-batch losses during the epoch,
-  computed with dropout active. The validation and test losses are evaluated one sample
-  at a time, so with the default RMSE loss each per-sample value is the absolute error
-  and the validation/test curves equal the mean absolute error — the best epoch is
-  therefore the one with the lowest validation MAE.
+  computed with dropout active. The validation and test losses are computed **over the
+  whole set** (all predictions first, then the loss once), so with the default RMSE
+  loss they are the RMSE of the set and the best epoch is the one with the lowest
+  validation RMSE; they do not depend on the batch size. With class weights
+  (`AsymmetricLossStrength`) the validation curve is the weighted cross-entropy over
+  the set. (Earlier versions averaged the loss of single samples, so with RMSE the
+  validation/test curves — and the best-epoch choice — were in fact the MAE.)
 
 ## Debugging
 
