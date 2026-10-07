@@ -224,6 +224,10 @@ feature_preprocessing:
 # -----------------------------------------------------------------------------
 tml_models:
   train_tml: true
+  # true (default): TML models (and their feature scaling and HPO) use the training +
+  # validation samples. false: training samples only, the same data GNNs train on;
+  # the validation samples are scored as a held-out validation set.
+  include_validation_in_training: true
   hpo_n_folds: 5   # CV folds for automatic HPO (>= 2; <= smallest class size for classification)
   # hpo_num_samples: 30          # configurations sampled per search (RandomizedSearchCV n_iter)
   # hpo_search_grid:             # custom candidates for models with an empty block ({})
@@ -310,8 +314,9 @@ tml_explainability:
   bootstraps: "all"
 
   # Data split to draw samples from for the global distribution plot.
-  # TML models are trained on train + validation, so "validation" (and "all")
-  # explain training data; use "test" for unseen samples.
+  # With tml_models.include_validation_in_training: true (default) TML models are
+  # trained on train + validation, so "validation" (and "all") explain training
+  # data; use "test" for unseen samples.
   explain_set: "test"              # train | validation | test | all
 
   # Normalisation applied to SHAP scores before plotting.
