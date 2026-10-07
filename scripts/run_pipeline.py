@@ -155,43 +155,49 @@ def _build_split_config(cfg: dict) -> SplitConfig:
 
 
 def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
-    """Build TrainGNNConfig from the 'gnn_training' section.
+    """Build TrainGNNConfig from the 'gnn_training' and 'training' sections.
 
-    YAML string keys ``"LearningRate"`` and ``"BatchSize"`` are remapped to
-    ``TrainingParam`` enum members, and architecture names to ``Network`` enum
-    members, before constructing the Pydantic model.
+    YAML string keys ``"LearningRate"``, ``"BatchSize"`` and
+    ``"AsymmetricLossStrength"`` are remapped to ``TrainingParam`` enum members, and architecture names to ``Network`` enum
+    members, before constructing the Pydantic model. The whole section is
+    validated, so unknown keys (e.g. typos) raise an error instead of being
+    ignored.
     """
     from polynet.config.enums import Network, TrainingParam
 
-    gnn_dict = cfg["gnn_training"]
-    raw_layers = gnn_dict.get("gnn_convolutional_layers", {})
-    _KEY_MAP = {"LearningRate": TrainingParam.LearningRate, "BatchSize": TrainingParam.BatchSize}
+    gnn_dict = dict(cfg["gnn_training"])
+    _KEY_MAP = {
+        "LearningRate": TrainingParam.LearningRate,
+        "BatchSize": TrainingParam.BatchSize,
+        "AsymmetricLossStrength": TrainingParam.AsymmetricLossStrength,
+    }
     layers = {}
-    for arch_name, arch_params in raw_layers.items():
+    for arch_name, arch_params in (gnn_dict.get("gnn_convolutional_layers") or {}).items():
         net = Network(arch_name)
         params = dict(arch_params) if arch_params else {}
         layers[net] = {_KEY_MAP.get(k, k): v for k, v in params.items()}
+    gnn_dict["gnn_convolutional_layers"] = layers
 
-    # Same key spelling as the architecture blocks (LearningRate / BatchSize).
-    search_grid = {
-        key: {_KEY_MAP.get(p, p): v for p, v in (params or {}).items()}
-        for key, params in (gnn_dict.get("hpo_search_grid") or {}).items()
-    }
+    # Same key spelling as the architecture blocks (LearningRate / BatchSize / ...).
+    if "hpo_search_grid" in gnn_dict:
+        gnn_dict["hpo_search_grid"] = {
+            key: {_KEY_MAP.get(p, p): v for p, v in (params or {}).items()}
+            for key, params in (gnn_dict["hpo_search_grid"] or {}).items()
+        }
+    if gnn_dict.get("optimisation") is None:
+        gnn_dict.pop("optimisation", None)
 
-    epochs = cfg.get("training", {}).get("epochs", 250)
-    return TrainGNNConfig(
-        train_gnn=gnn_dict.get("train_gnn", True),
-        gnn_convolutional_layers=layers,
-        share_gnn_parameters=gnn_dict.get("share_gnn_parameters", True),
-        epochs=epochs,
-        hpo_split_strategy=gnn_dict.get("hpo_split_strategy", "cross_validation"),
-        hpo_n_folds=gnn_dict.get("hpo_n_folds", 5),
-        hpo_val_fraction=gnn_dict.get("hpo_val_fraction", 0.2),
-        hpo_n_repeats=gnn_dict.get("hpo_n_repeats", 3),
-        optimisation=gnn_dict.get("optimisation") or {},
-        hpo_num_samples=gnn_dict.get("hpo_num_samples", 150),
-        hpo_search_grid=search_grid,
-    )
+    # Epochs live in the 'training' section (also set by --epochs).
+    training = cfg.get("training") or {}
+    unknown = sorted(set(training) - {"epochs"})
+    if unknown:
+        raise ValueError(f"training: unknown key(s) {unknown}. Allowed: ['epochs'].")
+    if "epochs" in gnn_dict:
+        raise ValueError("Set the number of epochs in 'training.epochs', not in 'gnn_training'.")
+    if "epochs" in training:
+        gnn_dict["epochs"] = training["epochs"]
+
+    return TrainGNNConfig.model_validate(gnn_dict)
 
 
 def _build_tml_config(cfg: dict) -> TrainTMLConfig:

@@ -18,6 +18,7 @@ from polynet.config.enums import (
     RegressionLoss,
     Scheduler,
     TraditionalMLModel,
+    TrainingParam,
     TransformDescriptor,
 )
 from polynet.config.schemas.base import (
@@ -237,6 +238,24 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
                 UserWarning,
                 stacklevel=2,
             )
+        return self
+
+    @model_validator(mode="after")
+    def check_architecture_parameters(self) -> "TrainGNNConfig":
+        """Reject unknown parameters in ``gnn_convolutional_layers`` (e.g. typos)."""
+        # Deferred import: the model registry imports torch.
+        from polynet.factories.network import architecture_parameters
+
+        # The seed is set by PolyNet for every split.
+        training_params = {str(p) for p in TrainingParam} - {str(TrainingParam.Seed)}
+        for network, params in self.gnn_convolutional_layers.items():
+            allowed = architecture_parameters(network) | training_params
+            unknown = sorted(str(p) for p in (params or {}) if str(p) not in allowed)
+            if unknown:
+                raise ValueError(
+                    f"gnn_convolutional_layers.{network.value}: unknown parameter(s) "
+                    f"{unknown}. Allowed: {sorted(allowed)}."
+                )
         return self
 
     @model_validator(mode="after")

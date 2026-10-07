@@ -180,7 +180,7 @@ gnn_training:
       n_convolutions: 3
       readout_layers: 2
       dropout: 0.1
-      pooling: "GlobalMeanPool"
+      pooling: "global_mean_pool"
 
     GAT:
       LearningRate: 0.001
@@ -237,7 +237,13 @@ Setting a scheduler parameter that the chosen scheduler does not use emits a war
 config-load time. In the GUI these options are under **Advanced training options** in
 the GNN section of the Train Models page.
 
-**Available architectures:** `GCN`, `GAT`, `CGGNN`, `MPNN`, `GraphSAGE`, `TransformerGNN`
+**Available architectures:** `GCN`, `GAT`, `CGGNN`, `MPNN`, `GraphSAGE`, `TransformerConvGNN`
+
+Every key is checked when the config is loaded: a misspelt `gnn_training` key, an
+unknown parameter in an architecture block (including one that belongs to another
+architecture, e.g. `improved` outside `GCN`) or a key other than `epochs` in `training`
+stops the run with an error listing the allowed names. The number of epochs is set in
+`training.epochs` only.
 
 **Architecture-specific parameters:**
 
@@ -245,15 +251,14 @@ the GNN section of the Train Models page.
 |---|---|---|
 | `GCN` | `improved: bool` | Improved normalisation from Kipf & Welling |
 | `GAT` | `num_heads: int` | Number of multi-head attention heads |
-| `TransformerGNN` | `num_heads: int` | Number of transformer attention heads |
+| `TransformerConvGNN` | `num_heads: int` | Number of transformer attention heads |
 | `GraphSAGE` | `bias: bool` | Whether to include bias terms |
 
 **Shared optional parameters:**
 
 | Parameter | Default | Description |
 |---|---|---|
-| `cross_att` | `false` | Enable cross-monomer attention |
-| `apply_weighting_to_graph` | `"PerMonomerPooling"` | One of: `PerMonomerPooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `BeforePooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), or `BeforeMPP` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs) |
+| `apply_weighting_to_graph` | `"before_pooling"` | One of: `per_monomer_pooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `before_pooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), `before_mpp` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs), or `no_weighting` |
 | `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Ignored for regression. Not currently tuned by automatic HPO (trials train without class weights), so it cannot be put in `hpo_search_grid`. |
 
 ## Automatic HPO configuration
