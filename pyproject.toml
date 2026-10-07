@@ -40,6 +40,7 @@ polymetrix = "^0.2.0"
 shap = "^0.51.0"
 openpyxl = "^3.1.5"
 gbigsmiles = "^0.3.3"
+astartes = "^1.3.3"
 
 
 [tool.poetry.group.dev.dependencies]
