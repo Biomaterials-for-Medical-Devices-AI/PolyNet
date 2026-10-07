@@ -22,6 +22,7 @@ Design notes
 """
 
 import copy
+import logging
 import math
 
 from polynet.config.enums import (
@@ -33,6 +34,8 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TrainingParam,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Traditional ML grids (templates — never mutate these directly)
@@ -114,9 +117,11 @@ _GNN_SPECIFIC_GRIDS: dict[Network, dict] = {
 
 
 # Parameters injected by PolyNet that user grids may not override.
-# ``AsymmetricLossStrength`` is excluded because HPO trials currently train
-# without class weights, so tuning it would have no effect.
-RESERVED_GNN_GRID_KEYS = frozenset({TrainingParam.Seed, TrainingParam.AsymmetricLossStrength})
+RESERVED_GNN_GRID_KEYS = frozenset({TrainingParam.Seed})
+
+# Default AsymmetricLossStrength candidates searched for classification
+# (``None`` = no class weighting). Regression never uses class weights.
+CLASSIFICATION_LOSS_STRENGTHS = [None, 0.25, 0.5, 0.75, 1.0]
 RESERVED_TML_GRID_KEYS = frozenset({"random_state", "probability"})
 
 # Key of ``gnn_training.hpo_search_grid`` applied to every architecture.
@@ -262,6 +267,10 @@ def get_gnn_search_grid(
         The GNN architecture to retrieve a grid for.
     random_seed:
         Injected into the grid as ``TrainingParam.Seed``.
+    problem_type:
+        For classification, ``AsymmetricLossStrength`` defaults to
+        ``CLASSIFICATION_LOSS_STRENGTHS``; for regression it is always
+        ``[None]`` (a user value is ignored with a warning).
     custom_grid:
         Optional ``gnn_training.hpo_search_grid``. Its ``shared`` entry and the
         entry for ``network`` replace the default candidates of the parameters
@@ -287,7 +296,7 @@ def get_gnn_search_grid(
     specific = copy.deepcopy(_GNN_SPECIFIC_GRIDS[network])
     shared = copy.deepcopy(_GNN_SHARED_GRID)
     if problem_type == ProblemType.Classification:
-        shared[TrainingParam.AsymmetricLossStrength] = [None, 0.25, 0.5, 0.75, 1.0]
+        shared[TrainingParam.AsymmetricLossStrength] = list(CLASSIFICATION_LOSS_STRENGTHS)
     grid = {**specific, **shared}
     user = custom_grid or {}
     grid = merge_search_grid(
@@ -297,6 +306,12 @@ def get_gnn_search_grid(
             for key in (SHARED_GNN_GRID_KEY, network.value)
         ),
     )
+    if problem_type == ProblemType.Regression and grid[TrainingParam.AsymmetricLossStrength] != [None]:
+        logger.warning(
+            f"hpo_search_grid sets {TrainingParam.AsymmetricLossStrength.value} for "
+            f"{network.value}, but class weights only apply to classification; ignoring it."
+        )
+        grid[TrainingParam.AsymmetricLossStrength] = [None]
     grid[TrainingParam.Seed] = [random_seed]
     return grid
 
@@ -333,7 +348,10 @@ def effective_search_spaces(problem_type: ProblemType, gnn_cfg=None, tml_cfg=Non
             net.value: {
                 k: v
                 for k, v in get_gnn_search_grid(
-                    net, random_seed=0, custom_grid=gnn_cfg.hpo_search_grid
+                    net,
+                    random_seed=0,
+                    problem_type=problem_type,
+                    custom_grid=gnn_cfg.hpo_search_grid,
                 ).items()
                 if k != TrainingParam.Seed
             }

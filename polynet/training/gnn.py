@@ -182,6 +182,43 @@ def build_optimisation(
     return optimizer, scheduler, loss_fn
 
 
+def class_weights_for(
+    graphs: list,
+    num_classes: int,
+    problem_type: ProblemType,
+    loss_strength: float | None,
+) -> torch.Tensor | None:
+    """
+    Cross-entropy class weights for ``AsymmetricLossStrength`` (or ``None``).
+
+    Used by final training and by every HPO trial, always computed from the
+    training graphs of that model.
+
+    Parameters
+    ----------
+    graphs:
+        Training graphs (their ``y`` holds the class label).
+    num_classes:
+        Number of classes.
+    problem_type:
+        Classification or regression; regression never uses class weights.
+    loss_strength:
+        ``AsymmetricLossStrength`` in [0, 1], or ``None`` for no weighting.
+
+    Returns
+    -------
+    torch.Tensor or None
+        Weights of shape ``(num_classes,)``, or ``None``.
+    """
+    if problem_type != ProblemType.Classification or loss_strength is None:
+        return None
+    return compute_class_weights(
+        labels=[int(g.y.item()) for g in graphs],
+        num_classes=int(num_classes),
+        imbalance_strength=loss_strength,
+    )
+
+
 def n_polymer_descriptors_of(graph) -> int:
     """Number of polymer descriptors stored on a graph (0 if none)."""
     poly_desc = getattr(graph, "polymer_descriptors", None)
@@ -405,14 +442,9 @@ def train_gnn_ensemble(
             val_loader = DataLoader(val_set_fit, shuffle=False)
             test_loader = DataLoader(test_set_fit, shuffle=False)
 
-            class_weights = None
-            if problem_type == ProblemType.Classification and loss_strength is not None:
-                all_labels = [data.y.item() for data in train_set]
-                class_weights = compute_class_weights(
-                    labels=all_labels,
-                    num_classes=int(num_classes),
-                    imbalance_strength=loss_strength,
-                )
+            class_weights = class_weights_for(
+                train_set, num_classes, problem_type, loss_strength
+            )
 
             optimizer, scheduler, loss_fn = build_optimisation(
                 model=model,

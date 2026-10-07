@@ -265,7 +265,7 @@ def test_trials_train_for_the_requested_epochs(monkeypatch):
     monkeypatch.setattr(hyperopt, "create_network", lambda **k: mock.MagicMock())
     monkeypatch.setattr(hyperopt, "fit_polymer_descriptor_scaler", lambda *a: None)
     monkeypatch.setattr(hyperopt, "n_polymer_descriptors_of", lambda g: 0)
-    monkeypatch.setattr(hyperopt, "build_optimisation", lambda **k: (None, None, None))
+    monkeypatch.setattr(hyperopt, "build_optimisation", lambda **k: (None, None, mock.MagicMock()))
     monkeypatch.setattr(hyperopt, "step_scheduler", lambda *a: None)
     reports = []
     monkeypatch.setattr(hyperopt.session, "report", reports.append)
@@ -285,3 +285,96 @@ def test_trials_train_for_the_requested_epochs(monkeypatch):
             epochs=7,
         )
         assert len(calls) == 7 * n_splits
+
+
+# --- AsymmetricLossStrength in GNN HPO -----------------------------------------
+
+
+def _classification_dataset(n=20):
+    return [types.SimpleNamespace(y=torch.tensor(i % 2)) for i in range(n)]
+
+
+def test_classification_hpo_searches_class_weight_strengths(tmp_path):
+    _, run = _run_gnn_hpo(
+        tmp_path, problem_type=ProblemType.Classification, dataset=_classification_dataset()
+    )
+    candidates = run.call_args.kwargs["config"][TrainingParam.AsymmetricLossStrength].categories
+    assert candidates == [None, 0.25, 0.5, 0.75, 1.0]
+
+
+def test_user_can_pin_the_class_weight_strength(tmp_path):
+    _, run = _run_gnn_hpo(
+        tmp_path,
+        problem_type=ProblemType.Classification,
+        dataset=_classification_dataset(),
+        custom_grid={"shared": {TrainingParam.AsymmetricLossStrength: [0.5]}},
+    )
+    assert run.call_args.kwargs["config"][TrainingParam.AsymmetricLossStrength].categories == [0.5]
+
+
+def test_regression_ignores_class_weight_strength(tmp_path, caplog):
+    with caplog.at_level(logging.WARNING):
+        _, run = _run_gnn_hpo(
+            tmp_path, custom_grid={"shared": {TrainingParam.AsymmetricLossStrength: [0.5]}}
+        )
+    assert run.call_args.kwargs["config"][TrainingParam.AsymmetricLossStrength].categories == [None]
+    assert "only apply to classification" in caplog.text
+
+
+def test_class_weight_strength_candidates_are_validated():
+    def cfg(values):
+        return TrainGNNConfig(
+            gnn_convolutional_layers={Network.GCN: {}},
+            hpo_search_grid={"shared": {TrainingParam.AsymmetricLossStrength: values}},
+        )
+
+    assert cfg([None, 0.5, 1.0])
+    with pytest.raises(ValidationError, match="between 0 and 1"):
+        cfg([1.5])
+
+
+def test_trials_train_weighted_but_are_scored_unweighted(monkeypatch):
+    """Validation losses must be comparable across AsymmetricLossStrength candidates."""
+    weighted = torch.nn.CrossEntropyLoss(weight=torch.tensor([0.2, 0.8]))
+    built = {}
+
+    def fake_build_optimisation(**kwargs):
+        built["class_weights"] = kwargs["class_weights"]
+        return None, None, weighted
+
+    scored = []
+    monkeypatch.setattr(hyperopt, "build_optimisation", fake_build_optimisation)
+    monkeypatch.setattr(hyperopt, "train_network", lambda *a, **k: None)
+    monkeypatch.setattr(
+        hyperopt, "eval_network", lambda m, l, loss_fn, d: scored.append(loss_fn) or 1.0
+    )
+    monkeypatch.setattr(hyperopt, "create_network", lambda **k: mock.MagicMock())
+    monkeypatch.setattr(hyperopt, "fit_polymer_descriptor_scaler", lambda *a: None)
+    monkeypatch.setattr(hyperopt, "n_polymer_descriptors_of", lambda g: 0)
+    steps = []
+    monkeypatch.setattr(hyperopt, "step_scheduler", lambda s, loss: steps.append(loss))
+    monkeypatch.setattr(hyperopt.session, "report", lambda r: None)
+
+    dataset = [
+        types.SimpleNamespace(num_node_features=3, num_edge_features=1, y=torch.tensor(y))
+        for y in [0, 0, 0, 0, 0, 0, 1, 1, 0, 1]
+    ]
+    hyperopt._gnn_target_function(
+        config={
+            TrainingParam.LearningRate: 0.01,
+            TrainingParam.BatchSize: 4,
+            TrainingParam.AsymmetricLossStrength: 1.0,
+        },
+        dataset=dataset,
+        num_classes=2,
+        splits=[(list(range(7)), [7, 8, 9])],
+        strategy=HpoSplitStrategy.Holdout,
+        network=Network.GCN,
+        problem_type=ProblemType.Classification,
+        epochs=1,
+    )
+    # Trained with inverse-frequency weights from the trial's training part (6 vs 1).
+    assert built["class_weights"][1] > built["class_weights"][0]
+    # Scored with an unweighted loss; the scheduler still sees the weighted one.
+    assert any(getattr(f, "weight", None) is None for f in scored)
+    assert weighted in scored and len(steps) == 1

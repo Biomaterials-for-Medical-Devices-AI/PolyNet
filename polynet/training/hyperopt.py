@@ -46,8 +46,10 @@ from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import step_scheduler
 from polynet.training.cv import make_kfold
+from polynet.factories.loss import create_loss
 from polynet.training.gnn import (
     build_optimisation,
+    class_weights_for,
     eval_network,
     fit_polymer_descriptor_scaler,
     n_polymer_descriptors_of,
@@ -210,7 +212,10 @@ def gnn_hyp_opt(
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
 
     config = get_gnn_search_grid(
-        network=gnn_arch, random_seed=random_seed, custom_grid=custom_grid
+        network=gnn_arch,
+        random_seed=random_seed,
+        problem_type=problem_type,
+        custom_grid=custom_grid,
     )
     search_space = {
         "architecture": gnn_arch.value,
@@ -319,6 +324,22 @@ def gnn_hyp_opt(
 # ---------------------------------------------------------------------------
 
 
+def _validate(model, val_loader, loss_fn, score_fn, scheduler, device) -> float:
+    """
+    Step the scheduler as in final training and return the trial's score.
+
+    The scheduler sees the training loss function on the validation data (as
+    in final training, weighted when class weights are used); the returned
+    score is the unweighted ``score_fn``, comparable across trials.
+    """
+    val_loss = eval_network(model, val_loader, score_fn, device)
+    weighted = getattr(loss_fn, "weight", None) is not None
+    step_scheduler(
+        scheduler, eval_network(model, val_loader, loss_fn, device) if weighted else val_loss
+    )
+    return val_loss
+
+
 def asha_grace_period(epochs: int) -> int:
     """
     Epochs every holdout HPO trial runs before ASHA may stop it.
@@ -357,7 +378,15 @@ def _gnn_target_function(
 
     lr = cfg.pop(TrainingParam.LearningRate)
     batch_size = cfg.pop(TrainingParam.BatchSize)
-    cfg.pop(TrainingParam.AsymmetricLossStrength, None)
+    loss_strength = cfg.pop(TrainingParam.AsymmetricLossStrength, None)
+
+    # Trials train with their own class weights but are all scored with the
+    # same unweighted loss, so validation losses are comparable across
+    # AsymmetricLossStrength candidates.
+    score_fn = create_loss(
+        problem_type,
+        regression_loss=(optimisation or GNNOptimisationConfig()).regression_loss,
+    ).to(device)
 
     if strategy == HpoSplitStrategy.CrossValidation:
         # Original behaviour: train each fold fully, report once at end.
@@ -389,14 +418,20 @@ def _gnn_target_function(
             )
 
             optimizer, scheduler, loss_fn = build_optimisation(
-                model=model, lr=lr, problem_type=problem_type, optimisation=optimisation
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights_for(
+                    train_set, num_classes, problem_type, loss_strength
+                ),
             )
+            loss_fn = loss_fn.to(device)
 
             best_val_loss = float("inf")
             for _ in range(1, epochs + 1):
                 train_network(model, train_loader, loss_fn, optimizer, device)
-                val_loss = eval_network(model, val_loader, loss_fn, device)
-                step_scheduler(scheduler, val_loss)
+                val_loss = _validate(model, val_loader, loss_fn, score_fn, scheduler, device)
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
 
@@ -438,17 +473,25 @@ def _gnn_target_function(
             )
 
             optimizer, scheduler, loss_fn = build_optimisation(
-                model=model, lr=lr, problem_type=problem_type, optimisation=optimisation
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights_for(
+                    train_set, num_classes, problem_type, loss_strength
+                ),
             )
-            split_data.append((model, train_loader, val_loader, optimizer, scheduler))
+            loss_fn = loss_fn.to(device)
+            split_data.append((model, train_loader, val_loader, optimizer, scheduler, loss_fn))
 
         best_val_losses = [float("inf")] * len(split_data)
 
         for epoch in range(1, epochs + 1):
-            for k, (model, train_loader, val_loader, optimizer, scheduler) in enumerate(split_data):
+            for k, (model, train_loader, val_loader, optimizer, scheduler, loss_fn) in enumerate(
+                split_data
+            ):
                 train_network(model, train_loader, loss_fn, optimizer, device)
-                val_loss = eval_network(model, val_loader, loss_fn, device)
-                step_scheduler(scheduler, val_loss)
+                val_loss = _validate(model, val_loader, loss_fn, score_fn, scheduler, device)
                 if val_loss < best_val_losses[k]:
                     best_val_losses[k] = val_loss
 

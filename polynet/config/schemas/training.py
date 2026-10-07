@@ -220,6 +220,12 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
                     f"'{SHARED_GNN_GRID_KEY}'."
                 )
             check_grid_parameters(where, params, allowed, RESERVED_GNN_GRID_KEYS)
+            for strength in params.get(TrainingParam.AsymmetricLossStrength, []):
+                if strength is not None and not 0.0 <= strength <= 1.0:
+                    raise ValueError(
+                        f"{where}.{TrainingParam.AsymmetricLossStrength.value} candidates must "
+                        f"be null or between 0 and 1, got {strength!r}."
+                    )
 
             if key in selected and self.gnn_convolutional_layers[selected[key]]:
                 warnings.warn(

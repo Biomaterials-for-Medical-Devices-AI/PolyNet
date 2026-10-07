@@ -259,7 +259,7 @@ stops the run with an error listing the allowed names. The number of epochs is s
 | Parameter | Default | Description |
 |---|---|---|
 | `apply_weighting_to_graph` | `"before_pooling"` | One of: `per_monomer_pooling` (pools each monomer separately then sums `Σ wᵢ·pool(monomerᵢ)` — atom-count-bias-free), `before_pooling` (wD-MPNN-style: weights node features then pools with weighted-mean normalisation `Σ wx / Σ w`), `before_mpp` (multiplies node features by their monomer weight *before* message passing, so the convs see weighted inputs), or `no_weighting` |
-| `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Ignored for regression. Not currently tuned by automatic HPO (trials train without class weights), so it cannot be put in `hpo_search_grid`. |
+| `AsymmetricLossStrength` | `null` | Classification only. When set to a float `s ∈ [0, 1]`, class loss weights are `(1 - s)·freq_weights + s·inverse_freq_weights` — `s = 0` upweights majority classes (no correction), `s = 1` is full inverse-frequency correction (rare classes get high weight). `null` disables class weighting entirely. Ignored for regression. With automatic HPO (classification) it is tuned over `[null, 0.25, 0.5, 0.75, 1.0]`; set `AsymmetricLossStrength: [s]` in `hpo_search_grid` to fix it (or to search other values) — see [Class weights in HPO](#class-weights-in-hpo). |
 
 ## Automatic HPO configuration
 
@@ -394,6 +394,16 @@ tml_models:
   reserved parameters and empty lists are errors listing the allowed values. A grid for
   a model that has explicit hyperparameters (so HPO does not run for it) triggers a
   warning.
+- **Class weights in HPO.** <a id="class-weights-in-hpo"></a> For classification,
+  GNN HPO also tunes `AsymmetricLossStrength` (class weights in the cross-entropy
+  loss) over `[null, 0.25, 0.5, 0.75, 1.0]`, and the final models use the chosen
+  value. Each trial trains with its own class weights (computed from the training part
+  of each HPO split), but every trial is **scored with the unweighted** cross-entropy
+  on its validation data, so trials with different weights are compared on the same
+  scale. To fix the strength while HPO tunes everything else, give a single value,
+  e.g. `shared: {AsymmetricLossStrength: [0.5]}` (or `[null]` for no weighting).
+  Candidates must be `null` or between 0 and 1. For regression the setting is ignored
+  with a warning.
 - **Sample counts.** `hpo_num_samples` must be ≥ 1. For TML it is capped, with a
   warning, at the number of distinct grid combinations (sampling more would only
   repeat configurations).
