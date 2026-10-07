@@ -365,6 +365,7 @@ def train_gnn_ensemble(
                     polymer_descriptor_scaler=polymer_descriptor_scaler,
                     optimisation=optimisation,
                     custom_grid=hpo_search_grid,
+                    epochs=epochs,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")

@@ -242,3 +242,46 @@ def test_effective_search_spaces_lists_only_tuned_models_with_merged_grids():
     assert lr == {"search_grid": {"fit_intercept": [True, False]}, "n_iter": 2}  # capped
 
     assert effective_search_spaces(ProblemType.Regression) == {}
+
+
+def test_gnn_hpo_trials_use_the_training_epochs(tmp_path):
+    with mock.patch.object(hyperopt, "ASHAScheduler") as asha, mock.patch.object(
+        hyperopt.tune, "with_parameters"
+    ) as trial:
+        _run_gnn_hpo(tmp_path, epochs=40)
+    # ASHA (holdout) stops at training.epochs; trials receive the same epochs.
+    assert asha.call_args.kwargs["max_t"] == 40
+    assert asha.call_args.kwargs["grace_period"] == hyperopt.asha_grace_period(40) == 8
+    assert trial.call_args.kwargs["epochs"] == 40
+
+    _, again = _run_gnn_hpo(tmp_path, epochs=60)
+    assert again.call_count == 1  # a different number of epochs is a new search
+
+
+def test_trials_train_for_the_requested_epochs(monkeypatch):
+    calls = []
+    monkeypatch.setattr(hyperopt, "train_network", lambda *a, **k: calls.append(1))
+    monkeypatch.setattr(hyperopt, "eval_network", lambda *a, **k: 1.0)
+    monkeypatch.setattr(hyperopt, "create_network", lambda **k: mock.MagicMock())
+    monkeypatch.setattr(hyperopt, "fit_polymer_descriptor_scaler", lambda *a: None)
+    monkeypatch.setattr(hyperopt, "n_polymer_descriptors_of", lambda g: 0)
+    monkeypatch.setattr(hyperopt, "build_optimisation", lambda **k: (None, None, None))
+    monkeypatch.setattr(hyperopt, "step_scheduler", lambda *a: None)
+    reports = []
+    monkeypatch.setattr(hyperopt.session, "report", reports.append)
+    dataset = [types.SimpleNamespace(num_node_features=3, num_edge_features=1) for _ in range(10)]
+    config = {TrainingParam.LearningRate: 0.01, TrainingParam.BatchSize: 4}
+
+    for strategy, n_splits in ((HpoSplitStrategy.CrossValidation, 2), (HpoSplitStrategy.Holdout, 1)):
+        calls.clear()
+        hyperopt._gnn_target_function(
+            config=dict(config),
+            dataset=dataset,
+            num_classes=1,
+            splits=[(list(range(7)), [7, 8, 9])] * n_splits,
+            strategy=strategy,
+            network=Network.GCN,
+            problem_type=ProblemType.Regression,
+            epochs=7,
+        )
+        assert len(calls) == 7 * n_splits

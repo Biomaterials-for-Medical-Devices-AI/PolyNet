@@ -270,6 +270,12 @@ control how the train+val data is partitioned inside each trial. The search grid
 default grid of `polynet/config/search_grid.py`, optionally customised with
 `hpo_search_grid` — see [Custom search grids](#custom-search-grids-hpo_search_grid).
 
+Every HPO trial trains for `training.epochs` epochs — the same number as the final
+models — so the selected hyperparameters are tuned for the training length actually
+used. With `holdout` / `repeated_holdout`, ASHA stops a trial at
+`training.epochs` at the latest and lets every trial run at least one fifth of them
+(50 of the default 250) before pruning it.
+
 ### Split strategies
 
 | Strategy | `hpo_split_strategy` value | Speed | Reliability | ASHA pruning |
@@ -279,7 +285,7 @@ default grid of `polynet/config/search_grid.py`, optionally customised with
 | **Repeated holdout** | `repeated_holdout` | Intermediate (N splits, reports per epoch) | Good — average across N repeats | ✓ |
 
 - **`cross_validation`** (default) — the dataset is split into `hpo_n_folds` folds.
-  Each trial trains one model per fold for the full number of epochs and reports a
+  Each trial trains one model per fold for `training.epochs` epochs and reports a
   single aggregated val loss at the end. This is the most statistically reliable
   option and the right choice for small datasets (< ~500 samples) where a single
   random split would have high variance.

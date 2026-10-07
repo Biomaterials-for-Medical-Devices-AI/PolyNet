@@ -141,6 +141,7 @@ def gnn_hyp_opt(
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
     optimisation: GNNOptimisationConfig | None = None,
     custom_grid: dict | None = None,
+    epochs: int = 250,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
@@ -195,6 +196,10 @@ def gnn_hyp_opt(
     custom_grid:
         ``gnn_training.hpo_search_grid``; merged on top of the default grid
         (see ``polynet.config.search_grid.get_gnn_search_grid``).
+    epochs:
+        Training epochs per trial (``training.epochs``, the same as final
+        training). For holdout strategies it is also ASHA's ``max_t``, with a
+        grace period of ``asha_grace_period(epochs)``.
 
     Returns
     -------
@@ -217,6 +222,7 @@ def gnn_hyp_opt(
         "n_repeats": n_repeats,
         "optimisation": (optimisation or GNNOptimisationConfig()).model_dump(mode="json"),
         "polymer_descriptor_scaler": str(polymer_descriptor_scaler),
+        "epochs": epochs,
     }
     run_name = f"{gnn_arch.value}_{search_cache_key(search_space)}"
 
@@ -257,8 +263,8 @@ def gnn_hyp_opt(
             time_attr="epoch",
             metric="val_loss",
             mode="min",
-            max_t=250,
-            grace_period=50,
+            max_t=epochs,
+            grace_period=asha_grace_period(epochs),
             reduction_factor=2,
         )
         if use_asha
@@ -287,6 +293,7 @@ def gnn_hyp_opt(
             problem_type=problem_type,
             polymer_descriptor_scaler=polymer_descriptor_scaler,
             optimisation=optimisation,
+            epochs=epochs,
         ),
         config=tune_config,
         num_samples=num_samples,
@@ -312,6 +319,15 @@ def gnn_hyp_opt(
 # ---------------------------------------------------------------------------
 
 
+def asha_grace_period(epochs: int) -> int:
+    """
+    Epochs every holdout HPO trial runs before ASHA may stop it.
+
+    One fifth of the training epochs (50 for the default 250), at least 1.
+    """
+    return max(1, round(epochs / 5))
+
+
 def _gnn_target_function(
     config: dict,
     dataset: list,
@@ -322,11 +338,12 @@ def _gnn_target_function(
     problem_type: ProblemType,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
     optimisation: GNNOptimisationConfig | None = None,
+    epochs: int = 250,
 ) -> None:
     """
     Ray Tune objective function — trains a GNN and reports validation loss.
 
-    For ``CrossValidation``: trains each fold fully (250 epochs) and reports
+    For ``CrossValidation``: trains each fold fully (``epochs``) and reports
     once at the end with the mean/std across folds. ASHA is not active.
 
     For ``Holdout`` / ``RepeatedHoldout``: trains all splits in epoch lockstep
@@ -376,7 +393,7 @@ def _gnn_target_function(
             )
 
             best_val_loss = float("inf")
-            for _ in range(1, 251):
+            for _ in range(1, epochs + 1):
                 train_network(model, train_loader, loss_fn, optimizer, device)
                 val_loss = eval_network(model, val_loader, loss_fn, device)
                 step_scheduler(scheduler, val_loss)
@@ -427,7 +444,7 @@ def _gnn_target_function(
 
         best_val_losses = [float("inf")] * len(split_data)
 
-        for epoch in range(1, 251):
+        for epoch in range(1, epochs + 1):
             for k, (model, train_loader, val_loader, optimizer, scheduler) in enumerate(split_data):
                 train_network(model, train_loader, loss_fn, optimizer, device)
                 val_loss = eval_network(model, val_loader, loss_fn, device)
