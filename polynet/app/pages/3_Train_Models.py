@@ -136,15 +136,24 @@ def train_models(
         index_col=0,
     )
 
-    # Compute data splits using the shared pipeline stage
-    train_val_test_idxs = compute_data_splits(
-        data=data,
-        data_cfg=data_options,
-        split_cfg=split_cfg,
-        random_seed=general_experiment_options.random_seed,
-        out_dir=experiment_path,
-        weights_col=representation_options.weights_col,
-    )
+    # Compute data splits using the shared pipeline stage. Some samplers cannot
+    # split some datasets (e.g. clusters larger than the validation set); show
+    # why instead of a traceback.
+    try:
+        train_val_test_idxs = compute_data_splits(
+            data=data,
+            data_cfg=data_options,
+            split_cfg=split_cfg,
+            random_seed=general_experiment_options.random_seed,
+            out_dir=experiment_path,
+            weights_col=representation_options.weights_col,
+        )
+    except ValueError as e:
+        st.error(
+            f"The data could not be split with these settings: {e} Try another sampler, "
+            "the 'random' split method or larger validation/test ratios."
+        )
+        st.stop()
 
     tml_cfg = (
         TrainTMLConfig(

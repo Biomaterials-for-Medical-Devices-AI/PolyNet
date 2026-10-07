@@ -9,7 +9,7 @@ import warnings
 
 from pydantic import Field, model_validator
 
-from polynet.config.enums import SplitMethod, SplitSampler, SplitType
+from polynet.config.enums import ProblemType, SplitMethod, SplitSampler, SplitType
 from polynet.config.schemas.base import PolynetBaseModel
 from polynet.config.schemas.fingerprints import SamplingFingerprintConfig
 
@@ -40,6 +40,37 @@ def deterministic_sampler_warning(sampler: SplitSampler, n_repetitions: int) -> 
         "repetition − 1), but models without randomness (e.g. linear regression) will be "
         "identical."
     )
+
+
+def available_samplers(
+    problem_type: ProblemType | str, split_method: SplitMethod | str
+) -> list[SplitSampler]:
+    """
+    Samplers that are valid (and sensible) for a problem type and split method.
+
+    - ``stratified`` excludes the samplers that use the target (``spxy``,
+      ``target_property``): within a class the target is constant.
+    - Classification excludes ``target_property``: sorting by class label
+      would put a single class in the test set.
+
+    Parameters
+    ----------
+    problem_type:
+        Classification or regression.
+    split_method:
+        ``random`` or ``stratified``.
+
+    Returns
+    -------
+    list[SplitSampler]
+        The valid samplers, in ``SplitSampler`` order (``random`` first).
+    """
+    excluded: set[SplitSampler] = set()
+    if SplitMethod(split_method) == SplitMethod.Stratified:
+        excluded |= SAMPLERS_USING_TARGET
+    if ProblemType(problem_type) == ProblemType.Classification:
+        excluded.add(SplitSampler.TargetProperty)
+    return [s for s in SplitSampler if s not in excluded]
 
 
 def stratified_target_sampler_error(sampler: SplitSampler) -> str:

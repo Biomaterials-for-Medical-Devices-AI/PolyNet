@@ -31,6 +31,7 @@ from polynet.config.constants import POLYBERT_MODEL
 from polynet.config.schemas.fingerprints import MorganFingerprintConfig, RDKitFingerprintConfig
 from polynet.config.schemas.split_data import (
     DETERMINISTIC_SAMPLERS,
+    available_samplers,
     SAMPLERS_USING_FINGERPRINTS,
     deterministic_sampler_warning,
 )
@@ -805,22 +806,28 @@ _SAMPLER_HELP = {
 }
 
 
-def sampler_widgets() -> None:
+def sampler_widgets(problem_type: ProblemType, split_method: SplitMethod) -> None:
     """
     astartes sampler and, for fingerprint samplers, the sampling fingerprint.
 
-    The sampling fingerprint is used only to split the data; it does not
-    change the representations.
+    Only the samplers valid for ``problem_type`` and ``split_method`` are
+    offered (``available_samplers``). The sampling fingerprint is used only to
+    split the data; it does not change the representations.
     """
+    options = available_samplers(problem_type, split_method)
+    # A sampler chosen earlier may no longer be valid (e.g. after switching to
+    # stratified); fall back to random instead of keeping an invalid choice.
+    if st.session_state.get(GeneralConfigStateKeys.Sampler) not in options:
+        st.session_state[GeneralConfigStateKeys.Sampler] = SplitSampler.Random
     sampler = st.selectbox(
         "Select the sampler",
-        options=list(SplitSampler),
+        options=options,
         index=0,
         key=GeneralConfigStateKeys.Sampler,
         format_func=lambda s: s.value,
         help="astartes sampler that draws the training, validation and test sets "
         "(astartes default hyperparameters). "
-        + " ".join(f"{s.value}: {text}" for s, text in _SAMPLER_HELP.items()),
+        + " ".join(f"{s.value}: {_SAMPLER_HELP[s]}" for s in options),
     )
     st.caption(_SAMPLER_HELP[sampler])
 
@@ -940,7 +947,10 @@ def split_data_form(problem_type: ProblemType) -> bool:
             key=GeneralConfigStateKeys.SplitMethod,
         )
 
-    sampler_widgets()
+    sampler_widgets(
+        problem_type,
+        st.session_state.get(GeneralConfigStateKeys.SplitMethod, SplitMethod.Random),
+    )
 
     if split_type == SplitType.TrainValTest:
         n_repetitions = st.select_slider(

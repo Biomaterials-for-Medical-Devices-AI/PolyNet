@@ -214,3 +214,23 @@ def test_sampling_metadata_records_the_sampler_and_fingerprint():
     assert sampling_metadata(_split_cfg(), _WEIGHTS)["sampling_fingerprint"] is None
     polybert = _split_cfg(sampler="kmeans", sampling_fingerprint={"fingerprint": "polybert"})
     assert sampling_metadata(polybert, _WEIGHTS)["sampling_fingerprint"]["model"] == "xushijie/polyBERT"
+
+
+# --- samplers offered in the GUI --------------------------------------------------
+
+
+@pytest.mark.parametrize("problem_type", ["regression", "classification"])
+@pytest.mark.parametrize("split_method", ["random", "stratified"])
+def test_every_offered_sampler_gives_a_valid_config(problem_type, split_method):
+    from polynet.config.schemas.split_data import available_samplers
+
+    offered = available_samplers(problem_type, split_method)
+    assert offered[0] == SplitSampler.Random
+    for sampler in offered:
+        _split_cfg(sampler=sampler, split_method=split_method)  # must not raise
+    for sampler in set(SplitSampler) - set(offered):
+        if split_method == "stratified" and sampler in {SplitSampler.SPXY, SplitSampler.TargetProperty}:
+            with pytest.raises(ValidationError):
+                _split_cfg(sampler=sampler, split_method=split_method)
+        else:  # hidden because it is meaningless here, not invalid
+            assert problem_type == "classification" and sampler == SplitSampler.TargetProperty

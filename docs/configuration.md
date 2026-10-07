@@ -184,7 +184,10 @@ sampler, always with astartes' default hyperparameters:
   test can be smaller or larger than requested (astartes' message is logged); they can fail
   on small datasets or small classes when a cluster is larger than the validation set.
 - `spxy` and `target_property` cannot be combined with `split_method: stratified` (the target
-  is constant within a class).
+  is constant within a class). `target_property` is not meaningful for classification (it
+  would put a single class in the test set). The GUI only offers the samplers that are valid
+  for the problem type and split method, and reports a sampler that cannot split the data
+  (e.g. clusters larger than the validation set) as a message instead of an error.
 - `dbscan` and `sphere_exclusion` are not offered: their default distance thresholds are far
   below the typical distance between polymer count fingerprints, so they cannot fill the
   sets.
