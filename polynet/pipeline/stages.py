@@ -377,9 +377,7 @@ def train_gnn(
         descriptor_scaler = getattr(model, "polymer_descriptor_scaler", None)
         if descriptor_scaler is not None:
             iter_key = model_name.rsplit("_", 1)[-1]
-            joblib.dump(
-                descriptor_scaler, models_dir / f"polymer_descriptor_scaler_{iter_key}.pkl"
-            )
+            joblib.dump(descriptor_scaler, models_dir / f"polymer_descriptor_scaler_{iter_key}.pkl")
 
     # TODO: create function to save this scaler
     for iter_key, scaler in target_scalers.items():
@@ -1064,13 +1062,11 @@ def predict_external(
         # ensembles have hard votes only, so probability-based metrics (AUROC)
         # are not computed for them.
         for col, model in ensemble_cols.items():
-            metrics.setdefault("ensemble", {}).setdefault(model, {})[set_name] = (
-                calculate_metrics(
-                    y_true=predictions[label_col],
-                    y_pred=predictions[col],
-                    y_probs=None,
-                    problem_type=data_cfg.problem_type,
-                )
+            metrics.setdefault("ensemble", {}).setdefault(model, {})[set_name] = calculate_metrics(
+                y_true=predictions[label_col],
+                y_pred=predictions[col],
+                y_probs=None,
+                problem_type=data_cfg.problem_type,
             )
 
         with open(out_dir / "metrics.json", "w") as f:
@@ -1163,8 +1159,7 @@ def run_explainability(
     models_to_explain = {
         key: model
         for key, model in trained_models.items()
-        if key.split("_", 1)[0] in selected_archs
-        and split_index_of_model(key) in selected_splits
+        if key.split("_", 1)[0] in selected_archs and split_index_of_model(key) in selected_splits
     }
 
     if not models_to_explain:
@@ -1321,16 +1316,16 @@ def run_tml_explainability(
     ``explanations/tml/{descriptor}_{sample_id}_shap.csv``
         Per-instance SHAP attribution table.
     """
-    from polynet.explainability.shap_explain import (
-        compute_global_shap_attribution,
-        compute_local_shap_attribution,
-    )
     from polynet.explainability.selection import (
         TML_VALIDATION_IS_TRAINING_WARNING,
         samples_per_model,
         select_splits,
         split_index_of_model,
         tml_explain_set_includes_validation,
+    )
+    from polynet.explainability.shap_explain import (
+        compute_global_shap_attribution,
+        compute_local_shap_attribution,
     )
     from polynet.visualization.utils import save_plot
 

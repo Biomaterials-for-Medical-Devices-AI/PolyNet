@@ -26,7 +26,9 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from polynet.config.enums import ProblemType
 
 
-def make_kfold(problem_type: ProblemType, n_folds: int, random_seed: int) -> KFold | StratifiedKFold:
+def make_kfold(
+    problem_type: ProblemType, n_folds: int, random_seed: int
+) -> KFold | StratifiedKFold:
     """
     Return the shuffled K-fold splitter used for hyperparameter search.
 

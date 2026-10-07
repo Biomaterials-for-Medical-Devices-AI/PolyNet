@@ -39,7 +39,9 @@ def _warnings(caplog):
 
 def test_absent_section_returns_none(run_pipeline, caplog):
     assert (
-        run_pipeline._resolve_preprocessing_config({}, train_tml=False, gnn_polymer_descriptors=True)
+        run_pipeline._resolve_preprocessing_config(
+            {}, train_tml=False, gnn_polymer_descriptors=True
+        )
         is None
     )
     assert not _warnings(caplog)

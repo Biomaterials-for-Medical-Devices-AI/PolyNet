@@ -183,10 +183,7 @@ def build_optimisation(
 
 
 def class_weights_for(
-    graphs: list,
-    num_classes: int,
-    problem_type: ProblemType,
-    loss_strength: float | None,
+    graphs: list, num_classes: int, problem_type: ProblemType, loss_strength: float | None
 ) -> torch.Tensor | None:
     """
     Cross-entropy class weights for ``AsymmetricLossStrength`` (or ``None``).
@@ -442,9 +439,7 @@ def train_gnn_ensemble(
             val_loader = DataLoader(val_set_fit, shuffle=False)
             test_loader = DataLoader(test_set_fit, shuffle=False)
 
-            class_weights = class_weights_for(
-                train_set, num_classes, problem_type, loss_strength
-            )
+            class_weights = class_weights_for(train_set, num_classes, problem_type, loss_strength)
 
             optimizer, scheduler, loss_fn = build_optimisation(
                 model=model,

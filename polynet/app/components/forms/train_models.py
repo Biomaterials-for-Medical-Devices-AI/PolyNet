@@ -5,6 +5,7 @@ from polynet.app.options.state_keys import (
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
+from polynet.config.constants import POLYBERT_MODEL
 from polynet.config.enums import (
     ApplyWeightingToGraph,
     ArchitectureParam,
@@ -25,16 +26,15 @@ from polynet.config.enums import (
     TransformDescriptor,
 )
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
-from polynet.config.schemas.representation import RepresentationConfig
-from polynet.config.schemas.target_preprocessing import TargetTransformConfig
-from polynet.config.constants import POLYBERT_MODEL
 from polynet.config.schemas.fingerprints import MorganFingerprintConfig, RDKitFingerprintConfig
+from polynet.config.schemas.representation import RepresentationConfig
 from polynet.config.schemas.split_data import (
     DETERMINISTIC_SAMPLERS,
-    available_samplers,
     SAMPLERS_USING_FINGERPRINTS,
+    available_samplers,
     deterministic_sampler_warning,
 )
+from polynet.config.schemas.target_preprocessing import TargetTransformConfig
 from polynet.config.schemas.training import GNNOptimisationConfig, TrainGNNConfig
 
 
@@ -948,8 +948,7 @@ def split_data_form(problem_type: ProblemType) -> bool:
         )
 
     sampler_widgets(
-        problem_type,
-        st.session_state.get(GeneralConfigStateKeys.SplitMethod, SplitMethod.Random),
+        problem_type, st.session_state.get(GeneralConfigStateKeys.SplitMethod, SplitMethod.Random)
     )
 
     if split_type == SplitType.TrainValTest:

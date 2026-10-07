@@ -25,7 +25,9 @@ from polynet.training.tml import train_tml_ensemble
 from polynet.utils.validation import check_n_folds_for_splits
 
 _RNG = np.random.default_rng(0)
-_DF = pd.DataFrame(_RNG.normal(size=(60, 3)), columns=["a", "b", "c"], index=[f"s{i}" for i in range(60)])
+_DF = pd.DataFrame(
+    _RNG.normal(size=(60, 3)), columns=["a", "b", "c"], index=[f"s{i}" for i in range(60)]
+)
 _DF["y"] = _DF["a"] * 2 + _RNG.normal(scale=0.1, size=60)
 _TRAIN, _VAL, _TEST = list(_DF.index[:40]), list(_DF.index[40:50]), list(_DF.index[50:])
 
@@ -59,7 +61,9 @@ def test_scalers_and_models_are_fitted_on_the_chosen_samples(include, fitted_on)
     # Feature scaler: training samples have mean 0 only for the samples it was fitted on.
     assert np.allclose(train_df[["a", "b", "c"]].mean(), 0, atol=1e-9)
     # Target scaler fitted on the same samples.
-    assert target_scalers["desc_1"].transform(_DF.loc[fitted_on, "y"].values).mean() == pytest.approx(0, abs=1e-9)
+    assert target_scalers["desc_1"].transform(
+        _DF.loc[fitted_on, "y"].values
+    ).mean() == pytest.approx(0, abs=1e-9)
     # The model was fitted on exactly these samples: refitting on them gives
     # the same coefficients.
     from sklearn.linear_model import LinearRegression
@@ -92,7 +96,9 @@ def test_included_validation_is_reported_as_training():
         models, data, SplitType.TrainValTest, "y", ProblemType.Regression, "y", target_scalers
     )
     assert set(preds[ResultColumn.SET]) == {DataSet.Training, DataSet.Test}
-    assert set(preds.loc[preds[ResultColumn.SET] == DataSet.Training, ResultColumn.INDEX]) == set(_TRAIN + _VAL)
+    assert set(preds.loc[preds[ResultColumn.SET] == DataSet.Training, ResultColumn.INDEX]) == set(
+        _TRAIN + _VAL
+    )
 
 
 def test_hpo_fold_check_counts_only_training_samples_when_validation_is_excluded():

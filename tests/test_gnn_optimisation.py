@@ -49,11 +49,18 @@ def test_defaults_reproduce_historical_settings():
 def test_yaml_style_dict_is_parsed():
     cfg = TrainGNNConfig(
         gnn_convolutional_layers={Network.GCN: {}},
-        optimisation={"optimizer": "sgd", "scheduler": "step_lr", "scheduler_step_size": 20,
-                      "regression_loss": "mae"},
+        optimisation={
+            "optimizer": "sgd",
+            "scheduler": "step_lr",
+            "scheduler_step_size": 20,
+            "regression_loss": "mae",
+        },
     ).optimisation
     assert (cfg.optimizer, cfg.scheduler, cfg.scheduler_step_size, cfg.regression_loss) == (
-        Optimizer.SGD, Scheduler.StepLR, 20, RegressionLoss.MAE
+        Optimizer.SGD,
+        Scheduler.StepLR,
+        20,
+        RegressionLoss.MAE,
     )
 
 
@@ -75,7 +82,9 @@ def test_invalid_settings_are_rejected(bad):
 
 
 def test_warns_when_scheduler_param_is_unused():
-    with pytest.warns(UserWarning, match="scheduler_patience=5 has no effect with scheduler='step_lr'"):
+    with pytest.warns(
+        UserWarning, match="scheduler_patience=5 has no effect with scheduler='step_lr'"
+    ):
         GNNOptimisationConfig(scheduler="step_lr", scheduler_patience=5)
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -94,9 +103,7 @@ def test_default_rmse_loss_matches_historical_sqrt_mse():
     assert torch.isclose(new, old)
 
 
-@pytest.mark.parametrize(
-    "loss, cls", [("rmse", RMSELoss), ("mse", nn.MSELoss), ("mae", nn.L1Loss)]
-)
+@pytest.mark.parametrize("loss, cls", [("rmse", RMSELoss), ("mse", nn.MSELoss), ("mae", nn.L1Loss)])
 def test_regression_loss_options(loss, cls):
     assert isinstance(create_loss(ProblemType.Regression, regression_loss=loss), cls)
 
@@ -134,8 +141,11 @@ def test_epoch_schedulers_step_on_epochs_not_on_the_loss():
 def test_builder_uses_the_settings():
     model = _params()
     cfg = GNNOptimisationConfig(
-        optimizer="sgd", scheduler="multi_step_lr", scheduler_milestones=[5, 7],
-        scheduler_factor=0.2, regression_loss="mae",
+        optimizer="sgd",
+        scheduler="multi_step_lr",
+        scheduler_milestones=[5, 7],
+        scheduler_factor=0.2,
+        regression_loss="mae",
     )
     opt, sched, loss = build_optimisation(model, 0.01, ProblemType.Regression, cfg)
     assert isinstance(opt, SGD) and opt.param_groups[0]["lr"] == 0.01
@@ -170,15 +180,26 @@ def test_hpo_trial_uses_the_optimisation_settings():
         return real(**kwargs)
 
     data = _dataset(12)
-    with mock.patch.object(hyperopt.session, "report", lambda d: None), mock.patch.object(
-        hyperopt, "build_optimisation", spy
+    with (
+        mock.patch.object(hyperopt.session, "report", lambda d: None),
+        mock.patch.object(hyperopt, "build_optimisation", spy),
     ):
         hyperopt._gnn_target_function(
-            config={TrainingParam.LearningRate: 0.01, TrainingParam.BatchSize: 4,
-                    "improved": False, "embedding_dim": 8, "n_convolutions": 1,
-                    "readout_layers": 2, "dropout": 0.0},
-            dataset=data, num_classes=1, splits=[(list(range(8)), list(range(8, 12)))],
-            strategy=HpoSplitStrategy.Holdout, network=Network.GCN,
-            problem_type=ProblemType.Regression, optimisation=cfg,
+            config={
+                TrainingParam.LearningRate: 0.01,
+                TrainingParam.BatchSize: 4,
+                "improved": False,
+                "embedding_dim": 8,
+                "n_convolutions": 1,
+                "readout_layers": 2,
+                "dropout": 0.0,
+            },
+            dataset=data,
+            num_classes=1,
+            splits=[(list(range(8)), list(range(8, 12)))],
+            strategy=HpoSplitStrategy.Holdout,
+            network=Network.GCN,
+            problem_type=ProblemType.Regression,
+            optimisation=cfg,
         )
     assert seen == [cfg]

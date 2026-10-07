@@ -34,7 +34,11 @@ class _MeanOfFeatures(torch.nn.Module):
 
 def _graphs(predictions, targets):
     return [
-        Data(x=torch.tensor([[p]]), edge_index=torch.empty(2, 0, dtype=torch.long), y=torch.tensor([t]))
+        Data(
+            x=torch.tensor([[p]]),
+            edge_index=torch.empty(2, 0, dtype=torch.long),
+            y=torch.tensor([t]),
+        )
         for p, t in zip(predictions, targets)
     ]
 

@@ -370,6 +370,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    from polynet.config.paths import hpo_search_spaces_path
+    from polynet.config.search_grid import effective_search_spaces
+    from polynet.data.structures import prepare_structures
     from polynet.pipeline import (
         build_graph_dataset,
         compute_data_splits,
@@ -384,9 +387,6 @@ def main() -> None:
         train_gnn,
         train_tml,
     )
-    from polynet.config.paths import hpo_search_spaces_path
-    from polynet.config.search_grid import effective_search_spaces
-    from polynet.data.structures import prepare_structures
     from polynet.utils.validation import validate_hpo_folds
 
     args = parse_args()

@@ -5,8 +5,8 @@ TML hyperparameter search: a randomised search (``RandomizedSearchCV``)
 scored with the shared shuffled K-fold splitter and the user's ``k``.
 """
 
-from unittest import mock
 import types
+from unittest import mock
 
 import numpy as np
 import pandas as pd

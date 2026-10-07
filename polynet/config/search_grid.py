@@ -306,7 +306,9 @@ def get_gnn_search_grid(
             for key in (SHARED_GNN_GRID_KEY, network.value)
         ),
     )
-    if problem_type == ProblemType.Regression and grid[TrainingParam.AsymmetricLossStrength] != [None]:
+    if problem_type == ProblemType.Regression and grid[TrainingParam.AsymmetricLossStrength] != [
+        None
+    ]:
         logger.warning(
             f"hpo_search_grid sets {TrainingParam.AsymmetricLossStrength.value} for "
             f"{network.value}, but class weights only apply to classification; ignoring it."

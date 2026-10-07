@@ -89,12 +89,7 @@ logger = logging.getLogger(__name__)
 # size warning only reports rounding to whole samples. Cluster samplers keep
 # clusters whole and can miss the requested sizes; that warning is logged.
 _COUNT_FILLED_SAMPLERS = frozenset(
-    {
-        SplitSampler.Random,
-        SplitSampler.KennardStone,
-        SplitSampler.SPXY,
-        SplitSampler.TargetProperty,
-    }
+    {SplitSampler.Random, SplitSampler.KennardStone, SplitSampler.SPXY, SplitSampler.TargetProperty}
 )
 
 # ---------------------------------------------------------------------------
@@ -470,8 +465,12 @@ def _train_val_test_indices(
         # Balance training and validation separately; test keeps the original
         # class distribution (see the docstring).
         if balance:
-            train_data = _balance(train_data, target_variable_col, train_set_balance, seed, "training")
-            val_data = _balance(val_data, target_variable_col, train_set_balance, seed, "validation")
+            train_data = _balance(
+                train_data, target_variable_col, train_set_balance, seed, "training"
+            )
+            val_data = _balance(
+                val_data, target_variable_col, train_set_balance, seed, "validation"
+            )
 
         train_data_idxs.append(train_data.index)
         val_data_idxs.append(val_data.index)

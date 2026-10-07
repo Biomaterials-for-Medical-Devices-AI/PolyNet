@@ -43,10 +43,10 @@ from polynet.config.enums import (
 )
 from polynet.config.schemas.training import GNNOptimisationConfig
 from polynet.config.search_grid import get_gnn_search_grid
+from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
 from polynet.factories.optimizer import step_scheduler
 from polynet.training.cv import make_kfold
-from polynet.factories.loss import create_loss
 from polynet.training.gnn import (
     build_optimisation,
     class_weights_for,
@@ -381,8 +381,7 @@ def _gnn_target_function(
     # same unweighted loss, so validation losses are comparable across
     # AsymmetricLossStrength candidates.
     score_fn = create_loss(
-        problem_type,
-        regression_loss=(optimisation or GNNOptimisationConfig()).regression_loss,
+        problem_type, regression_loss=(optimisation or GNNOptimisationConfig()).regression_loss
     ).to(device)
 
     if strategy == HpoSplitStrategy.CrossValidation:

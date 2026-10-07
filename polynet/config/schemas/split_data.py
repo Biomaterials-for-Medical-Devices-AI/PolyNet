@@ -15,12 +15,7 @@ from polynet.config.schemas.fingerprints import SamplingFingerprintConfig
 
 # Samplers that place polymers by their (sampling) fingerprint.
 SAMPLERS_USING_FINGERPRINTS = frozenset(
-    {
-        SplitSampler.KennardStone,
-        SplitSampler.SPXY,
-        SplitSampler.KMeans,
-        SplitSampler.OptiSim,
-    }
+    {SplitSampler.KennardStone, SplitSampler.SPXY, SplitSampler.KMeans, SplitSampler.OptiSim}
 )
 # Samplers that also (or only) use the target values.
 SAMPLERS_USING_TARGET = frozenset({SplitSampler.SPXY, SplitSampler.TargetProperty})
@@ -28,7 +23,6 @@ SAMPLERS_USING_TARGET = frozenset({SplitSampler.SPXY, SplitSampler.TargetPropert
 DETERMINISTIC_SAMPLERS = frozenset(
     {SplitSampler.KennardStone, SplitSampler.SPXY, SplitSampler.TargetProperty}
 )
-
 
 
 def deterministic_sampler_warning(sampler: SplitSampler, n_repetitions: int) -> str:
@@ -79,7 +73,11 @@ def stratified_target_sampler_error(sampler: SplitSampler) -> str:
         f"The '{SplitSampler(sampler).value}' sampler cannot be used with split_method "
         "'stratified': it uses the target values, which are constant within a class. Use "
         "split_method 'random'"
-        + (", or the 'kennard_stone' sampler (SPXY without the target)." if sampler == SplitSampler.SPXY else ".")
+        + (
+            ", or the 'kennard_stone' sampler (SPXY without the target)."
+            if sampler == SplitSampler.SPXY
+            else "."
+        )
     )
 
 

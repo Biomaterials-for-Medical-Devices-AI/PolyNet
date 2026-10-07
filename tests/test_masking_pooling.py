@@ -22,7 +22,9 @@ from polynet.models.gnn.gcn import GCNRegressor  # noqa: E402
 
 # Copolymer graph: monomer 0 has 3 nodes (w=0.3), monomer 1 has 5 nodes (w=0.7).
 _N_NODES = 8
-_EDGE_INDEX = torch.tensor([[0, 1, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7], [1, 0, 2, 1, 4, 3, 5, 4, 6, 5, 7, 6]])
+_EDGE_INDEX = torch.tensor(
+    [[0, 1, 1, 2, 3, 4, 4, 5, 5, 6, 6, 7], [1, 0, 2, 1, 4, 3, 5, 4, 6, 5, 7, 6]]
+)
 _MONOMER_ID = torch.tensor([[0]] * 3 + [[1]] * 5)
 _WEIGHT = torch.tensor([[0.3]] * 3 + [[0.7]] * 5)
 

@@ -222,7 +222,11 @@ def train_tml_ensemble(
 
     logger.info(
         "TML models are trained on the "
-        + ("training + validation samples." if include_validation_in_training else "training samples only (validation held out, as for GNNs).")
+        + (
+            "training + validation samples."
+            if include_validation_in_training
+            else "training samples only (validation held out, as for GNNs)."
+        )
     )
     train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
     trained_models: dict = {}

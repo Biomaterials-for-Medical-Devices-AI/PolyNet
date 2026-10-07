@@ -133,7 +133,14 @@ def create_network(network: Network | str, problem_type: ProblemType | str, **kw
 
 # Constructor arguments PolyNet sets itself from the data and the experiment.
 _SET_BY_POLYNET = frozenset(
-    {"n_node_features", "n_edge_features", "n_classes", "n_polymer_descriptors", "seed", "problem_type"}
+    {
+        "n_node_features",
+        "n_edge_features",
+        "n_classes",
+        "n_polymer_descriptors",
+        "seed",
+        "problem_type",
+    }
 )
 
 

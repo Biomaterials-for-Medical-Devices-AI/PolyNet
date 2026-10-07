@@ -95,7 +95,11 @@ def test_corrected_ttest_needs_two_splits():
 
 
 def test_metrics_matrix_corrected_ttest():
-    metrics = {"A": [0.80, 0.82, 0.79, 0.85], "B": [0.75, 0.78, 0.77, 0.80], "C": [0.7, 0.9, 0.8, 0.6]}
+    metrics = {
+        "A": [0.80, 0.82, 0.79, 0.85],
+        "B": [0.75, 0.78, 0.77, 0.80],
+        "C": [0.7, 0.9, 0.8, 0.6],
+    }
     p, names = metrics_pvalue_matrix(metrics, test="corrected_ttest", test_train_ratio=0.25)
     assert names == ["A", "B", "C"]
     np.testing.assert_array_equal(p, p.T)

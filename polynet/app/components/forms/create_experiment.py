@@ -6,12 +6,12 @@ from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import DatasetName, ProblemType
 from polynet.data.creator import DatasetCreator
-from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.data.structures import (
     canonicalise_structures,
     detect_string_representation,
     find_invalid_structures,
 )
+from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.validation import find_duplicate_ids
 
 

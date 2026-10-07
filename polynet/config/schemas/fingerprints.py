@@ -122,7 +122,9 @@ class SamplingFingerprintConfig(PolynetBaseModel):
         default=MolecularDescriptor.Morgan, description="morgan, rdkitfp or polybert."
     )
     fp_size: int | None = Field(
-        default=None, ge=1, description="Fingerprint length (default 2048); count fingerprints only."
+        default=None,
+        ge=1,
+        description="Fingerprint length (default 2048); count fingerprints only.",
     )
     radius: int | None = Field(
         default=None, ge=0, description="Morgan radius (default 3); morgan only."

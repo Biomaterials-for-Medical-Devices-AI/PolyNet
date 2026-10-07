@@ -50,13 +50,13 @@ from rdkit.Chem import Descriptors, MolFromSmiles, rdFingerprintGenerator
 
 from polynet.config.column_names import get_fp_col_names
 from polynet.config.constants import POLYBERT_MODEL
+from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.fingerprints import (
     CountFingerprintConfig,
     MorganFingerprintConfig,
     RDKitFingerprintConfig,
     resolve_fingerprint_config,
 )
-from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.data.preprocessing import get_data_index
 from polynet.featurizer.pmx import create_pmx_featurizer
 
@@ -406,7 +406,9 @@ def polymer_count_fingerprints(
     fp_dict = _compute_count_fingerprints(
         _get_unique_smiles(data, smiles_cols), gen_factory(settings)
     )
-    return _polymer_matrix(_build_fp_df_dict(fp_dict, prefix, data, smiles_cols), data, weights_col, prefix)
+    return _polymer_matrix(
+        _build_fp_df_dict(fp_dict, prefix, data, smiles_cols), data, weights_col, prefix
+    )
 
 
 def polymer_polybert_fingerprints(

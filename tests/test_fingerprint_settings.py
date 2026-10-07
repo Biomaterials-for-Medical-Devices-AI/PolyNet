@@ -121,8 +121,12 @@ def _vectors(molecular_descriptors):
 
 
 def test_pipeline_uses_the_configured_settings():
-    out = _vectors({MolecularDescriptor.Morgan: {"fp_size": 128, "radius": 1},
-                    MolecularDescriptor.RDKitFP: {"fp_size": 64}})
+    out = _vectors(
+        {
+            MolecularDescriptor.Morgan: {"fp_size": 128, "radius": 1},
+            MolecularDescriptor.RDKitFP: {"fp_size": 64},
+        }
+    )
     morgan_cols = [c for c in out[MolecularDescriptor.Morgan].columns if "morgan" in c]
     rdkit_cols = [c for c in out[MolecularDescriptor.RDKitFP].columns if "rdkitfp" in c]
     assert (len(morgan_cols), len(rdkit_cols)) == (128, 64)

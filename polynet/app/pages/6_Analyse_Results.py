@@ -25,7 +25,6 @@ from polynet.app.options.file_paths import (
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.config.enums import ProblemType
-from polynet.utils.statistical_analysis import mean_split_sizes
 from polynet.config.schemas import (
     DataConfig,
     GeneralConfig,
@@ -34,6 +33,7 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.utils.statistical_analysis import mean_split_sizes
 
 st.header("Analyse Results")
 

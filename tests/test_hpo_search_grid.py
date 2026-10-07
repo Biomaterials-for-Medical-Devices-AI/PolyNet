@@ -65,7 +65,10 @@ def test_valid_overrides_and_default_sample_counts():
         (lambda: _tml({"random_forest": {"n_trees": [3]}}), r"random_forest\.n_trees is not"),
         (lambda: _tml({"xgboost": {"max_depth": [3]}}), "not a selected model"),
         (lambda: _tml({"random_forest": {"random_state": [1]}}), "set by PolyNet"),
-        (lambda: TrainGNNConfig(gnn_convolutional_layers={"GCN": {}}, hpo_num_samples=0), "hpo_num_samples"),
+        (
+            lambda: TrainGNNConfig(gnn_convolutional_layers={"GCN": {}}, hpo_num_samples=0),
+            "hpo_num_samples",
+        ),
     ],
 )
 def test_invalid_grids_are_rejected(make, match):
@@ -100,7 +103,9 @@ def test_gnn_override_replaces_only_the_given_parameters():
 
 
 def test_no_custom_grid_gives_the_default_grid():
-    assert get_gnn_search_grid(Network.GAT, 3, custom_grid={}) == get_gnn_search_grid(Network.GAT, 3)
+    assert get_gnn_search_grid(Network.GAT, 3, custom_grid={}) == get_gnn_search_grid(
+        Network.GAT, 3
+    )
     assert get_tml_search_grid(
         TraditionalMLModel.XGBoost, ProblemType.Regression, 3, custom_grid=None
     ) == get_tml_search_grid(TraditionalMLModel.XGBoost, ProblemType.Regression, 3)
@@ -183,9 +188,11 @@ def _run_gnn_hpo(tmp_path, **overrides):
         custom_grid={"GCN": {"embedding_dim": [16]}},
     )
     kwargs.update(overrides)
-    with mock.patch.object(hyperopt.ray, "init"), mock.patch.object(
-        hyperopt.ray, "shutdown"
-    ), mock.patch.object(hyperopt.tune, "run", side_effect=_fake_tune_run) as run:
+    with (
+        mock.patch.object(hyperopt.ray, "init"),
+        mock.patch.object(hyperopt.ray, "shutdown"),
+        mock.patch.object(hyperopt.tune, "run", side_effect=_fake_tune_run) as run,
+    ):
         best = hyperopt.gnn_hyp_opt(**kwargs)
     return best, run
 
@@ -245,9 +252,10 @@ def test_effective_search_spaces_lists_only_tuned_models_with_merged_grids():
 
 
 def test_gnn_hpo_trials_use_the_training_epochs(tmp_path):
-    with mock.patch.object(hyperopt, "ASHAScheduler") as asha, mock.patch.object(
-        hyperopt.tune, "with_parameters"
-    ) as trial:
+    with (
+        mock.patch.object(hyperopt, "ASHAScheduler") as asha,
+        mock.patch.object(hyperopt.tune, "with_parameters") as trial,
+    ):
         _run_gnn_hpo(tmp_path, epochs=40)
     # ASHA (holdout) stops at training.epochs; trials receive the same epochs.
     assert asha.call_args.kwargs["max_t"] == 40
@@ -272,7 +280,10 @@ def test_trials_train_for_the_requested_epochs(monkeypatch):
     dataset = [types.SimpleNamespace(num_node_features=3, num_edge_features=1) for _ in range(10)]
     config = {TrainingParam.LearningRate: 0.01, TrainingParam.BatchSize: 4}
 
-    for strategy, n_splits in ((HpoSplitStrategy.CrossValidation, 2), (HpoSplitStrategy.Holdout, 1)):
+    for strategy, n_splits in (
+        (HpoSplitStrategy.CrossValidation, 2),
+        (HpoSplitStrategy.Holdout, 1),
+    ):
         calls.clear()
         hyperopt._gnn_target_function(
             config=dict(config),

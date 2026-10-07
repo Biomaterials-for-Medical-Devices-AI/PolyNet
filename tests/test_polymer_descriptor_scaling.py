@@ -24,10 +24,7 @@ from polynet.config.enums import (  # noqa: E402
 from polynet.data.feature_transformer import FeatureTransformer  # noqa: E402
 from polynet.models.gnn.gcn import GCNRegressor  # noqa: E402
 from polynet.models.persistence import load_gnn_model, save_gnn_model  # noqa: E402
-from polynet.training.gnn import (  # noqa: E402
-    fit_polymer_descriptor_scaler,
-    train_gnn_ensemble,
-)
+from polynet.training.gnn import fit_polymer_descriptor_scaler, train_gnn_ensemble  # noqa: E402
 
 N_NODE, N_EDGE, N_DESC = 8, 3, 2
 

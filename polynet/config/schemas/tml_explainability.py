@@ -50,9 +50,9 @@ from __future__ import annotations
 
 from typing import Literal, Union
 
-from polynet.config.enums import ImportanceNormalisationMethod, ShapGlobalPlotType
 from pydantic import field_validator
 
+from polynet.config.enums import ImportanceNormalisationMethod, ShapGlobalPlotType
 from polynet.config.schemas.base import PolynetBaseModel, ids_as_strings
 
 

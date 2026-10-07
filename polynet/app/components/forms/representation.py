@@ -232,7 +232,7 @@ def molecular_descriptor_representation(
                     step=1,
                     key=DescriptorCalculationStateKeys.RDKitFPSize,
                     help="Length of the count fingerprint vector (default 2048).",
-                ),
+                )
             }
 
         st.markdown("### PolyMetriX Descriptors")

@@ -24,7 +24,10 @@ from polynet.utils.validation import find_duplicate_ids
 
 def test_detects_smiles_and_psmiles():
     assert detect_string_representation(pd.DataFrame({"s": ["CCO", "c1ccccc1"]}), ["s"]) == "smiles"
-    assert detect_string_representation(pd.DataFrame({"s": ["[*]CC[*]", "[*]OC[*]"]}), ["s"]) == "psmiles"
+    assert (
+        detect_string_representation(pd.DataFrame({"s": ["[*]CC[*]", "[*]OC[*]"]}), ["s"])
+        == "psmiles"
+    )
 
 
 def test_canonicalises_smiles():
@@ -88,7 +91,9 @@ def test_find_duplicate_ids():
 
 def test_cli_loader_rejects_duplicate_ids_with_examples(tmp_path):
     path = tmp_path / "d.csv"
-    pd.DataFrame({"id": [1, 2, 2, 5, 5], "smiles": ["CCO"] * 5, "y": range(5)}).to_csv(path, index=False)
+    pd.DataFrame({"id": [1, 2, 2, 5, 5], "smiles": ["CCO"] * 5, "y": range(5)}).to_csv(
+        path, index=False
+    )
     with pytest.raises(ValueError, match=r"2 duplicated value\(s\), e.g. 2, 5"):
         load_dataset(path, smiles_cols=["smiles"], target_col="y", id_col="id")
 

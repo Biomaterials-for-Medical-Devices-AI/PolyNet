@@ -551,9 +551,7 @@ def _rows_of_models(
             samples = sample_ids_set & {str(s) for s in samples_per_model.get(key, ())}
         allowed.update((model_type, str(iteration), s) for s in samples)
 
-    keys = pd.MultiIndex.from_frame(
-        cache_df[["model_type", "iteration", "sample_id"]].astype(str)
-    )
+    keys = pd.MultiIndex.from_frame(cache_df[["model_type", "iteration", "sample_id"]].astype(str))
     return cache_df.loc[keys.isin(allowed)]
 
 
@@ -916,9 +914,7 @@ def compute_global_shap_attribution(
         ids = (
             tuple(explain_sample_ids)
             if samples_per_model is None
-            else tuple(
-                s for s in explain_sample_ids if str(s) in samples_per_model.get(key, set())
-            )
+            else tuple(s for s in explain_sample_ids if str(s) in samples_per_model.get(key, set()))
         )
         groups.setdefault(ids, []).append(key)
 

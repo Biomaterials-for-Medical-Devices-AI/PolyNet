@@ -21,6 +21,7 @@ from polynet.app.options.file_paths import (
     general_options_path,
     gnn_raw_data_file,
     gnn_raw_data_path,
+    hpo_search_spaces_path,
     ml_results_file_path,
     ml_results_parent_directory,
     model_metrics_file_path,
@@ -32,7 +33,6 @@ from polynet.app.options.file_paths import (
     target_transform_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
-    hpo_search_spaces_path,
 )
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
@@ -43,9 +43,9 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes
 from polynet.app.utils import save_data
-from polynet.config.enums import SplitSampler
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
+from polynet.config.enums import SplitSampler
 from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
@@ -57,6 +57,7 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.config.search_grid import effective_search_spaces
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.pipeline import (
     compute_data_splits,
@@ -67,7 +68,6 @@ from polynet.pipeline import (
     train_gnn,
     train_tml,
 )
-from polynet.config.search_grid import effective_search_spaces
 from polynet.utils.validation import validate_hpo_folds
 
 

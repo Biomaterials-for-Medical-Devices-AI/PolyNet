@@ -96,7 +96,9 @@ def test_invalid_sampling_fingerprints_are_rejected(settings):
 
 
 def test_polybert_sampling_fingerprint_takes_no_settings():
-    fp = _split_cfg(sampler="kmeans", sampling_fingerprint={"fingerprint": "polybert"}).sampling_fingerprint
+    fp = _split_cfg(
+        sampler="kmeans", sampling_fingerprint={"fingerprint": "polybert"}
+    ).sampling_fingerprint
     assert (fp.fp_size, fp.radius) == (None, None) and not fp.is_count_fingerprint
 
 
@@ -157,8 +159,13 @@ def test_kennard_stone_uses_the_sampling_fingerprints():
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         *_, tr, va, te = train_val_test_split(
-            X, train_size=0.6, val_size=0.2, test_size=0.2, sampler="kennard_stone",
-            hopts={}, return_indices=True,
+            X,
+            train_size=0.6,
+            val_size=0.2,
+            test_size=0.2,
+            sampler="kennard_stone",
+            hopts={},
+            return_indices=True,
         )
     assert set(test[0]) == set(_DATA.index[te]) and set(train[0]) == set(_DATA.index[tr])
 
@@ -204,7 +211,9 @@ def test_target_property_puts_extreme_targets_in_the_test_set():
 
 
 def test_sampling_metadata_records_the_sampler_and_fingerprint():
-    cfg = _split_cfg(sampler="spxy", sampling_fingerprint={"fingerprint": "rdkitfp", "fp_size": 1024})
+    cfg = _split_cfg(
+        sampler="spxy", sampling_fingerprint={"fingerprint": "rdkitfp", "fp_size": 1024}
+    )
     meta = sampling_metadata(cfg, _WEIGHTS)
     assert meta["sampler"] == "spxy" and meta["uses_target"] and meta["deterministic"]
     assert meta["sampling_fingerprint"]["fingerprint"] == "rdkitfp"
@@ -213,7 +222,10 @@ def test_sampling_metadata_records_the_sampler_and_fingerprint():
     assert meta["astartes_version"]
     assert sampling_metadata(_split_cfg(), _WEIGHTS)["sampling_fingerprint"] is None
     polybert = _split_cfg(sampler="kmeans", sampling_fingerprint={"fingerprint": "polybert"})
-    assert sampling_metadata(polybert, _WEIGHTS)["sampling_fingerprint"]["model"] == "xushijie/polyBERT"
+    assert (
+        sampling_metadata(polybert, _WEIGHTS)["sampling_fingerprint"]["model"]
+        == "xushijie/polyBERT"
+    )
 
 
 # --- samplers offered in the GUI --------------------------------------------------
@@ -229,7 +241,10 @@ def test_every_offered_sampler_gives_a_valid_config(problem_type, split_method):
     for sampler in offered:
         _split_cfg(sampler=sampler, split_method=split_method)  # must not raise
     for sampler in set(SplitSampler) - set(offered):
-        if split_method == "stratified" and sampler in {SplitSampler.SPXY, SplitSampler.TargetProperty}:
+        if split_method == "stratified" and sampler in {
+            SplitSampler.SPXY,
+            SplitSampler.TargetProperty,
+        }:
             with pytest.raises(ValidationError):
                 _split_cfg(sampler=sampler, split_method=split_method)
         else:  # hidden because it is meaningless here, not invalid

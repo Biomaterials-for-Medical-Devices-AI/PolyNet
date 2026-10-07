@@ -17,11 +17,7 @@ import pytest
 
 from polynet.config.schemas.explainability import ExplainabilityConfig
 from polynet.config.schemas.tml_explainability import TMLExplainabilityConfig
-from polynet.explainability.selection import (
-    match_dataset_ids,
-    select_splits,
-    split_index_of_model,
-)
+from polynet.explainability.selection import match_dataset_ids, select_splits, split_index_of_model
 
 MODELS = ["GCN_1", "GCN_2", "GCN_3"]
 
@@ -103,9 +99,7 @@ def test_display_data_keeps_each_models_own_molecules():
 
 
 def _shap_cache(rows):
-    return pd.DataFrame(
-        rows, columns=["model_type", "iteration", "sample_id", "class_idx", "f1"]
-    )
+    return pd.DataFrame(rows, columns=["model_type", "iteration", "sample_id", "class_idx", "f1"])
 
 
 def test_shap_merge_uses_exact_model_instances():
@@ -127,7 +121,10 @@ def test_shap_merge_restricts_each_model_to_its_samples():
         [("rf", "1", "a", 0, 1.0), ("rf", "1", "b", 0, 5.0), ("rf", "2", "a", 0, 9.0)]
     )
     merged = merge_shap_attributions(
-        cache, ["rf-morgan_1", "rf-morgan_2"], ["a", "b"], {"rf-morgan_1": {"b"}, "rf-morgan_2": {"a"}}
+        cache,
+        ["rf-morgan_1", "rf-morgan_2"],
+        ["a", "b"],
+        {"rf-morgan_1": {"b"}, "rf-morgan_2": {"a"}},
     )
     assert merged["f1"].to_dict() == {"a": 9.0, "b": 5.0}
 
