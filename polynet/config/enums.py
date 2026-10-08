@@ -23,6 +23,7 @@ class DatasetName(StrEnum):
     """Benchmarking datasets"""
 
     CuratedTg = "curated_tg"
+    FluorineNMRSNR = "fluorine_nmr_snr"
 
 
 class ProblemType(StrEnum):

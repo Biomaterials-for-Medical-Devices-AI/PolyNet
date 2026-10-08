@@ -69,11 +69,33 @@ data:
 | `benchmark_dataset` | Content |
 |---|---|
 | `curated_tg` | 7,367 homopolymers (`PSMILES`) with experimental glass transition temperatures `Tg(K)` from the curated polymetrix dataset (Zenodo record 15210035); IDs in `ID`. |
+| `fluorine_nmr_snr` | 418 fluorinated copolymers with their ¹⁹F NMR signal-to-noise ratio `SNR`. Every polymer combines the same six acrylate monomers (`smiles_1` … `smiles_6`, PSMILES) in different molar ratios (`ratio_1` … `ratio_6`, each row sums to 1); IDs in `ID`. `MolWt` and `Dispersity` are measured for 159 polymers only (empty otherwise). From Reis et al., *J. Am. Chem. Soc.* 2021, 143, 17677–17689, as used by Tao et al., *STAR Protocols* 2022, 3. |
 
-The data are downloaded on first use (internet access needed once) and cached by
-polymetrix. They are validated like a CSV file (columns, structures, unique IDs, target),
-and a copy is saved as `data_name` in the experiment's output directory. As these are
-homopolymers, use `smiles_merge_approach: "no_merging"` and `weights_col: null`.
+`curated_tg` is downloaded on first use (internet access needed once) and cached by
+polymetrix; `fluorine_nmr_snr` ships with PolyNet. Both are validated like a CSV file
+(columns, structures, unique IDs, target), and a copy is saved as `data_name` in the
+experiment's output directory. `curated_tg` holds homopolymers: use
+`smiles_merge_approach: "no_merging"` and `weights_col: null`. For `fluorine_nmr_snr`,
+weight each monomer by its ratio:
+
+```yaml
+data:
+  data_name: "fluorine_nmr_snr.csv"
+  benchmark_dataset: "fluorine_nmr_snr"
+  smiles_cols: ["smiles_1", "smiles_2", "smiles_3", "smiles_4", "smiles_5", "smiles_6"]
+  target_variable_col: "SNR"
+  id_col: "ID"
+  problem_type: "regression"
+  string_representation: "psmiles"
+  num_classes: 1
+representations:
+  smiles_merge_approach: "weighted_average"
+  weights_col: {smiles_1: ratio_1, smiles_2: ratio_2, smiles_3: ratio_3,
+                smiles_4: ratio_4, smiles_5: ratio_5, smiles_6: ratio_6}
+```
+
+`MolWt` and `Dispersity` are mostly missing, so they cannot be used as
+`polymer_descriptors` on the full dataset.
 
 ### Structure validation and canonicalisation
 
