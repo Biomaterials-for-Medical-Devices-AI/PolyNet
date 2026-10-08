@@ -46,9 +46,9 @@ def test_random_search_uses_shuffled_cv_and_returns_best_estimator():
     best, kwargs = _run(random_seed=3)
     assert isinstance(kwargs["cv"], KFold)
     assert kwargs["cv"].shuffle is True and kwargs["cv"].random_state == 3
-    assert kwargs["n_iter"] == 30
+    assert kwargs["n_iter"] == 50
     assert kwargs["random_state"] == 3
-    assert best.polynet_hpo_["n_iter"] == 30 and best.polynet_hpo_["best_cv_score"] == 0.5
+    assert best.polynet_hpo_["n_iter"] == 50 and best.polynet_hpo_["best_cv_score"] == 0.5
 
 
 def test_random_search_uses_user_fold_count():

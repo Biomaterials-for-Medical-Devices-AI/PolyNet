@@ -51,7 +51,7 @@ def _tml(grid, models=None):
 def test_valid_overrides_and_default_sample_counts():
     gnn = _gnn({"shared": {"dropout": [0.2]}, "GCN": {"improved": [True]}})
     tml_cfg = _tml({"random_forest": {"n_estimators": [50, 100]}})
-    assert gnn.hpo_num_samples == 150 and tml_cfg.hpo_num_samples == 30
+    assert gnn.hpo_num_samples == tml_cfg.hpo_num_samples == 50
 
 
 @pytest.mark.parametrize(
