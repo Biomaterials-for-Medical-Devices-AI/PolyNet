@@ -81,6 +81,8 @@ class TrainTMLStateKeys(StrEnum):
     PerformHyperparameterTuning = "PerformHyperparameterTuning"
     HPONumFolds = "TMLHPONumFolds"
     IncludeValidation = "TMLIncludeValidation"
+    HPONumSamples = "TMLHPONumSamples"
+    SearchGrid = "TMLSearchGrid"
 
     TrainLinearRegression = "LinearRegression"
     TrainLogisticRegression = "LogisticRegression"
@@ -119,6 +121,8 @@ class TrainGNNStateKeys(StrEnum):
     TrainGNN = "TrainGNN"
     HypTunning = "HypTunning"
     Epochs = "GNNEpochs"
+    HPONumSamples = "GNNHPONumSamples"
+    SearchGrid = "GNNSearchGrid"
     SharedGNNParams = "SharedGNNParams"
     GNNConvolutionalLayers = "GNNConvolutionalLayers"
     GNNNumberOfLayers = "GNNNumberOfLayers"

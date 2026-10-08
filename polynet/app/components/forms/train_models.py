@@ -1,5 +1,6 @@
 import streamlit as st
 
+from polynet.app.components.forms.search_grid import num_samples_widget, search_grid_editor
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
@@ -36,6 +37,12 @@ from polynet.config.schemas.split_data import (
 )
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
 from polynet.config.schemas.training import GNNOptimisationConfig, TrainGNNConfig
+from polynet.config.search_grid import (
+    SHARED_GNN_GRID_KEY,
+    default_gnn_architecture_grid,
+    default_gnn_shared_grid,
+    default_tml_grid,
+)
 
 
 def train_TML_models(problem_type: ProblemType) -> dict:
@@ -61,7 +68,10 @@ def train_TML_models(problem_type: ProblemType) -> dict:
         hyperparameter_tunning = st.checkbox(
             "Perform hyperparameter tuning",
             key=TrainTMLStateKeys.PerformHyperparameterTuning,
-            help="If enabled, the hyperparameters of the models will be tuned with a randomised search (30 configurations sampled from a predefined grid, scored by k-fold shuffled cross-validation). This may take a long time depending on the number of models selected.",
+            help="If enabled, the hyperparameters of the models will be tuned with a "
+            "randomised search (configurations sampled from a search grid, scored by k-fold "
+            "shuffled cross-validation; the grids can be customised below). This may take a "
+            "long time depending on the number of models selected.",
         )
 
         if hyperparameter_tunning:
@@ -75,6 +85,11 @@ def train_TML_models(problem_type: ProblemType) -> dict:
                 "classification). k must not exceed the number of training samples or, for "
                 "classification, the size of the smallest class — this is checked before "
                 "training starts.",
+            )
+            num_samples_widget(
+                key=TrainTMLStateKeys.HPONumSamples,
+                help_text="Configurations RandomizedSearchCV samples per model and split "
+                "(capped at the number of distinct configurations in the grid).",
             )
 
         st.markdown(
@@ -283,6 +298,19 @@ def train_TML_models(problem_type: ProblemType) -> dict:
                 )
                 models[TraditionalMLModel.XGBoost]["max_depth"] = max_depth
 
+        st.session_state[TrainTMLStateKeys.SearchGrid] = {}
+        if hyperparameter_tunning:
+            grid = {}
+            for model in models:
+                custom = search_grid_editor(
+                    default_tml_grid(model, problem_type),
+                    key_prefix=f"tml_grid_{model.value}_",
+                    title=f"Search grid — {model.value}",
+                )
+                if custom:
+                    grid[model.value] = custom
+            st.session_state[TrainTMLStateKeys.SearchGrid] = grid
+
     return models
 
 
@@ -459,7 +487,8 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     hyperparameter_tunning = st.checkbox(
         "Perform hyperparameter tuning",
         key=TrainGNNStateKeys.HypTunning,
-        help="If enabled, hyperparameters will be tuned by randomly sampling configurations from a predefined search grid with Ray Tune (can be slow).",
+        help="If enabled, hyperparameters will be tuned with Ray Tune by sampling "
+        "configurations from a search grid (defaults can be customised below; can be slow).",
     )
 
     st.number_input(
@@ -492,6 +521,31 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     if not conv_layers:
         st.error("Please select at least one GNN convolutional layer to train.")
         st.stop()
+
+    st.session_state[TrainGNNStateKeys.SearchGrid] = {}
+    if hyperparameter_tunning:
+        num_samples_widget(
+            key=TrainGNNStateKeys.HPONumSamples,
+            help_text="Configurations Ray Tune samples from the search grid for each "
+            "architecture and split.",
+        )
+        grid = {}
+        shared = search_grid_editor(
+            default_gnn_shared_grid(problem_type),
+            key_prefix="gnn_grid_shared_",
+            title="Search grid — parameters shared by all architectures",
+        )
+        if shared:
+            grid[SHARED_GNN_GRID_KEY] = shared
+        for network in conv_layers:
+            specific = search_grid_editor(
+                default_gnn_architecture_grid(network),
+                key_prefix=f"gnn_grid_{network.value}_",
+                title=f"Search grid — {network.value}-specific parameters",
+            )
+            if specific:
+                grid[network.value] = specific
+        st.session_state[TrainGNNStateKeys.SearchGrid] = grid
 
     if not hyperparameter_tunning:
         share_params = st.checkbox(

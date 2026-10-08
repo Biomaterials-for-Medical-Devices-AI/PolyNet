@@ -57,6 +57,7 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
 from polynet.config.search_grid import effective_search_spaces
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.pipeline import (
@@ -163,6 +164,13 @@ def train_models(
             include_validation_in_training=st.session_state.get(
                 TrainTMLStateKeys.IncludeValidation, True
             ),
+            hyperparameter_optimisation=bool(
+                st.session_state.get(TrainTMLStateKeys.PerformHyperparameterTuning, False)
+            ),
+            hpo_num_samples=int(
+                st.session_state.get(TrainTMLStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+            ),
+            hpo_search_grid=st.session_state.get(TrainTMLStateKeys.SearchGrid, {}),
         )
         if tml_models
         else None
@@ -177,6 +185,13 @@ def train_models(
                     TrainGNNStateKeys.Epochs, TrainGNNConfig.model_fields["epochs"].default
                 )
             ),
+            hyperparameter_optimisation=bool(
+                st.session_state.get(TrainGNNStateKeys.HypTunning, False)
+            ),
+            hpo_num_samples=int(
+                st.session_state.get(TrainGNNStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+            ),
+            hpo_search_grid=st.session_state.get(TrainGNNStateKeys.SearchGrid, {}),
             optimisation=gnn_optimisation_cfg or GNNOptimisationConfig(),
         )
         if gnn_conv_params
@@ -196,7 +211,8 @@ def train_models(
         st.error(str(e))
         st.stop()
 
-    # Provenance: the merged HPO search spaces (defaults + hpo_search_grid).
+    # Provenance: the HPO grids actually searched (default candidates, with any
+    # parameter set in hpo_search_grid replacing its defaults).
     search_spaces = effective_search_spaces(
         data_options.problem_type, gnn_cfg=gnn_cfg, tml_cfg=tml_cfg
     )
