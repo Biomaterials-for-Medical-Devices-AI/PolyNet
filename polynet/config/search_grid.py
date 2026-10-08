@@ -150,7 +150,7 @@ def merge_search_grid(default: dict, *overrides: dict | None) -> dict:
     Returns
     -------
     dict
-        The merged grid.
+        The default grid, with each overridden parameter's candidates replaced.
     """
     merged = copy.deepcopy(default)
     for override in overrides:
@@ -162,6 +162,30 @@ def merge_search_grid(default: dict, *overrides: dict | None) -> dict:
 def n_grid_combinations(grid: dict) -> int:
     """Number of distinct configurations in a grid (product of the candidate counts)."""
     return math.prod(len(v) if isinstance(v, list) else 1 for v in grid.values())
+
+
+def default_gnn_shared_grid(problem_type: ProblemType) -> dict:
+    """
+    Default candidates of the parameters shared by all GNN architectures.
+
+    These are what a ``shared`` entry of ``hpo_search_grid`` can replace
+    (reserved keys such as the seed are left out).
+    """
+    grid = copy.deepcopy(_GNN_SHARED_GRID)
+    if problem_type == ProblemType.Classification:
+        grid[TrainingParam.AsymmetricLossStrength] = list(CLASSIFICATION_LOSS_STRENGTHS)
+    return {k: v for k, v in grid.items() if k not in RESERVED_GNN_GRID_KEYS}
+
+
+def default_gnn_architecture_grid(network: Network) -> dict:
+    """Default candidates of the parameters specific to one GNN architecture (may be empty)."""
+    return copy.deepcopy(_GNN_SPECIFIC_GRIDS[network])
+
+
+def default_tml_grid(model: TraditionalMLModel, problem_type: ProblemType) -> dict:
+    """Default candidates of a TML model's search grid, without the keys PolyNet sets."""
+    grid = get_tml_search_grid(model, problem_type, random_seed=0)
+    return {k: v for k, v in grid.items() if k not in RESERVED_TML_GRID_KEYS}
 
 
 def gnn_grid_parameters(network: Network) -> set[str]:
@@ -323,8 +347,9 @@ def effective_search_spaces(problem_type: ProblemType, gnn_cfg=None, tml_cfg=Non
     Describe the search spaces automatic HPO will use in an experiment.
 
     For every architecture / model that runs HPO (empty hyperparameter
-    block), returns its default grid merged with the user's
-    ``hpo_search_grid``, together with the sample count and folds. Seeds
+    block), returns the grid actually searched — its default candidates, with
+    any parameter set in ``hpo_search_grid`` replacing its defaults — together
+    with the sample count and folds. Seeds
     (``seed`` / ``random_state``) are left out because they change per split
     (``random_seed + split - 1``); everything else is exactly what is searched.
 
