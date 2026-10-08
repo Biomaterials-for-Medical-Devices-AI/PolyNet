@@ -25,6 +25,7 @@ from polynet.config.schemas.base import (
     HyperparamOptimConfig,
     PolynetBaseModel,
     check_grid_parameters,
+    resolve_hpo_flag,
 )
 from polynet.config.search_grid import (
     RESERVED_GNN_GRID_KEYS,
@@ -168,9 +169,10 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         final training and to every HPO trial (``GNNOptimisationConfig``).
         Defaults reproduce Adam + ReduceLROnPlateau + RMSE.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, Ray Tune samples
-        random configurations from the search grid defined in
-        ``config/search_grid.py`` before final training.
+        Inherited from ``HyperparamOptimConfig``. Records whether HPO runs: Ray
+        Tune tunes every architecture whose block is empty, sampling
+        ``hpo_num_samples`` configurations from the search grid
+        (``config/search_grid.py``, customised by ``hpo_search_grid``).
     """
 
     train_gnn: bool = Field(
@@ -262,6 +264,11 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
                     f"gnn_convolutional_layers.{network.value}: unknown parameter(s) "
                     f"{unknown}. Allowed: {sorted(allowed)}."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def check_hpo_flag(self) -> "TrainGNNConfig":
+        resolve_hpo_flag(self, self.gnn_convolutional_layers, "gnn_training")
         return self
 
     @model_validator(mode="after")
@@ -385,8 +392,9 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         Feature scaling / transformation applied to descriptor inputs
         before training. Has no effect on raw graph inputs.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, a randomised
-        search (``RandomizedSearchCV``, 30 configurations, ``hpo_n_folds``-fold
+        Inherited from ``HyperparamOptimConfig``. Records whether HPO runs; HPO
+        runs for every model with an empty block. The randomised
+        search (``RandomizedSearchCV``, ``hpo_num_samples`` configurations, ``hpo_n_folds``-fold
         shuffled CV) is run over the search grid defined in
         ``config/search_grid.py`` for each selected model.
     hpo_n_folds:
@@ -409,16 +417,16 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
     )
 
-    hpo_num_samples: int = Field(
-        default=30,
-        ge=1,
-        description="Configurations sampled by RandomizedSearchCV (n_iter) per HPO run.",
-    )
     include_validation_in_training: bool = Field(
         default=True,
         description="Train TML models on training + validation samples (True) or on the "
         "training samples only, like GNNs (False).",
     )
+
+    @model_validator(mode="after")
+    def check_hpo_flag(self) -> "TrainTMLConfig":
+        resolve_hpo_flag(self, self.selected_models, "tml_models")
+        return self
 
     @model_validator(mode="after")
     def validate_hpo_search_grid(self) -> "TrainTMLConfig":
