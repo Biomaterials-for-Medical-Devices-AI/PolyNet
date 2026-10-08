@@ -8,8 +8,13 @@ genuinely share the same fields and validation logic.
 """
 
 from typing import Any
+import warnings
 
 from pydantic import BaseModel, Field
+
+# Default number of hyperparameter configurations sampled per HPO run (GNN Ray
+# Tune trials and TML RandomizedSearchCV candidates alike).
+DEFAULT_HPO_NUM_SAMPLES = 50
 
 
 class HyperparamOptimConfig(BaseModel):
@@ -35,9 +40,10 @@ class HyperparamOptimConfig(BaseModel):
     hyperparameter_optimisation: bool = Field(
         default=False,
         description=(
-            "Whether to run hyperparameter optimisation before final training. "
-            "When True, the search grid defined in ``config/search_grids.py`` "
-            "is used for the selected model."
+            "Declares whether hyperparameter optimisation is expected. HPO runs for every "
+            "architecture / model whose hyperparameter block is empty ({}), whatever this "
+            "flag says. When not set, it is filled in from the blocks; when it contradicts "
+            "them, a warning is given (see ``resolve_hpo_flag``)."
         ),
     )
     hpo_n_folds: int = Field(
@@ -46,7 +52,7 @@ class HyperparamOptimConfig(BaseModel):
         description="Number of shuffled cross-validation folds used to score HPO configurations.",
     )
     hpo_num_samples: int = Field(
-        default=150,
+        default=DEFAULT_HPO_NUM_SAMPLES,
         ge=1,
         description="Number of hyperparameter configurations sampled per HPO run.",
     )
@@ -57,6 +63,47 @@ class HyperparamOptimConfig(BaseModel):
             "parameter replaces the default candidates, the others keep their defaults."
         ),
     )
+
+
+def resolve_hpo_flag(cfg: BaseModel, blocks: dict | None, where: str) -> None:
+    """
+    Fill in ``hyperparameter_optimisation`` or warn when it contradicts the blocks.
+
+    HPO runs for every architecture / model whose block is empty (``{}``); the
+    flag does not switch it on or off. When the flag is not set, it is filled
+    in from the blocks (true if any block is empty), so saved options record
+    whether HPO ran. When it is set and contradicts the blocks, a warning
+    explains what will actually happen.
+
+    Parameters
+    ----------
+    cfg:
+        A training config with ``hyperparameter_optimisation``.
+    blocks:
+        ``{architecture or model: hyperparameters}``.
+    where:
+        Config section for the message (e.g. ``"gnn_training"``).
+    """
+    empty = sorted(str(getattr(k, "value", k)) for k, v in (blocks or {}).items() if not v)
+    if "hyperparameter_optimisation" not in cfg.model_fields_set:
+        cfg.hyperparameter_optimisation = bool(empty)
+        return
+    if cfg.hyperparameter_optimisation and not empty:
+        warnings.warn(
+            f"{where}.hyperparameter_optimisation is true, but every model has explicit "
+            "hyperparameters, so no hyperparameter optimisation will run. Leave a model's "
+            "block empty ({}) to tune it.",
+            UserWarning,
+            stacklevel=3,
+        )
+    elif not cfg.hyperparameter_optimisation and empty:
+        warnings.warn(
+            f"{where}.hyperparameter_optimisation is false, but {empty} have empty "
+            "hyperparameter blocks ({}), so hyperparameter optimisation will run for them. "
+            "Give them hyperparameters to train them without tuning.",
+            UserWarning,
+            stacklevel=3,
+        )
 
 
 def ids_as_strings(value: Any) -> Any:
