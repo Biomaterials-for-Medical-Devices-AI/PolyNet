@@ -531,7 +531,8 @@ def main() -> None:
         tml_cfg=hpo_tml_cfg,
         gnn_cfg=hpo_gnn_cfg,
     )
-    # Provenance: the merged HPO search spaces (defaults + hpo_search_grid).
+    # Provenance: the HPO grids actually searched (default candidates, with any
+    # parameter set in hpo_search_grid replacing its defaults).
     search_spaces = effective_search_spaces(
         data_cfg.problem_type, gnn_cfg=hpo_gnn_cfg, tml_cfg=hpo_tml_cfg
     )

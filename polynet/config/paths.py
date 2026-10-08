@@ -342,7 +342,7 @@ def model_metrics_file_path(experiment_path: Path) -> Path:
 
 
 def hpo_search_spaces_path(experiment_path: Path) -> Path:
-    """Return the path to ``hpo_search_spaces.json`` (merged HPO grids of the experiment)."""
+    """Return the path to ``hpo_search_spaces.json`` (HPO grids actually searched)."""
     return experiment_path / "hpo_search_spaces.json"
 
 
