@@ -15,6 +15,7 @@ Import directly from this package for convenience::
     )
 """
 
+from polynet.config.schemas.applicability_domain import ApplicabilityDomainConfig
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.explainability import ExplainabilityConfig
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
@@ -28,6 +29,7 @@ from polynet.config.schemas.tml_explainability import TMLExplainabilityConfig
 from polynet.config.schemas.training import GNNOptimisationConfig, TrainGNNConfig, TrainTMLConfig
 
 __all__ = [
+    "ApplicabilityDomainConfig",
     "DataConfig",
     "ExplainabilityConfig",
     "GeneralConfig",

@@ -23,6 +23,7 @@ class DatasetName(StrEnum):
     """Benchmarking datasets"""
 
     CuratedTg = "curated_tg"
+    FluorineNMRSNR = "fluorine_nmr_snr"
 
 
 class ProblemType(StrEnum):
@@ -71,6 +72,21 @@ class SplitSampler(StrEnum):
     KMeans = "kmeans"
     OptiSim = "optisim"
     TargetProperty = "target_property"
+
+
+class ApplicabilityDomainMetric(StrEnum):
+    """
+    Distance placing new polymers relative to the training polymers.
+
+    ``ruzicka_morgan``: min–max (Ruzicka) distance on the ratio-weighted count
+    Morgan fingerprint, the same for every model. ``euclidean_model_inputs``:
+    Euclidean distance in each traditional model's own inputs (its
+    representation after the scaler and feature selection of the split);
+    GNNs always use ``ruzicka_morgan``.
+    """
+
+    RuzickaMorgan = "ruzicka_morgan"
+    EuclideanModelInputs = "euclidean_model_inputs"
 
 
 class HpoSplitStrategy(StrEnum):

@@ -49,3 +49,14 @@ def test_benchmark_dataset_is_validated_like_a_csv():
     df = pd.DataFrame({"ID": [0, 1], "PSMILES": ["[*]CC[*]", "[*]CO[*]"], "Tg(K)": [300.0, 350.0]})
     with _fake_benchmark(df), pytest.raises(ValueError):
         loader.load_benchmark_dataset("curated_tg", ["SMILES"], "Tg(K)", "ID", "regression")
+
+
+def test_bundled_fluorine_nmr_snr_dataset_loads_and_validates():
+    smiles_cols = [f"smiles_{i}" for i in range(1, 7)]
+    df = loader.load_benchmark_dataset("fluorine_nmr_snr", smiles_cols, "SNR", "ID", "regression")
+    assert len(df) == 418 and df.index.is_unique
+    # Copolymers: the six molar ratios of every polymer sum to 1.
+    ratios = df[[f"ratio_{i}" for i in range(1, 7)]].sum(axis=1)
+    assert ratios.round(6).eq(1).all()
+    # Missing measurements are empty (NaN), not placeholder strings.
+    assert df["MolWt"].dtype.kind == "f" and df["MolWt"].notna().sum() == 159

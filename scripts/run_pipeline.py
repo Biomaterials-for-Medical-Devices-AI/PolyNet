@@ -32,7 +32,8 @@ Stages
     9.  Compute metrics
     10. Plot results
     11. Run explainability           (if enabled)
-    12. Predict on external dataset  (if --predict-data or prediction.data_path set)
+    12. Predict on external dataset  (if --predict-data or prediction.data_path set),
+        with the applicability domain of the new polymers (prediction.applicability_domain)
 
 All outputs are written under the directory specified by
 ``experiment.output_dir`` in the config file.
@@ -51,6 +52,7 @@ import yaml
 
 from polynet.config.io import save_options
 from polynet.config.schemas import (
+    ApplicabilityDomainConfig,
     DataConfig,
     ExplainabilityConfig,
     FeatureTransformConfig,
@@ -277,6 +279,16 @@ def _build_tml_explainability_config(cfg: dict):
     return TMLExplainabilityConfig.model_validate(cfg.get("tml_explainability", {}))
 
 
+def _build_applicability_domain_config(cfg: dict) -> ApplicabilityDomainConfig:
+    """Build ApplicabilityDomainConfig from 'prediction.applicability_domain'.
+
+    Falls back to the defaults (assessed) when the section is absent.
+    """
+    return ApplicabilityDomainConfig.model_validate(
+        (cfg.get("prediction") or {}).get("applicability_domain") or {}
+    )
+
+
 # ---------------------------------------------------------------------------
 # Data loading (script-specific)
 # ---------------------------------------------------------------------------
@@ -423,6 +435,8 @@ def main() -> None:
     # Build Pydantic config objects shared across stages
     data_cfg = _build_data_config(cfg)
     split_cfg = _build_split_config(cfg)
+    # Validated now so a typo stops the run before training, not after.
+    ad_cfg = _build_applicability_domain_config(cfg)
 
     t_total = time.perf_counter()
 
@@ -732,6 +746,7 @@ def main() -> None:
                 experiment_path=out_dir,
                 out_dir=predict_out_dir,
                 dataset_name=dataset_name,
+                ad_cfg=ad_cfg,
             )
             logger.info(f"  Saved predictions ({len(predictions)} rows) to {predict_out_dir}")
             if metrics is not None:

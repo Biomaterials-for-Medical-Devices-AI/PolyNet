@@ -100,7 +100,7 @@ def select_data_form():
 
         dataset_name = st.selectbox(
             "Select a benchmark dataset to load",
-            options=[DatasetName.CuratedTg],
+            options=list(DatasetName),
             key=CreateExperimentStateKeys.DatasetNameLoad,
         )
 

@@ -5,7 +5,10 @@ description = "Polymer Property Predictions and Biomaterials Design"
 authors = ["Eduardo Aguilar-Bejarano <eduardo.aguilar-bejarano@nottingham.ac.uk>"]
 license = "MIT"
 readme = "README.md"
-include = [{ path = "polynet/app/static/*.png", format = ["sdist", "wheel"] }]
+include = [
+  { path = "polynet/app/static/*.png", format = ["sdist", "wheel"] },
+  { path = "polynet/data/benchmarks/*.csv", format = ["sdist", "wheel"] },
+]
 
 [tool.poetry.scripts]
 polynet = "polynet.cli:main"

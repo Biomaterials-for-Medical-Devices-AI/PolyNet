@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from importlib.resources import files
 from typing import Callable
 
 import pandas as pd
@@ -50,7 +51,8 @@ class DatasetCreator:
             If the requested dataset is not supported.
         """
         dataset_loaders: dict[DatasetName, Callable[[], pd.DataFrame]] = {
-            DatasetName.CuratedTg: self._load_curated_tg
+            DatasetName.CuratedTg: self._load_curated_tg,
+            DatasetName.FluorineNMRSNR: self._load_fluorine_nmr_snr,
         }
 
         try:
@@ -80,3 +82,32 @@ class DatasetCreator:
         dataset.index.name = "ID"
         dataset = dataset.reset_index()
         return dataset
+
+    @staticmethod
+    def _load_fluorine_nmr_snr() -> pd.DataFrame:
+        """
+        Load the 19F NMR signal-to-noise ratio dataset of fluorinated copolymers.
+
+        Bundled with PolyNet (``polynet/data/benchmarks/fluorine_nmr_snr.csv``).
+        Every polymer is a copolymer of the same six acrylate monomers; only
+        their molar ratios change.
+
+        References: Reis, M. et al. Machine-Learning-Guided Discovery of 19F
+        MRI Agents Enabled by Automated Copolymer Synthesis. J. Am. Chem. Soc.
+        143, 17677–17689 (2021); Tao, L., Arbaugh, T., Byrnes, J., Varshney, V.
+        & Li, Y. Unified machine learning protocol for copolymer
+        structure-property predictions. STAR Protocols 3 (2022).
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing:
+            - ``ID``: polymer identifier
+            - ``smiles_1`` … ``smiles_6``: monomer PSMILES
+            - ``ratio_1`` … ``ratio_6``: molar ratios (each row sums to 1)
+            - ``SNR``: 19F NMR signal-to-noise ratio
+            - ``MolWt``, ``Dispersity``: measured molecular weight and
+              dispersity, missing (NaN) for most polymers
+        """
+        with files("polynet.data").joinpath("benchmarks", "fluorine_nmr_snr.csv").open() as f:
+            return pd.read_csv(f)

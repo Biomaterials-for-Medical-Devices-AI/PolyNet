@@ -102,8 +102,9 @@ Outputs are written to `{output_dir}/unseen_predictions/{filename}/`:
 
 ```
 results/my_experiment/unseen_predictions/new_polymers/
-├── predictions.csv          # Per-model predictions + ensemble columns
+├── predictions.csv          # Per-model predictions + ensemble + applicability domain columns
 ├── metrics.json             # Per-model and ensemble metrics (only when target column is present)
+├── applicability_domain.json  # Applicability domain settings, per-split cutoffs, expected-error bins
 └── representation/
     └── GNN/
         └── raw/             # Raw graph data used by the GNN featuriser
@@ -136,6 +137,79 @@ number of splits, classification ties are possible). When the target column is p
 metrics under `"ensemble"`, keyed by ensemble name. Classification ensembles only have
 hard votes, so probability-based metrics (AUROC) are `null` for them. In the GUI the
 ensembles appear as separate rows of the metrics tables.
+
+### Applicability domain
+
+Models are only reliable for polymers similar to the ones they were trained on. For
+every prediction, PolyNet reports whether the new polymer lies in the **applicability
+domain** of the models and the error to expect at its distance from the training set.
+
+- **Distance.** A polymer's distance to the training set is its mean distance to its
+  *k* nearest training polymers. Two distances are available (`metric`, one or both):
+  - `ruzicka_morgan` (default): 1 − the min–max (Ruzicka) similarity, Σmin/Σmax, of
+    ratio-weighted count fingerprints (Morgan by default: the monomer fingerprints
+    averaged with their molar ratios, as in the representations). It is the
+    generalisation of the Tanimoto coefficient to counts, and the same for every model.
+    One domain per model family (`GNN`, `TML`).
+  - `euclidean_model_inputs`: Euclidean distance in the inputs of the traditional
+    models, i.e. their representation after the scaler and feature selection fitted on
+    each split. One domain per representation (`TML rdkit`, `TML morgan`, …). GNNs have
+    no such inputs and always use `ruzicka_morgan`.
+- **Domain** (Tropsha, Gramatica & Gombar, *QSAR Comb. Sci.* 2003, 22, 69–77). The
+  training polymers are placed relative to each other in the same way, giving a mean
+  distance ⟨d⟩ and standard deviation σ. A new polymer is in the domain when its distance
+  is at most ⟨d⟩ + Z·σ. Its **score** is distance / cutoff, so 1 is the boundary for
+  either distance. With `representations.polymer_descriptors` (e.g. Mw), it must also lie
+  within their training range.
+- **Expected error** (Sheridan et al., *J. Chem. Inf. Comput. Sci.* 2004, 44,
+  1912–1928). The held-out test polymers of every split are scored against that split's
+  training polymers, and their errors are grouped into score bins (quantiles). A new
+  polymer gets the mean test error of its bin: the absolute error (regression) or the
+  accuracy (classification). Polymers farther out than every test polymer get no
+  expected error, because no error was observed that far out.
+
+The reference is what each model family was trained on: the training set for GNNs,
+and training + validation for TML models when
+`tml_models.include_validation_in_training` is true.
+
+**Repeated splits.** Each split's models learned from a different training set, so every
+split has its own domain (its own ⟨d⟩, σ and cutoff, listed per split in
+`applicability_domain.json`). A new polymer is scored against each split, and the
+results are combined like the ensembles: the mean score, the share of splits whose
+domain contains it, and a majority vote for `In Domain`. For the expected error, the
+test polymers of each split are scored against that split's training set only, so no
+polymer is ever compared with a set it was trained on. Their (score, error) pairs from
+all splits are pooled into one table of score bins per model, and a new polymer's
+expected error is the mean of its per-split look-ups. A single reference merged from
+all training sets is deliberately not used: each split's test polymers belong to the
+training sets of other splits, so the calibration would be optimistic. Deterministic
+samplers (e.g. `kennard_stone`) repeat the same split, so all domains are identical and
+`In Domain Fraction` is 0 or 1.
+
+`{scope}` is `GNN` / `TML` for `ruzicka_morgan` and `TML {representation}` for
+`euclidean_model_inputs`; `{metric}` is `Ruzicka` or `Euclidean`.
+
+| Column | Meaning |
+|---|---|
+| `{scope} AD {metric} Score` | Distance to the *k* nearest training polymers / domain cutoff (1 = boundary), averaged over the splits |
+| `{scope} AD {metric} In Domain Fraction` | Share of the splits in whose domain the polymer lies |
+| `{scope} AD {metric} In Domain` | In the domain of at least half of the splits |
+| `{family} AD Descriptors In Range Fraction` | Share of the splits whose training range contains the polymer descriptors (only with `polymer_descriptors`) |
+| `{name} AD {metric} Expected Abs Error {target}` / `… Expected Accuracy {target}` | Held-out test error of the split models of the ensemble `{name}` at a similar score |
+
+On the showcase datasets, `ruzicka_morgan` separated new chemistry and ranked errors
+clearly better than `euclidean_model_inputs` on chemically diverse polymers (Tg), and
+both performed alike when only monomer ratios change (SNR copolymers).
+
+The domain is computed at prediction time from files every experiment already saves:
+the training dataset, `split_indices.json`, `ml_results/predictions.csv` and, for
+`euclidean_model_inputs`, the training descriptors and per-split scalers. It therefore
+also works for experiments trained before this feature. If one of these files is
+missing, a warning is logged: without `split_indices.json` the whole dataset is the
+reference and there is no expected error, and without the training dataset the
+predictions are returned without the domain. Settings are under
+[`prediction.applicability_domain`](configuration.md#prediction), and in the
+**Applicability domain** expander of the Predict page.
 
 The same `predict_external` function is used by both the CLI and the Streamlit app,
 guaranteeing identical results regardless of entry point.

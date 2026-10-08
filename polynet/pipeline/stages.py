@@ -32,6 +32,7 @@ import pandas as pd
 from polynet.config.enums import ProblemType, TargetTransformDescriptor, TransformDescriptor
 from polynet.config.paths import split_indices_path
 from polynet.config.schemas import (
+    ApplicabilityDomainConfig,
     DataConfig,
     ExplainabilityConfig,
     FeatureTransformConfig,
@@ -674,6 +675,7 @@ def predict_external(
     experiment_path: Path,
     out_dir: Path,
     dataset_name: str,
+    ad_cfg: ApplicabilityDomainConfig | None = None,
 ) -> tuple[pd.DataFrame, dict | None]:
     """
     Predict properties for an external (unseen) dataset using models from a
@@ -690,6 +692,15 @@ def predict_external(
     members; classification ensembles report the majority vote and the vote
     fraction. Ensemble metrics are stored under the ``"ensemble"`` key of the
     returned metrics, next to the per-split keys (``"1"``, ``"2"``, …).
+
+    The applicability domain of the new polymers is assessed with the metric(s)
+    of ``ad_cfg`` (see ``polynet.applicability``): their distance to the
+    polymers the models were trained on, whether they are in the domain, and
+    the error to expect at that distance. Its columns are added to the predictions and
+    the settings, per-split domains and calibration bins are written to
+    ``applicability_domain.json``. If it cannot be assessed (e.g. the training
+    dataset is missing), a warning is logged and the predictions are returned
+    without it.
 
     Parameters
     ----------
@@ -711,6 +722,9 @@ def predict_external(
         File name of the unseen dataset (e.g. ``"test_set.csv"``).  Used as
         the graph dataset filename so the GNN featuriser saves raw data under
         ``out_dir/representation/GNN/raw/``.
+    ad_cfg:
+        Applicability domain settings. ``None`` uses the defaults (assessed);
+        ``enabled=False`` skips it.
 
     Returns
     -------
@@ -724,6 +738,8 @@ def predict_external(
     import torch
     from torch_geometric.loader import DataLoader
 
+    from polynet.applicability import ModelGroup, assess_applicability_domain
+    from polynet.applicability.reference import GNN, TML
     from polynet.config.column_names import (
         get_predicted_label_column_name,
         get_true_label_column_name,
@@ -821,6 +837,10 @@ def predict_external(
     # and ensemble predicted column → ensemble model name; used for metrics.
     split_cols: dict[str, tuple[str, str, list[str]]] = {}
     ensemble_cols: dict[str, str] = {}
+    # Ensemble name → models summarised by the applicability domain, and the
+    # cleaned TML descriptors of the new polymers (euclidean_model_inputs).
+    ad_groups: dict[str, ModelGroup] = {}
+    descriptor_dfs: dict[str, pd.DataFrame] = {}
 
     # ------------------------------------------------------------------
     # TML path: descriptors → predict
@@ -918,6 +938,10 @@ def predict_external(
 
             # e.g. "random forest-rdkit" (model × representation), split "1"
             split_cols[predicted_col] = (iteration, ml_model.replace("_", " "), probs_cols)
+            ad_groups.setdefault(
+                ml_model.replace("_", " "),
+                ModelGroup(ml_model.replace("_", " "), TML, [ml_model], representation=df_name),
+            )
             preds_all = preds_df if preds_all is None else pd.concat([preds_all, preds_df], axis=1)
 
         if preds_all is not None:
@@ -995,7 +1019,12 @@ def predict_external(
                 probs_cols = list(probs_df.columns)
 
             # e.g. "GCN", split "1"
-            split_cols[predicted_col] = (gnn_iteration, model_name.rsplit("_", 1)[0], probs_cols)
+            gnn_arch = model_name.rsplit("_", 1)[0]
+            split_cols[predicted_col] = (gnn_iteration, gnn_arch, probs_cols)
+            ad_groups.setdefault(gnn_arch, ModelGroup(gnn_arch, GNN, [gnn_arch]))
+            ad_groups.setdefault(GNN, ModelGroup(GNN, GNN))
+            if gnn_arch not in ad_groups[GNN].model_ids:
+                ad_groups[GNN].model_ids.append(gnn_arch)
 
             preds_all = (
                 preds_df
@@ -1035,6 +1064,35 @@ def predict_external(
         raise RuntimeError(
             f"No trained models found in {models_dir}. " "Run the training pipeline first."
         )
+
+    # ------------------------------------------------------------------
+    # Applicability domain
+    # ------------------------------------------------------------------
+    ad_cfg = ad_cfg or ApplicabilityDomainConfig()
+    if ad_cfg.enabled and len(predictions) != len(df):
+        logger.warning(
+            f"The applicability domain was not assessed: {len(predictions)} predictions for "
+            f"{len(df)} polymers cannot be matched row by row."
+        )
+    elif ad_cfg.enabled:
+        try:
+            ad_columns, ad_report = assess_applicability_domain(
+                data=df,
+                groups=list(ad_groups.values()),
+                experiment_path=experiment_path,
+                data_cfg=data_cfg,
+                repr_cfg=repr_cfg,
+                ad_cfg=ad_cfg,
+                new_descriptors=descriptor_dfs,
+            )
+        except (FileNotFoundError, ValueError) as e:
+            logger.warning(f"The applicability domain could not be assessed: {e}")
+        else:
+            # Both are in the row order of the prepared data.
+            predictions = pd.concat([predictions.reset_index(drop=True), ad_columns], axis=1)
+            with open(out_dir / "applicability_domain.json", "w") as f:
+                json.dump(ad_report, f, indent=4)
+            logger.info(f"Applicability domain saved to {out_dir / 'applicability_domain.json'}")
 
     # ------------------------------------------------------------------
     # Save predictions
