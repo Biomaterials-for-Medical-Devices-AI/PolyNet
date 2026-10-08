@@ -33,6 +33,7 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TransformDescriptor,
 )
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
 from polynet.config.search_grid import get_tml_search_grid, n_grid_combinations
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
@@ -145,7 +146,7 @@ def train_tml_ensemble(
     train_val_test_idxs: tuple[list, list | None, list],
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
     hpo_n_folds: int = 5,
-    hpo_num_samples: int = 30,
+    hpo_num_samples: int = DEFAULT_HPO_NUM_SAMPLES,
     hpo_search_grid: dict | None = None,
     include_validation_in_training: bool = True,
 ) -> tuple[dict, dict, dict, dict]:
@@ -192,7 +193,8 @@ def train_tml_ensemble(
         the number of distinct grid combinations.
     hpo_search_grid:
         User search-grid candidates keyed by model name
-        (``tml_models.hpo_search_grid``), merged on top of the default grids.
+        (``tml_models.hpo_search_grid``); each parameter they set replaces the
+        default candidates.
     include_validation_in_training:
         If True, the validation samples are added to the training samples
         (feature transformer, target scaler, hyperparameter search and model
@@ -359,8 +361,8 @@ def tml_search_space(
     """
     Return the grid and number of samples for a TML randomised search.
 
-    The grid is the default grid of ``model_id`` with the user candidates
-    (``custom_grid``) merged on top. ``n_iter`` is capped at the number of
+    The grid is the default grid of ``model_id``, with each parameter set in
+    ``custom_grid`` replacing its default candidates. ``n_iter`` is capped at the number of
     distinct grid combinations — sampling more would only repeat
     configurations — with a warning.
 
@@ -389,14 +391,15 @@ def _run_random_search(
     problem_type: ProblemType,
     random_seed: int,
     n_folds: int = 5,
-    n_iter: int = 30,
+    n_iter: int = DEFAULT_HPO_NUM_SAMPLES,
     custom_grid: dict | None = None,
 ) -> object:
     """
     Tune a TML model with a randomised hyperparameter search.
 
-    Samples ``n_iter`` configurations from the model's search grid (defaults
-    merged with ``custom_grid``, see ``tml_search_space``) with
+    Samples ``n_iter`` configurations from the model's search grid (the
+    defaults, with ``custom_grid`` replacing individual parameters; see
+    ``tml_search_space``) with
     ``RandomizedSearchCV`` and scores them by ``n_folds``-fold shuffled
     cross-validation (stratified for classification). A summary of the search
     is attached to the returned estimator as ``polynet_hpo_`` (search grid,

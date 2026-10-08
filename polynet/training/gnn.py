@@ -39,6 +39,7 @@ from polynet.config.enums import (
     TrainingParam,
     TransformDescriptor,
 )
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
 from polynet.config.schemas.training import GNNOptimisationConfig
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
@@ -243,7 +244,7 @@ def train_gnn_ensemble(
     hpo_n_repeats: int = 3,
     polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
     optimisation: GNNOptimisationConfig | None = None,
-    hpo_num_samples: int = 150,
+    hpo_num_samples: int = DEFAULT_HPO_NUM_SAMPLES,
     hpo_search_grid: dict | None = None,
 ) -> tuple[dict, dict, dict]:
     """
@@ -302,8 +303,8 @@ def train_gnn_ensemble(
     hpo_num_samples:
         Number of configurations Ray Tune samples per HPO run.
     hpo_search_grid:
-        User search-grid candidates (``gnn_training.hpo_search_grid``), merged
-        on top of the default grid.
+        User search-grid candidates (``gnn_training.hpo_search_grid``); each
+        parameter they set replaces the default candidates.
 
     Returns
     -------

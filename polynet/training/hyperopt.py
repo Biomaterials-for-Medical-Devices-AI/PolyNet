@@ -149,8 +149,8 @@ def gnn_hyp_opt(
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
 
     Results are cached under a directory named after the architecture and a
-    hash of every setting that affects the search (the merged grid including
-    the seed, ``num_samples``, the HPO split settings, the optimisation
+    hash of every setting that affects the search (the grid actually searched,
+    including the seed, ``num_samples``, the HPO split settings, the optimisation
     settings and the descriptor scaler). If that cache exists, the best
     configuration is loaded instead of re-running the search; any changed
     setting gives a new hash, so stale results are never reused. The searched
@@ -196,8 +196,8 @@ def gnn_hyp_opt(
         trial (the same settings as final training). ``None`` uses the
         defaults (Adam, ReduceLROnPlateau, RMSE).
     custom_grid:
-        ``gnn_training.hpo_search_grid``; merged on top of the default grid
-        (see ``polynet.config.search_grid.get_gnn_search_grid``).
+        ``gnn_training.hpo_search_grid``; each parameter it sets replaces the
+        default candidates (see ``polynet.config.search_grid.get_gnn_search_grid``).
     epochs:
         Training epochs per trial (``training.epochs``, the same as final
         training). For holdout strategies it is also ASHA's ``max_t``, with a
