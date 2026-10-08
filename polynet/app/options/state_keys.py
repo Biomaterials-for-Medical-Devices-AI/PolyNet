@@ -262,6 +262,14 @@ class PredictPageStateKeys(StrEnum):
     CompareTarget = "CompareTarget"
     SelectAllModels = "SelectAllModels"
     SelectModel = "SelectModel"
+    ADEnabled = "ADEnabled"
+    ADMetric = "ADMetric"
+    ADNeighbours = "ADNeighbours"
+    ADZ = "ADZ"
+    ADBins = "ADBins"
+    ADFingerprint = "ADFingerprint"
+    ADFpSize = "ADFpSize"
+    ADFpRadius = "ADFpRadius"
 
 
 class ProjectionPlotStateKeys(StrEnum):
