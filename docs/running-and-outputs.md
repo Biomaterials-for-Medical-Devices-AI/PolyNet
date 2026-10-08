@@ -170,8 +170,21 @@ domain** of the models and the error to expect at its distance from the training
 
 The reference is what each model family was trained on: the training set for GNNs,
 and training + validation for TML models when
-`tml_models.include_validation_in_training` is true. Every split has its own
-reference; the results are averaged over the splits, like the ensembles.
+`tml_models.include_validation_in_training` is true.
+
+**Repeated splits.** Each split's models learned from a different training set, so every
+split has its own domain (its own ⟨d⟩, σ and cutoff, listed per split in
+`applicability_domain.json`). A new polymer is scored against each split, and the
+results are combined like the ensembles: the mean score, the share of splits whose
+domain contains it, and a majority vote for `In Domain`. For the expected error, the
+test polymers of each split are scored against that split's training set only, so no
+polymer is ever compared with a set it was trained on. Their (score, error) pairs from
+all splits are pooled into one table of score bins per model, and a new polymer's
+expected error is the mean of its per-split look-ups. A single reference merged from
+all training sets is deliberately not used: each split's test polymers belong to the
+training sets of other splits, so the calibration would be optimistic. Deterministic
+samplers (e.g. `kennard_stone`) repeat the same split, so all domains are identical and
+`In Domain Fraction` is 0 or 1.
 
 `{scope}` is `GNN` / `TML` for `ruzicka_morgan` and `TML {representation}` for
 `euclidean_model_inputs`; `{metric}` is `Ruzicka` or `Euclidean`.
