@@ -283,20 +283,23 @@ def _build_tml_explainability_config(cfg: dict):
 
 
 def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
-    """Load and validate the dataset from disk. Script-specific stage."""
-    from polynet.data.loader import load_dataset
+    """Load and validate the dataset (a CSV file or a built-in benchmark). Script-specific stage."""
+    from polynet.data.loader import load_benchmark_dataset, load_dataset
 
     data_cfg = cfg["data"]
-    data_path = resolve_path(data_cfg["data_path"], root)
-
-    df = load_dataset(
-        path=data_path,
+    columns = dict(
         smiles_cols=data_cfg["smiles_cols"],
         target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
         problem_type=data_cfg["problem_type"],
     )
-    logger.info(f"  Loaded {len(df)} samples from {data_path}")
+    if data_cfg.get("benchmark_dataset"):
+        source = f"benchmark dataset '{data_cfg['benchmark_dataset']}'"
+        df = load_benchmark_dataset(data_cfg["benchmark_dataset"], **columns)
+    else:
+        source = resolve_path(data_cfg["data_path"], root)
+        df = load_dataset(path=source, **columns)
+    logger.info(f"  Loaded {len(df)} samples from {source}")
     logger.info(f"  Columns: {list(df.columns)}")
     save_options(path=out_dir / "data_options.json", options=data_cfg)
     return df

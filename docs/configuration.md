@@ -48,6 +48,33 @@ data:
   canonicalise_smiles: true        # canonicalise structures before featurisation (default true)
 ```
 
+### Built-in benchmark dataset (`benchmark_dataset`)
+
+Instead of `data_path`, the CLI can load a built-in benchmark dataset — the same ones the
+GUI offers under *Load benchmarking dataset*. Give exactly one of `data_path` and
+`benchmark_dataset`. The template `configs/experiment.yaml` uses it by default:
+
+```yaml
+data:
+  data_name: "curated_tg.csv"
+  benchmark_dataset: "curated_tg"  # instead of data_path
+  smiles_cols: ["PSMILES"]
+  target_variable_col: "Tg(K)"
+  id_col: "ID"
+  problem_type: "regression"
+  string_representation: "psmiles"
+  num_classes: 1
+```
+
+| `benchmark_dataset` | Content |
+|---|---|
+| `curated_tg` | 7,367 homopolymers (`PSMILES`) with experimental glass transition temperatures `Tg(K)` from the curated polymetrix dataset (Zenodo record 15210035); IDs in `ID`. |
+
+The data are downloaded on first use (internet access needed once) and cached by
+polymetrix. They are validated like a CSV file (columns, structures, unique IDs, target),
+and a copy is saved as `data_name` in the experiment's output directory. As these are
+homopolymers, use `smiles_merge_approach: "no_merging"` and `weights_col: null`.
+
 ### Structure validation and canonicalisation
 
 The GUI, the CLI and external prediction (`predict_external`) prepare the structure

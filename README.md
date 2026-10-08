@@ -134,7 +134,10 @@ python scripts/integration_test.py
 
 ### CLI
 
-**1. Edit the config file** to point at your data and choose your models:
+**1. Edit the config file** to point at your data and choose your models. The template
+`configs/experiment.yaml` runs out of the box on the built-in Tg benchmark
+(`benchmark_dataset: "curated_tg"`, downloaded on first use); to use your own data,
+replace it with `data_path`:
 
 ```yaml
 # configs/experiment.yaml
