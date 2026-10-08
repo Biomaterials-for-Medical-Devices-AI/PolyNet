@@ -124,6 +124,11 @@ class BaseNetwork(nn.Module):
         self.seed = seed
         self.losses = None
 
+        # Fitted scaler for the polymer descriptors (a ``FeatureTransformer``
+        # fitted on the training split, see ``set_polymer_descriptor_scaler``).
+        # ``None`` means descriptors are used as given.
+        self.polymer_descriptor_scaler = None
+
         self._seed_everything(seed)
 
         self.pooling_fn = POOLING_FUNCTIONS.get(self.pooling, gmeanp)
@@ -202,13 +207,53 @@ class BaseNetwork(nn.Module):
             monomer_id=monomer_id,
         )
         if polymer_descriptors is not None and self.n_polymer_descriptors > 0:
-            embedding = torch.cat([embedding, polymer_descriptors], dim=1)
+            embedding = torch.cat(
+                [embedding, self.scale_polymer_descriptors(polymer_descriptors)], dim=1
+            )
         preds = self.readout_function(embedding)
 
         if self.n_classes == 1:
             preds = preds.float()
 
         return preds
+
+    # ------------------------------------------------------------------
+    # Polymer descriptor scaling
+    # ------------------------------------------------------------------
+
+    def set_polymer_descriptor_scaler(self, scaler) -> None:
+        """
+        Attach a fitted polymer descriptor scaler to the model.
+
+        The scaler is applied to the raw polymer descriptors in every forward
+        pass. Because GNN models are saved as whole pickled modules, the
+        scaler travels with the saved model, so every prediction path
+        (external prediction, explanations, the GUI) receives descriptors in
+        the scale the model was trained on.
+
+        Parameters
+        ----------
+        scaler:
+            A ``polynet.data.feature_transformer.FeatureTransformer`` fitted on
+            the training descriptors (scaling only, no feature selection), or
+            ``None`` to use descriptors as given.
+        """
+        self.polymer_descriptor_scaler = scaler
+
+    def scale_polymer_descriptors(self, polymer_descriptors: Tensor) -> Tensor:
+        """
+        Apply the attached polymer descriptor scaler (identity if none).
+
+        Models saved before descriptor scaling existed have no scaler
+        attribute and are returned unchanged.
+        """
+        scaler = getattr(self, "polymer_descriptor_scaler", None)
+        if scaler is None:
+            return polymer_descriptors
+        scaled = scaler.transform(polymer_descriptors.detach().cpu().numpy())
+        return torch.as_tensor(
+            scaled, dtype=polymer_descriptors.dtype, device=polymer_descriptors.device
+        )
 
     def _pool_per_monomer(
         self, x: Tensor, batch_index: Tensor, monomer_weight: Tensor, monomer_id: Tensor

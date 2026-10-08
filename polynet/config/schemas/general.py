@@ -29,9 +29,10 @@ class GeneralConfig(PolynetBaseModel):
         Fraction of the full dataset reserved for the test set.
         Must be in (0, 1).
     val_ratio:
-        Fraction of the full dataset reserved for the validation set.
-        Must be in (0, 1). Only used when ``split_type`` includes a
-        validation split (e.g. TrainValTest).
+        Fraction of the full dataset reserved for the validation set, so
+        ``test_ratio=0.1, val_ratio=0.1`` gives an 80/10/10 split. Must be in
+        (0, 1), and ``test_ratio + val_ratio`` must be below 1. Only used when
+        ``split_type`` includes a validation split (e.g. TrainValTest).
     random_seed:
         Global random seed for reproducibility across all stochastic steps.
     n_bootstrap_iterations:

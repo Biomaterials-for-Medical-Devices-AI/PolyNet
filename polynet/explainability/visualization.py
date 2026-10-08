@@ -251,7 +251,9 @@ def plot_attribution_distribution(
     Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
 
     Each fragment occupies one row of a seaborn ``FacetGrid``; rows overlap
-    vertically so the overall chart is compact.  Fragments are sorted by their
+    vertically so the overall chart is compact. Each row is scaled to its own
+    density peak, so rows show the *shape* of each distribution (heights are
+    not comparable between rows).  Fragments are sorted by their
     mean attribution (descending), and each row is coloured by interpolating
     between ``neg_color`` (most negative mean) and ``pos_color`` (most positive
     mean).
@@ -291,8 +293,17 @@ def plot_attribution_distribution(
 
     sns.set_theme(style="white", rc={"axes.facecolor": (0, 0, 0, 0)})
 
+    # Each row gets its own density scale (sharey=False): with a shared scale, a
+    # fragment whose scores are nearly all identical (a very narrow, very tall
+    # KDE) flattens every other row into an invisible line.
     g = sns.FacetGrid(
-        df, row="fragment", hue="fragment", aspect=aspect, height=row_height, palette=palette
+        df,
+        row="fragment",
+        hue="fragment",
+        aspect=aspect,
+        height=row_height,
+        palette=palette,
+        sharey=False,
     )
 
     # Filled KDE

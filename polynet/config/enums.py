@@ -56,6 +56,23 @@ class SplitMethod(StrEnum):
     Stratified = "stratified"
 
 
+class SplitSampler(StrEnum):
+    """
+    astartes sampler used to draw the train / validation / test sets.
+
+    ``dbscan`` and ``sphere_exclusion`` are not offered: their default distance
+    thresholds (eps 0.5, cutoff 0.25) are far below typical distances between
+    count fingerprints, so they cannot fill the sets.
+    """
+
+    Random = "random"
+    KennardStone = "kennard_stone"
+    SPXY = "spxy"
+    KMeans = "kmeans"
+    OptiSim = "optisim"
+    TargetProperty = "target_property"
+
+
 class HpoSplitStrategy(StrEnum):
     """Data split strategy used inside the GNN hyperparameter optimisation loop."""
 
@@ -221,8 +238,6 @@ class FragmentationMethod(StrEnum):
 
     MurckoScaffold = "murcko_scaffold"
     BRICS = "brics"
-    FunctionalGroups = "functional_groups"
-    Recap = "recap"
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +325,14 @@ class Scheduler(StrEnum):
     ReduceLROnPlateau = "reduce_lr_on_plateau"
 
 
+class RegressionLoss(StrEnum):
+    """Loss minimised when training GNNs on regression targets."""
+
+    RMSE = "rmse"  # sqrt of the batch mean squared error (PolyNet's historical default)
+    MSE = "mse"
+    MAE = "mae"
+
+
 # ---------------------------------------------------------------------------
 # Traditional ML
 # ---------------------------------------------------------------------------
@@ -323,8 +346,6 @@ class TraditionalMLModel(StrEnum):
     RandomForest = "random_forest"
     XGBoost = "xgboost"
     SupportVectorMachine = "support_vector_machine"
-    KNeighborsClassifier = "k_neighbors_classifier"
-    DecisionTreeClassifier = "decision_tree_classifier"
 
 
 # ---------------------------------------------------------------------------

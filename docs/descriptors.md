@@ -1,8 +1,9 @@
 # Descriptors
 
 PolyNet builds fixed-length vector representations for traditional ML and graph
-representations for GNNs. This document covers two cross-cutting topics:
+representations for GNNs. This document covers three cross-cutting topics:
 
+- [Count fingerprints (Morgan, RDKit)](#count-fingerprints-morgan-rdkit) — fingerprint size and radius
 - [Polymer descriptor fusion](#polymer-descriptor-fusion) — injecting given polymer-level features
 - [PolyMetriX descriptors](#polymetrix-descriptors) — polymer-aware chemical descriptors
 
@@ -15,6 +16,31 @@ representations for GNNs. This document covers two cross-cutting topics:
 > unaffected.
 
 ---
+
+## Count fingerprints (Morgan, RDKit)
+
+`morgan` and `rdkitfp` compute RDKit **count** fingerprints for each monomer (via
+`rdFingerprintGenerator`), which are then merged per polymer like any other descriptor.
+Set the value to `true` (or `[]`) for the defaults, or to a mapping to change them:
+
+| Descriptor | Setting | Default | Meaning |
+|---|---|---|---|
+| `morgan` | `fp_size` | `2048` | Length of the fingerprint vector (number of bins) |
+| `morgan` | `radius` | `3` | Radius of the atom environments (3 ≈ ECFP6, 2 ≈ ECFP4) |
+| `rdkitfp` | `fp_size` | `2048` | Length of the fingerprint vector |
+
+```yaml
+representations:
+  molecular_descriptors:
+    morgan: {fp_size: 1024, radius: 2}
+    rdkitfp: true
+```
+
+The defaults are RDKit's own generator defaults, which PolyNet has always used — note
+that the default Morgan radius is **3**, not 2. Unknown settings or non-positive values
+are rejected at config load. The settings are saved in `representation_options.json`
+and reused when predicting new data. In the GUI they appear on the Representation page
+under each fingerprint checkbox.
 
 ## Polymer descriptor fusion
 
@@ -44,6 +70,30 @@ the FFN readout receives both the learned graph representation and the experimen
 polymer context. The first readout layer is automatically widened to accommodate the
 extra dimensions.
 
+**Scaling (GNN).** Before concatenation the descriptors are scaled with the **same
+transformation as the tabular features**: the `feature_preprocessing.scaler` strategy,
+applied through the same `FeatureTransformer` class. A transformer is fitted on the
+polymer descriptors of the **training graphs of each split only** (and, during HPO, on
+the training part of each HPO split). Feature selection (`selectors`) is *not* applied,
+since the readout has a fixed input width and polymer descriptors are chosen explicitly.
+If no `feature_preprocessing` section is configured (e.g. a GNN-only experiment),
+`standard_scaler` is used. The fitted transformer is stored inside each saved GNN model
+and applied in its forward pass, so predictions on external data and explanations always
+use the training-split scaling; it is also written to
+`ml_results/models/polymer_descriptor_scaler_{iteration}.pkl` for reference. A polymer
+descriptor containing `NaN`/`±inf` in the training set raises an error for GNNs (it
+cannot be dropped without changing the model input width).
+
+> **TML vs GNN scaling.** The scaling *strategy* is the same for both model families.
+> GNNs use the validation set to select the best epoch, so their polymer descriptor
+> scaler is fitted on the **training** samples only. By default
+> (`tml_models.include_validation_in_training: true`) TML models are trained on the
+> **training + validation** samples, and their `FeatureTransformer` is fitted on those
+> too, so the same descriptor ends up with slightly different scaled values in the two
+> model families (e.g. a different median/IQR under `robust_scaler`). Set
+> `include_validation_in_training: false` to train TML on the training samples only:
+> both families then see the same data and the scaled values are identical.
+
 ```
 GNN forward pass with polymer descriptors:
 
@@ -51,7 +101,7 @@ GNN forward pass with polymer descriptors:
                                                                ↓
                                               [embedding, dim = embedding_dim]
                                                                ↓
-                                     cat([embedding, polymer_descriptors], dim=1)
+                             cat([embedding, scale(polymer_descriptors)], dim=1)
                                                                ↓
                                               FFN readout → prediction
 ```

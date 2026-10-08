@@ -18,6 +18,8 @@ Public API
 from __future__ import annotations
 
 from copy import deepcopy
+import hashlib
+import json
 import logging
 from pathlib import Path
 
@@ -28,23 +30,31 @@ from ray import tune
 from ray.air import session
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
-from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
+from sklearn.model_selection import train_test_split
 import torch
 from torch_geometric.loader import DataLoader
 
 from polynet.config.enums import (
     HpoSplitStrategy,
     Network,
-    Optimizer,
     ProblemType,
-    Scheduler,
     TrainingParam,
+    TransformDescriptor,
 )
+from polynet.config.schemas.training import GNNOptimisationConfig
 from polynet.config.search_grid import get_gnn_search_grid
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
-from polynet.factories.optimizer import create_optimizer, create_scheduler
-from polynet.training.gnn import eval_network, train_network
+from polynet.factories.optimizer import step_scheduler
+from polynet.training.cv import make_kfold
+from polynet.training.gnn import (
+    build_optimisation,
+    class_weights_for,
+    evaluate_losses,
+    fit_polymer_descriptor_scaler,
+    n_polymer_descriptors_of,
+    train_network,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -93,11 +103,7 @@ def _build_splits(
     stratify = y if problem_type == ProblemType.Classification else None
 
     if strategy == HpoSplitStrategy.CrossValidation:
-        cv = (
-            StratifiedKFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-            if problem_type == ProblemType.Classification
-            else KFold(n_splits=n_folds, shuffle=True, random_state=random_seed)
-        )
+        cv = make_kfold(problem_type=problem_type, n_folds=n_folds, random_seed=random_seed)
         return [(tr.tolist(), va.tolist()) for tr, va in cv.split(np.zeros(n), y)]
 
     if strategy == HpoSplitStrategy.Holdout:
@@ -134,19 +140,27 @@ def gnn_hyp_opt(
     n_folds: int = 5,
     val_fraction: float = 0.2,
     n_repeats: int = 3,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
+    custom_grid: dict | None = None,
+    epochs: int = 250,
 ) -> dict:
     """
     Run Ray Tune hyperparameter optimisation for a GNN architecture.
 
-    If a results CSV already exists for this architecture and iteration,
-    the best previously found configuration is loaded and returned
-    without re-running the search.
+    Results are cached under a directory named after the architecture and a
+    hash of every setting that affects the search (the grid actually searched,
+    including the seed, ``num_samples``, the HPO split settings, the optimisation
+    settings and the descriptor scaler). If that cache exists, the best
+    configuration is loaded instead of re-running the search; any changed
+    setting gives a new hash, so stale results are never reused. The searched
+    space is written to ``search_space.json`` in the same directory.
 
     Parameters
     ----------
     exp_path:
         Root experiment directory. HPO results are stored under
-        ``exp_path/gnn_hyp_opt/iteration_{iteration}/{arch}/``.
+        ``exp_path/gnn_hyp_opt/iteration_{iteration}/{arch}_{hash}/``.
     gnn_arch:
         The GNN architecture to tune.
     dataset:
@@ -174,6 +188,20 @@ def gnn_hyp_opt(
         ``RepeatedHoldout``.
     n_repeats:
         Number of independent random splits. Used only by ``RepeatedHoldout``.
+    polymer_descriptor_scaler:
+        Scaling strategy for polymer descriptors. Within each trial the
+        scaler is fitted on the training part of every HPO split only.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss used in every
+        trial (the same settings as final training). ``None`` uses the
+        defaults (Adam, ReduceLROnPlateau, RMSE).
+    custom_grid:
+        ``gnn_training.hpo_search_grid``; each parameter it sets replaces the
+        default candidates (see ``polynet.config.search_grid.get_gnn_search_grid``).
+    epochs:
+        Training epochs per trial (``training.epochs``, the same as final
+        training). For holdout strategies it is also ASHA's ``max_t``, with a
+        grace period of ``asha_grace_period(epochs)``.
 
     Returns
     -------
@@ -183,14 +211,41 @@ def gnn_hyp_opt(
     """
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
 
-    hop_results_path = Path(exp_path) / "gnn_hyp_opt" / f"iteration_{iteration}"
-    results_csv = hop_results_path / gnn_arch.value / f"{gnn_arch.value}.csv"
+    config = get_gnn_search_grid(
+        network=gnn_arch,
+        random_seed=random_seed,
+        problem_type=problem_type,
+        custom_grid=custom_grid,
+    )
+    search_space = {
+        "architecture": gnn_arch.value,
+        "search_grid": config,
+        "num_samples": num_samples,
+        "hpo_split_strategy": HpoSplitStrategy(hpo_split_strategy).value,
+        "n_folds": n_folds,
+        "val_fraction": val_fraction,
+        "n_repeats": n_repeats,
+        "optimisation": (optimisation or GNNOptimisationConfig()).model_dump(mode="json"),
+        "polymer_descriptor_scaler": str(polymer_descriptor_scaler),
+        "epochs": epochs,
+    }
+    run_name = f"{gnn_arch.value}_{search_cache_key(search_space)}"
 
-    config = get_gnn_search_grid(network=gnn_arch, random_seed=random_seed)
+    hop_results_path = Path(exp_path) / "gnn_hyp_opt" / f"iteration_{iteration}"
+    run_dir = hop_results_path / run_name
+    results_csv = run_dir / f"{gnn_arch.value}.csv"
 
     if results_csv.exists():
-        logger.info(f"Found existing HPO results at {results_csv}. Loading best config.")
-        return _load_best_config(hop_results_path, gnn_arch, config)
+        logger.info(f"Found HPO results for the same search at {results_csv}. Loading best config.")
+        return _load_best_config(results_csv, config)
+
+    run_dir.mkdir(parents=True, exist_ok=True)
+    with open(run_dir / "search_space.json", "w") as f:
+        json.dump(search_space, f, indent=2, default=str)
+    logger.info(
+        f"HPO for {gnn_arch.value} (iteration {iteration}): {num_samples} samples, "
+        f"search space saved to {run_dir / 'search_space.json'}."
+    )
 
     # --- Split indices ---
     splits = _build_splits(
@@ -213,8 +268,8 @@ def gnn_hyp_opt(
             time_attr="epoch",
             metric="val_loss",
             mode="min",
-            max_t=250,
-            grace_period=50,
+            max_t=epochs,
+            grace_period=asha_grace_period(epochs),
             reduction_factor=2,
         )
         if use_asha
@@ -241,13 +296,16 @@ def gnn_hyp_opt(
             strategy=hpo_split_strategy,
             network=gnn_arch,
             problem_type=problem_type,
+            polymer_descriptor_scaler=polymer_descriptor_scaler,
+            optimisation=optimisation,
+            epochs=epochs,
         ),
         config=tune_config,
         num_samples=num_samples,
         scheduler=asha,
         progress_reporter=reporter,
         storage_path=hop_results_path.resolve(),
-        name=gnn_arch.value,
+        name=run_name,
         resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},
     )
 
@@ -266,6 +324,28 @@ def gnn_hyp_opt(
 # ---------------------------------------------------------------------------
 
 
+def _validate(model, val_loader, loss_fn, score_fn, scheduler, device) -> float:
+    """
+    Step the scheduler as in final training and return the trial's score.
+
+    The scheduler sees the training loss function on the validation data (as
+    in final training, weighted when class weights are used); the returned
+    score is the unweighted ``score_fn``, comparable across trials.
+    """
+    val_loss, training_val_loss = evaluate_losses(model, val_loader, [score_fn, loss_fn], device)
+    step_scheduler(scheduler, training_val_loss)
+    return val_loss
+
+
+def asha_grace_period(epochs: int) -> int:
+    """
+    Epochs every holdout HPO trial runs before ASHA may stop it.
+
+    One fifth of the training epochs (50 for the default 250), at least 1.
+    """
+    return max(1, round(epochs / 5))
+
+
 def _gnn_target_function(
     config: dict,
     dataset: list,
@@ -274,11 +354,14 @@ def _gnn_target_function(
     strategy: HpoSplitStrategy,
     network: Network,
     problem_type: ProblemType,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
+    epochs: int = 250,
 ) -> None:
     """
     Ray Tune objective function — trains a GNN and reports validation loss.
 
-    For ``CrossValidation``: trains each fold fully (250 epochs) and reports
+    For ``CrossValidation``: trains each fold fully (``epochs``) and reports
     once at the end with the mean/std across folds. ASHA is not active.
 
     For ``Holdout`` / ``RepeatedHoldout``: trains all splits in epoch lockstep
@@ -292,9 +375,14 @@ def _gnn_target_function(
 
     lr = cfg.pop(TrainingParam.LearningRate)
     batch_size = cfg.pop(TrainingParam.BatchSize)
-    cfg.pop(TrainingParam.AsymmetricLossStrength, None)
+    loss_strength = cfg.pop(TrainingParam.AsymmetricLossStrength, None)
 
-    loss_fn = create_loss(problem_type)
+    # Trials train with their own class weights but are all scored with the
+    # same unweighted loss, so validation losses are comparable across
+    # AsymmetricLossStrength candidates.
+    score_fn = create_loss(
+        problem_type, regression_loss=(optimisation or GNNOptimisationConfig()).regression_loss
+    ).to(device)
 
     if strategy == HpoSplitStrategy.CrossValidation:
         # Original behaviour: train each fold fully, report once at end.
@@ -318,19 +406,28 @@ def _gnn_target_function(
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=num_classes,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 **cfg,
             ).to(device)
-
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            model.set_polymer_descriptor_scaler(
+                fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
             )
 
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights_for(
+                    train_set, num_classes, problem_type, loss_strength
+                ),
+            )
+            loss_fn = loss_fn.to(device)
+
             best_val_loss = float("inf")
-            for _ in range(1, 251):
+            for _ in range(1, epochs + 1):
                 train_network(model, train_loader, loss_fn, optimizer, device)
-                val_loss = eval_network(model, val_loader, loss_fn, device)
-                scheduler.step(val_loss)
+                val_loss = _validate(model, val_loader, loss_fn, score_fn, scheduler, device)
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
 
@@ -364,22 +461,33 @@ def _gnn_target_function(
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=num_classes,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 **cfg,
             ).to(device)
-
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            model.set_polymer_descriptor_scaler(
+                fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
             )
-            split_data.append((model, train_loader, val_loader, optimizer, scheduler))
+
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights_for(
+                    train_set, num_classes, problem_type, loss_strength
+                ),
+            )
+            loss_fn = loss_fn.to(device)
+            split_data.append((model, train_loader, val_loader, optimizer, scheduler, loss_fn))
 
         best_val_losses = [float("inf")] * len(split_data)
 
-        for epoch in range(1, 251):
-            for k, (model, train_loader, val_loader, optimizer, scheduler) in enumerate(split_data):
+        for epoch in range(1, epochs + 1):
+            for k, (model, train_loader, val_loader, optimizer, scheduler, loss_fn) in enumerate(
+                split_data
+            ):
                 train_network(model, train_loader, loss_fn, optimizer, device)
-                val_loss = eval_network(model, val_loader, loss_fn, device)
-                scheduler.step(val_loss)
+                val_loss = _validate(model, val_loader, loss_fn, score_fn, scheduler, device)
                 if val_loss < best_val_losses[k]:
                     best_val_losses[k] = val_loss
 
@@ -397,16 +505,33 @@ def _gnn_target_function(
 # ---------------------------------------------------------------------------
 
 
-def _load_best_config(hop_results_path: Path, gnn_arch: Network, config_keys: dict) -> dict:
+def search_cache_key(search_space: dict) -> str:
+    """
+    Short, stable hash of the settings that define an HPO search.
+
+    Parameters
+    ----------
+    search_space:
+        JSON-serialisable description of the search (grid, sample count,
+        split and training settings). Enum values are serialised as strings.
+
+    Returns
+    -------
+    str
+        First 10 hex characters of the SHA-256 of the canonical JSON.
+    """
+    canonical = json.dumps(search_space, sort_keys=True, default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:10]
+
+
+def _load_best_config(results_csv: Path, config_keys: dict) -> dict:
     """
     Load the best hyperparameter configuration from a saved CSV.
 
     Parameters
     ----------
-    hop_results_path:
-        Base path where HPO results are stored.
-    gnn_arch:
-        GNN architecture whose results to load.
+    results_csv:
+        Ray Tune results table saved by ``gnn_hyp_opt``.
     config_keys:
         Dict whose keys are the hyperparameter names to look up.
         Used to construct column names (``config/{param}``).
@@ -423,8 +548,6 @@ def _load_best_config(hop_results_path: Path, gnn_arch: Network, config_keys: di
     FileNotFoundError
         If the results CSV does not exist.
     """
-    results_csv = hop_results_path / gnn_arch.value / f"{gnn_arch.value}.csv"
-
     if not results_csv.exists():
         raise FileNotFoundError(f"HPO results file not found: {results_csv}")
 

@@ -36,20 +36,23 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 ## Features
 
 - **Six GNN architectures** — GCN, GAT, CGGNN, MPNN, GraphSAGE, TransformerGNN — each with regression and classification variants
-- **Traditional ML** — Random Forest, XGBoost, SVM, Logistic Regression, Linear Regression
+- **Traditional ML** — Random Forest, XGBoost, SVM, Logistic Regression, Linear Regression, with optional automatic hyperparameter search (`RandomizedSearchCV` scored by shuffled, user-set k-fold cross-validation)
+- **Molecular fingerprints** — Morgan and RDKit count fingerprints with configurable size and Morgan radius (defaults: 2048 bins, radius 3), alongside RDKit descriptors, PolyBERT and PolyMetriX
 - **Multi-monomer polymers** — handles copolymers with any number of monomers and molar ratios; ratios are normalised per polymer to sum to 1 across the participating monomers (any scale works — fractions, percentages, or arbitrary ratios such as 1:1:2), and ratio-0 monomers are excluded from the graph entirely so homopolymers written as `(monomer, 100/0)` are invariant to the empty SMILES column
 - **Per-monomer pooling** — `PerMonomerPooling` weighting mode pools each monomer's nodes separately and combines them as `Σ wᵢ·pool(monomerᵢ)`, removing the atom-count bias that arises when weighting before pooling on mixed-size copolymers (wD-MPNN-style weighted-mean pooling is also supported)
 - **PSMILES attachment-point handling** — opt-in `IsAttachmentPoint` atom feature strips `*` (wildcard) atoms from the graph and flags the atoms that were attached to them, replacing dangling pseudo-element nodes with an explicit boolean marker
 - **PolyMetriX descriptors** — polymer-aware chemical descriptors (molecular weight, ring counts, TPSA, etc.) computed on the full repeat unit, side chain, or backbone, with configurable aggregation; three modes — `side_chain`, `backbone`, and `polymer` — can be used in any combination
-- **Automatic HPO** — Ray Tune with configurable split strategy (cross-validation, holdout, repeated holdout); ASHA early stopping active for holdout-based strategies
-- **Bootstrap ensemble training** — configurable number of train/val/test splits for robust uncertainty estimates
+- **Automatic HPO** — Ray Tune for GNNs with configurable split strategy (cross-validation, holdout, repeated holdout; ASHA early stopping for holdout-based strategies); configurable number of sampled configurations (default 50 for GNNs and traditional ML) and custom search grids — in YAML or the GUI — that override individual parameters of the default grids; results cached per search settings and saved with the experiment
+- **Configurable GNN training** — optimiser (Adam, SGD, RMSprop, Adadelta, Adagrad), learning-rate scheduler (ReduceLROnPlateau, step, multi-step, exponential) and regression loss (RMSE, MSE, MAE), applied identically to final training and HPO
+- **Data splitting with astartes** — train/val/test splits drawn with an [astartes](https://github.com/JacksonBurns/astartes) sampler: random (default), Kennard–Stone, SPXY, k-means, OptiSim or target-property, optionally stratified by class; fingerprint samplers use a ratio-weighted polymer fingerprint (Morgan, RDKit or polyBERT) whose type and settings are chosen for splitting only, and the sampling settings are saved with the experiment
+- **Repeated random splits and ensembles** — configurable number of train/val/test splits (`n_bootstrap_iterations`); predictions on new data are combined across the splits into ensembles per GNN architecture, across all GNNs, and per TML model × representation, reported as mean ± standard deviation (regression) or majority vote with vote fraction (classification), with metrics for each ensemble
+- **Structure validation** — SMILES/PSMILES are validated and canonicalised the same way in the GUI, the CLI and when predicting new data; invalid or missing structures and duplicated sample IDs are reported with examples
 - **Target variable scaling** — six scaling strategies for regression targets (StandardScaler, MinMaxScaler, RobustScaler, Log₁₀, Log(1+y), or none); scaler is fit on the training set only and automatically inverse-transformed before metrics and plots so all results are reported in the original target units
-- **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features
-- **GNN fragment-level explainability** — chemistry-masking attribution (Wellawatte et al., Nat. Commun. 2023): each fragment's importance is measured as the change in prediction when that fragment is masked from the graph pooling step; results are aggregated to functional-group level using BRICS or Murcko scaffold fragmentation; supports global distribution plots (ridge, bar, strip) and per-molecule attribution heatmaps
+- **Polymer descriptor fusion** — user-supplied experimental or computed polymer-level features (e.g. molecular weight, chain length) can be concatenated to vectorial descriptor representations and, for GNN models, fused into the graph embedding after pooling so the FFN receives both learned and given features; for GNNs they are scaled with the pipeline's feature scaler, fitted on the training split
+- **GNN fragment-level explainability** — chemistry-masking attribution (substructure masking; Wu et al., *Nat. Commun.* 14, 2585 (2023), [doi:10.1038/s41467-023-38192-3](https://doi.org/10.1038/s41467-023-38192-3)): each fragment's importance is measured as the change in prediction when that fragment is masked from the graph pooling step; fragments come from BRICS or Murcko-scaffold fragmentation and attributions are aggregated per fragment; supports global distribution plots (ridge, bar, strip) and per-molecule attribution heatmaps
 - **TML SHAP explainability** — SHAP-based attribution for all traditional ML models using auto-selected explainers (`TreeExplainer` for RF/XGBoost, `LinearExplainer` for linear models, `KernelExplainer` for SVM); global summaries and per-instance plots are rendered with the native `shap` package (beeswarm / bar / violin and waterfall / force / bar); SHAP values are cached to CSV and reused across runs
 - **Configurable explanation display** — view local explanations averaged across the model ensemble or as one plot per model × molecule, with selectable attribution normalisation (local / per-model / global / none)
-- **Statistical model comparison** — pairwise McNemar (classification) and Wilcoxon (regression) tests on the Analyse Results page, with multiple-comparison correction (Holm-Bonferroni, Bonferroni, Benjamini-Hochberg)
-- **Graph embedding visualisation** — PCA and t-SNE projections of latent representations
+- **Statistical model comparison** — pairwise McNemar (classification) and Wilcoxon signed-rank tests on absolute errors (regression) on the Analyse Results page; metric-level comparison across repeated splits with Wilcoxon or the Nadeau–Bengio corrected resampled t-test; multiple-comparison correction (Holm-Bonferroni, Bonferroni, Benjamini-Hochberg)
 - **Publication-quality plots** — parity plots, ROC curves, confusion matrices, learning curves, and attribution heatmaps
 - **Single-command pipeline** — YAML config file drives the entire workflow; no code changes between experiments
 - **GUI-independent core** — all pipeline stages are importable from `polynet` without Streamlit
@@ -131,7 +134,10 @@ python scripts/integration_test.py
 
 ### CLI
 
-**1. Edit the config file** to point at your data and choose your models:
+**1. Edit the config file** to point at your data and choose your models. The template
+`configs/experiment.yaml` runs out of the box on the built-in Tg benchmark
+(`benchmark_dataset: "curated_tg"`, downloaded on first use); to use your own data,
+replace it with `data_path`:
 
 ```yaml
 # configs/experiment.yaml

@@ -1,7 +1,8 @@
 """
-polynet.config.search_grids
-============================
-Default hyperparameter search grids for grid-search optimisation.
+polynet.config.search_grid
+===========================
+Default hyperparameter search grids for hyperparameter optimisation (HPO),
+and the merge of user-supplied grids (``hpo_search_grid``) on top of them.
 
 Design notes
 ------------
@@ -12,11 +13,17 @@ Design notes
 * GNN and TML grids are looked up by separate functions to keep the API
   clear and avoid a single overloaded function that accepts both model
   families.
-* These grids represent sensible defaults. Users can override them by
-  supplying a custom grid to the trainer directly.
+* These grids represent sensible defaults. Users can override individual
+  parameters with ``gnn_training.hpo_search_grid`` / ``tml_models.hpo_search_grid``:
+  a supplied parameter *replaces* the default candidates, every other parameter
+  keeps its defaults (see ``merge_search_grid``).
+* Values PolyNet sets itself (``RESERVED_GNN_GRID_KEYS`` /
+  ``RESERVED_TML_GRID_KEYS``) cannot be overridden.
 """
 
 import copy
+import logging
+import math
 
 from polynet.config.enums import (
     ApplyWeightingToGraph,
@@ -27,6 +34,8 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TrainingParam,
 )
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Traditional ML grids (templates — never mutate these directly)
@@ -107,13 +116,93 @@ _GNN_SPECIFIC_GRIDS: dict[Network, dict] = {
 }
 
 
+# Parameters injected by PolyNet that user grids may not override.
+RESERVED_GNN_GRID_KEYS = frozenset({TrainingParam.Seed})
+
+# Default AsymmetricLossStrength candidates searched for classification
+# (``None`` = no class weighting). Regression never uses class weights.
+CLASSIFICATION_LOSS_STRENGTHS = [None, 0.25, 0.5, 0.75, 1.0]
+RESERVED_TML_GRID_KEYS = frozenset({"random_state", "probability"})
+
+# Key of ``gnn_training.hpo_search_grid`` applied to every architecture.
+SHARED_GNN_GRID_KEY = "shared"
+
+
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
 
+def merge_search_grid(default: dict, *overrides: dict | None) -> dict:
+    """
+    Return ``default`` with the parameters of each override replacing its candidates.
+
+    Overrides are applied in order (later ones win). Parameters not present in
+    any override keep their default candidates. Neither input is modified.
+
+    Parameters
+    ----------
+    default:
+        Default grid ``{param: [candidates]}``.
+    *overrides:
+        User grids ``{param: [candidates]}``; ``None`` entries are skipped.
+
+    Returns
+    -------
+    dict
+        The default grid, with each overridden parameter's candidates replaced.
+    """
+    merged = copy.deepcopy(default)
+    for override in overrides:
+        for param, values in (override or {}).items():
+            merged[param] = list(values)
+    return merged
+
+
+def n_grid_combinations(grid: dict) -> int:
+    """Number of distinct configurations in a grid (product of the candidate counts)."""
+    return math.prod(len(v) if isinstance(v, list) else 1 for v in grid.values())
+
+
+def default_gnn_shared_grid(problem_type: ProblemType) -> dict:
+    """
+    Default candidates of the parameters shared by all GNN architectures.
+
+    These are what a ``shared`` entry of ``hpo_search_grid`` can replace
+    (reserved keys such as the seed are left out).
+    """
+    grid = copy.deepcopy(_GNN_SHARED_GRID)
+    if problem_type == ProblemType.Classification:
+        grid[TrainingParam.AsymmetricLossStrength] = list(CLASSIFICATION_LOSS_STRENGTHS)
+    return {k: v for k, v in grid.items() if k not in RESERVED_GNN_GRID_KEYS}
+
+
+def default_gnn_architecture_grid(network: Network) -> dict:
+    """Default candidates of the parameters specific to one GNN architecture (may be empty)."""
+    return copy.deepcopy(_GNN_SPECIFIC_GRIDS[network])
+
+
+def default_tml_grid(model: TraditionalMLModel, problem_type: ProblemType) -> dict:
+    """Default candidates of a TML model's search grid, without the keys PolyNet sets."""
+    grid = get_tml_search_grid(model, problem_type, random_seed=0)
+    return {k: v for k, v in grid.items() if k not in RESERVED_TML_GRID_KEYS}
+
+
+def gnn_grid_parameters(network: Network) -> set[str]:
+    """Parameters a user grid may set for ``network`` (its default grid minus reserved keys)."""
+    return set(get_gnn_search_grid(network, random_seed=0)) - RESERVED_GNN_GRID_KEYS
+
+
+def shared_gnn_grid_parameters() -> set[str]:
+    """Parameters the ``shared`` entry of a user GNN grid may set."""
+    return set(_GNN_SHARED_GRID) - RESERVED_GNN_GRID_KEYS
+
+
 def get_tml_search_grid(
-    model: TraditionalMLModel, problem_type: ProblemType, random_seed: int
+    model: TraditionalMLModel,
+    problem_type: ProblemType,
+    random_seed: int,
+    custom_grid: dict | None = None,
 ) -> dict:
     """
     Return a hyperparameter search grid for a traditional ML model.
@@ -130,17 +219,22 @@ def get_tml_search_grid(
         support both regression and classification (e.g. LinearRegression).
     random_seed:
         Injected into the grid as ``random_state`` where applicable.
+    custom_grid:
+        Optional user grid for this model (``tml_models.hpo_search_grid[model]``).
+        Its parameters replace the default candidates; ``random_state`` /
+        ``probability`` are always set by PolyNet.
 
     Returns
     -------
     dict
-        A hyperparameter grid suitable for use with sklearn's GridSearchCV.
+        A hyperparameter grid, sampled by sklearn's ``RandomizedSearchCV``.
 
     Raises
     ------
     ValueError
         If the model is not recognised.
     """
+    user = custom_grid or {}
     match model:
         case TraditionalMLModel.LinearRegression:
             grid = copy.deepcopy(
@@ -173,11 +267,17 @@ def get_tml_search_grid(
                 f"Available models: {[m.value for m in TraditionalMLModel]}"
             )
 
-    return grid
+    # User candidates replace the defaults; PolyNet-injected values stay authoritative.
+    return merge_search_grid(
+        grid, {k: v for k, v in user.items() if k not in RESERVED_TML_GRID_KEYS}
+    )
 
 
 def get_gnn_search_grid(
-    network: Network, random_seed: int, problem_type: ProblemType | None = None
+    network: Network,
+    random_seed: int,
+    problem_type: ProblemType | None = None,
+    custom_grid: dict | None = None,
 ) -> dict:
     """
     Return a hyperparameter search grid for a GNN architecture.
@@ -191,6 +291,15 @@ def get_gnn_search_grid(
         The GNN architecture to retrieve a grid for.
     random_seed:
         Injected into the grid as ``TrainingParam.Seed``.
+    problem_type:
+        For classification, ``AsymmetricLossStrength`` defaults to
+        ``CLASSIFICATION_LOSS_STRENGTHS``; for regression it is always
+        ``[None]`` (a user value is ignored with a warning).
+    custom_grid:
+        Optional ``gnn_training.hpo_search_grid``. Its ``shared`` entry and the
+        entry for ``network`` replace the default candidates of the parameters
+        they set (the architecture entry wins over ``shared``). The seed is
+        always set by PolyNet.
 
     Returns
     -------
@@ -211,6 +320,101 @@ def get_gnn_search_grid(
     specific = copy.deepcopy(_GNN_SPECIFIC_GRIDS[network])
     shared = copy.deepcopy(_GNN_SHARED_GRID)
     if problem_type == ProblemType.Classification:
-        shared[TrainingParam.AsymmetricLossStrength] = [None, 0.25, 0.5, 0.75, 1.0]
-    grid = {**specific, **shared, TrainingParam.Seed: [random_seed]}
+        shared[TrainingParam.AsymmetricLossStrength] = list(CLASSIFICATION_LOSS_STRENGTHS)
+    grid = {**specific, **shared}
+    user = custom_grid or {}
+    grid = merge_search_grid(
+        grid,
+        *(
+            {k: v for k, v in (user.get(key) or {}).items() if k not in RESERVED_GNN_GRID_KEYS}
+            for key in (SHARED_GNN_GRID_KEY, network.value)
+        ),
+    )
+    if problem_type == ProblemType.Regression and grid[TrainingParam.AsymmetricLossStrength] != [
+        None
+    ]:
+        logger.warning(
+            f"hpo_search_grid sets {TrainingParam.AsymmetricLossStrength.value} for "
+            f"{network.value}, but class weights only apply to classification; ignoring it."
+        )
+        grid[TrainingParam.AsymmetricLossStrength] = [None]
+    grid[TrainingParam.Seed] = [random_seed]
     return grid
+
+
+def effective_search_spaces(problem_type: ProblemType, gnn_cfg=None, tml_cfg=None) -> dict:
+    """
+    Describe the search spaces automatic HPO will use in an experiment.
+
+    For every architecture / model that runs HPO (empty hyperparameter
+    block), returns the grid actually searched — its default candidates, with
+    any parameter set in ``hpo_search_grid`` replacing its defaults — together
+    with the sample count and folds. Seeds
+    (``seed`` / ``random_state``) are left out because they change per split
+    (``random_seed + split - 1``); everything else is exactly what is searched.
+
+    Parameters
+    ----------
+    problem_type:
+        Classification or regression (TML grids depend on it).
+    gnn_cfg:
+        ``TrainGNNConfig`` or ``None`` if GNNs are not trained.
+    tml_cfg:
+        ``TrainTMLConfig`` or ``None`` if TML models are not trained.
+
+    Returns
+    -------
+    dict
+        ``{"gnn": {...}, "tml": {...}}`` with an entry only for pipelines that
+        run HPO; empty if nothing is tuned.
+    """
+    spaces: dict = {}
+
+    if gnn_cfg is not None:
+        architectures = {
+            net.value: {
+                k: v
+                for k, v in get_gnn_search_grid(
+                    net,
+                    random_seed=0,
+                    problem_type=problem_type,
+                    custom_grid=gnn_cfg.hpo_search_grid,
+                ).items()
+                if k != TrainingParam.Seed
+            }
+            for net, params in gnn_cfg.gnn_convolutional_layers.items()
+            if not params
+        }
+        if architectures:
+            spaces["gnn"] = {
+                "hpo_num_samples": gnn_cfg.hpo_num_samples,
+                "hpo_split_strategy": gnn_cfg.hpo_split_strategy.value,
+                "hpo_n_folds": gnn_cfg.hpo_n_folds,
+                "hpo_val_fraction": gnn_cfg.hpo_val_fraction,
+                "hpo_n_repeats": gnn_cfg.hpo_n_repeats,
+                "architectures": architectures,
+            }
+
+    if tml_cfg is not None:
+        models = {}
+        for model, params in (tml_cfg.selected_models or {}).items():
+            if params:
+                continue
+            grid = get_tml_search_grid(
+                model,
+                problem_type,
+                random_seed=0,
+                custom_grid=tml_cfg.hpo_search_grid.get(model.value),
+            )
+            models[model.value] = {
+                "search_grid": {k: v for k, v in grid.items() if k != "random_state"},
+                "n_iter": min(tml_cfg.hpo_num_samples, n_grid_combinations(grid)),
+            }
+        if models:
+            spaces["tml"] = {
+                "hpo_num_samples": tml_cfg.hpo_num_samples,
+                "hpo_n_folds": tml_cfg.hpo_n_folds,
+                "models": models,
+            }
+
+    return spaces

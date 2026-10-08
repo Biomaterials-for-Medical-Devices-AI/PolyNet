@@ -103,11 +103,39 @@ Outputs are written to `{output_dir}/unseen_predictions/{filename}/`:
 ```
 results/my_experiment/unseen_predictions/new_polymers/
 ├── predictions.csv          # Per-model predictions + ensemble columns
-├── metrics.json             # Per-model metrics (only when target column is present)
+├── metrics.json             # Per-model and ensemble metrics (only when target column is present)
 └── representation/
     └── GNN/
         └── raw/             # Raw graph data used by the GNN featuriser
 ```
+
+### Ensemble predictions
+
+An experiment trains one model per repeated random split for every GNN architecture
+and every TML model × representation. When predicting new data, the models trained on
+the different splits are combined into **ensembles**:
+
+| Ensemble | Members |
+|---|---|
+| `{arch} Ensemble` (e.g. `GCN Ensemble`) | One GNN architecture, all splits |
+| `GNN Ensemble` | All GNN architectures, all splits |
+| `{model}-{representation} Ensemble` (e.g. `random forest-rdkit Ensemble`) | One TML model on one representation, all splits |
+
+Columns added to `predictions.csv` for each ensemble:
+
+| Task | Columns | Meaning |
+|---|---|---|
+| Regression | `{name} Ensemble Predicted {target}` | Mean of the member predictions |
+| | `{name} Ensemble Std {target}` | Standard deviation of the member predictions (population, `ddof=0`) — the spread between members, not a calibrated uncertainty |
+| Classification | `{name} Ensemble Predicted {target}` | Majority vote of the members (ties go to the smallest class label) |
+| | `{name} Ensemble Vote Fraction {target}` | Share of members that voted for the ensemble class |
+
+Ensembles need at least two members, i.e. `n_bootstrap_iterations ≥ 2` (with an even
+number of splits, classification ties are possible). When the target column is present,
+`metrics.json` holds the per-split metrics under `"1"`, `"2"`, … and the ensemble
+metrics under `"ensemble"`, keyed by ensemble name. Classification ensembles only have
+hard votes, so probability-based metrics (AUROC) are `null` for them. In the GUI the
+ensembles appear as separate rows of the metrics tables.
 
 The same `predict_external` function is used by both the CLI and the Streamlit app,
 guaranteeing identical results regardless of entry point.
@@ -176,6 +204,7 @@ Everything is written under `experiment.output_dir`:
 results/my_experiment/
 ├── config_used.yaml             # Exact configuration used (for reproducibility)
 ├── split_indices.json           # Train/val/test sample IDs for each iteration
+├── hpo_search_spaces.json       # HPO grids actually searched (only when automatic HPO runs)
 ├── data_options.json            # Saved DataConfig
 ├── representation_options.json  # Saved RepresentationConfig
 ├── general_options.json         # Saved GeneralConfig
@@ -189,6 +218,7 @@ results/my_experiment/
 │   │   ├── rf-Morgan_1.joblib   # TML model (iteration 1)
 │   │   ├── Morgan.pkl           # Feature scaler for Morgan descriptor
 │   │   ├── target_scaler_1.pkl  # GNN target scaler (iteration 1; omitted when no_transformation)
+│   │   ├── polymer_descriptor_scaler_1.pkl  # GNN polymer descriptor scaler (iteration 1; only with polymer_descriptors)
 │   │   └── target_Morgan_1.pkl  # TML target scaler for Morgan, iteration 1
 │   └── plots/
 │       ├── GCN_1_learning_curve.png
@@ -210,6 +240,31 @@ results/my_experiment/
 
 The `predictions.csv` table holds one row per `(sample × bootstrap iteration)`, with a
 `Set` column (train/val/test) and one predicted-value column per trained model.
+
+### GNN learning curves
+
+`plots/{model}_{iteration}_learning_curve.png` shows, for one GNN and one split, the
+training, validation and test loss after every epoch.
+
+- **Model selection uses the validation loss only.** Each GNN is trained for a fixed
+  number of epochs (`training.epochs`; there is no early stopping). After every epoch
+  the validation loss is computed, and at the end the weights from the epoch with the
+  **lowest validation loss** are restored. The default `reduce_lr_on_plateau` scheduler
+  also monitors the validation loss.
+- **The test curve is for monitoring only.** The test loss is computed every epoch so
+  the curves can be inspected, but it is never used for training, for choosing the
+  learning rate or for choosing the final weights.
+- **What the loss values are.** The curves show the training loss
+  (`gnn_training.optimisation.regression_loss`, RMSE by default; cross-entropy for
+  classification). With `target_transform` enabled they are in the *scaled* target
+  units. The training curve is the mean of the per-batch losses during the epoch,
+  computed with dropout active. The validation and test losses are computed **over the
+  whole set** (all predictions first, then the loss once), so with the default RMSE
+  loss they are the RMSE of the set and the best epoch is the one with the lowest
+  validation RMSE; they do not depend on the batch size. With class weights
+  (`AsymmetricLossStrength`) the validation curve is the weighted cross-entropy over
+  the set. (Earlier versions averaged the loss of single samples, so with RMSE the
+  validation/test curves — and the best-epoch choice — were in fact the MAE.)
 
 ## Debugging
 

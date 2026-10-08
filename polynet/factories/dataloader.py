@@ -62,30 +62,243 @@ Public API
 
 from __future__ import annotations
 
+import logging
+import math
 from typing import Generator
+import warnings
 
+from astartes import train_val_test_split
+from astartes.utils.exceptions import InvalidConfigurationError
+from astartes.utils.warnings import ImperfectSplittingWarning, NormalizationWarning
+import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
 from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 
-from polynet.config.enums import SplitMethod, SplitType
+from polynet.config.enums import SplitMethod, SplitSampler, SplitType
+from polynet.config.schemas.split_data import (
+    SAMPLERS_USING_FINGERPRINTS,
+    SAMPLERS_USING_TARGET,
+    stratified_target_sampler_error,
+)
 from polynet.data.preprocessing import class_balancer
+
+logger = logging.getLogger(__name__)
+
+# Samplers that fill the sets by count (floor rounding only), so astartes'
+# size warning only reports rounding to whole samples. Cluster samplers keep
+# clusters whole and can miss the requested sizes; that warning is logged.
+_COUNT_FILLED_SAMPLERS = frozenset(
+    {SplitSampler.Random, SplitSampler.KennardStone, SplitSampler.SPXY, SplitSampler.TargetProperty}
+)
 
 # ---------------------------------------------------------------------------
 # Index computation
 # ---------------------------------------------------------------------------
 
 
-def _raw_split(
-    data: pd.DataFrame, test_size: float, random_state: int, stratify: pd.Series | None = None
-) -> tuple[pd.DataFrame, pd.DataFrame]:
+def _split_fractions(val_ratio: float, test_ratio: float) -> tuple[float, float, float]:
     """
-    Thin wrapper around ``sklearn.train_test_split`` that preserves the
-    original DataFrame index, which is used to track sample identity
-    throughout the pipeline.
+    Train / validation / test fractions that sum to exactly 1.0.
+
+    astartes rescales fractions whose sum is not exactly 1.0, so the training
+    fraction is nudged by a few floating-point steps until ``train + test +
+    val == 1.0``. For some ratio pairs no such value exists; astartes then
+    rescales by 1 ± 1e-16, which does not change the split sizes.
     """
-    return train_test_split(data, test_size=test_size, random_state=random_state, stratify=stratify)
+    train = 1.0 - val_ratio - test_ratio
+    up = down = train
+    for _ in range(4):
+        for candidate in (up, down):
+            if candidate + test_ratio + val_ratio == 1.0:
+                return candidate, val_ratio, test_ratio
+        up, down = math.nextafter(up, 1.0), math.nextafter(down, 0.0)
+    return train, val_ratio, test_ratio
+
+
+def astartes_split(
+    n_samples: int,
+    val_ratio: float,
+    test_ratio: float,
+    random_seed: int,
+    sampler: SplitSampler | str = SplitSampler.Random,
+    features: np.ndarray | None = None,
+    targets: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Train / validation / test split of ``n_samples`` with an astartes sampler.
+
+    Uses ``astartes.train_val_test_split`` with astartes' default sampler
+    hyperparameters.
+
+    - ``random``: a random split (``features`` are not needed). Training and
+      validation sizes are ``floor(n × fraction)``; test takes the rest.
+    - Fingerprint samplers (``kennard_stone``, ``spxy``, ``kmeans``,
+      ``optisim``) place samples by their ``features``; ``spxy`` also uses
+      the ``targets``.
+    - ``target_property`` orders samples by their ``targets``.
+
+    Cluster-based samplers keep each cluster in one set, so the validation
+    and test sets can be smaller than requested; astartes' warning about it
+    is logged.
+
+    Parameters
+    ----------
+    n_samples:
+        Number of samples to split.
+    val_ratio:
+        Fraction of the samples for validation.
+    test_ratio:
+        Fraction of the samples for testing.
+    random_seed:
+        Seed of the sampler (ignored by the deterministic samplers).
+    sampler:
+        The astartes sampler.
+    features:
+        Array of shape ``(n_samples, n_features)``; required by the
+        fingerprint samplers.
+    targets:
+        Target values of the samples; required by ``spxy`` and
+        ``target_property``.
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        Positions (``0 … n_samples − 1``) of the training, validation and
+        test samples.
+
+    Raises
+    ------
+    ValueError
+        If required inputs are missing, or the sampler cannot fill non-empty
+        training, validation and test sets.
+    """
+    sampler = SplitSampler(sampler)
+    if sampler in SAMPLERS_USING_FINGERPRINTS and features is None:
+        raise ValueError(f"The '{sampler.value}' sampler needs fingerprint features.")
+    if sampler in SAMPLERS_USING_TARGET and targets is None:
+        raise ValueError(f"The '{sampler.value}' sampler needs the target values.")
+
+    X = features if sampler in SAMPLERS_USING_FINGERPRINTS else np.arange(n_samples).reshape(-1, 1)
+    y = np.asarray(targets, dtype=float) if sampler in SAMPLERS_USING_TARGET else None
+    train_size, val_size, test_size = _split_fractions(val_ratio, test_ratio)
+    try:
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter("always")
+            *_, train_idx, val_idx, test_idx = train_val_test_split(
+                X,
+                y=y,
+                train_size=train_size,
+                val_size=val_size,
+                test_size=test_size,
+                sampler=sampler.value,
+                random_state=random_seed,
+                hopts={},
+                return_indices=True,
+            )
+    except InvalidConfigurationError as exc:
+        raise ValueError(
+            f"The '{sampler.value}' sampler cannot split {n_samples} samples into training, "
+            f"validation ({val_ratio}) and test ({test_ratio}) sets: {exc}"
+        ) from exc
+
+    for w in caught:
+        # Rounding to whole samples and the 1e-16 rescaling of
+        # _split_fractions are expected; cluster-based sizes are reported.
+        if issubclass(w.category, NormalizationWarning):
+            continue
+        if issubclass(w.category, ImperfectSplittingWarning) and sampler in _COUNT_FILLED_SAMPLERS:
+            continue
+        logger.warning(f"astartes ({sampler.value}): {w.message}")
+
+    sets = [np.asarray(idx, dtype=int) for idx in (train_idx, val_idx, test_idx)]
+    combined = np.concatenate(sets)
+    if len(np.unique(combined)) != len(combined):
+        # Guard against silent sampler failures (e.g. NaN distances make
+        # Kennard–Stone-type samplers repeat one sample).
+        raise ValueError(
+            f"The '{sampler.value}' sampler returned repeated or overlapping samples; the "
+            "split is not valid. Check the sampling fingerprints and targets."
+        )
+    return tuple(sets)
+
+
+def stratified_astartes_split(
+    labels: pd.Series,
+    val_ratio: float,
+    test_ratio: float,
+    random_seed: int,
+    sampler: SplitSampler | str = SplitSampler.Random,
+    features: np.ndarray | None = None,
+    targets: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """
+    Stratified train / validation / test split built from astartes splits.
+
+    The samples of each class are split separately with ``astartes_split``
+    (same sampler, fractions and seed) and the results are merged, so every
+    set keeps the class proportions of ``labels`` up to rounding within each
+    class.
+
+    Parameters
+    ----------
+    labels:
+        Class label of every sample.
+    val_ratio, test_ratio, random_seed, sampler, features, targets:
+        As in ``astartes_split`` (``features`` / ``targets`` for all samples).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray, np.ndarray]
+        Positions of the training, validation and test samples.
+
+    Raises
+    ------
+    ValueError
+        If a class cannot be split into non-empty training, validation and
+        test sets, or with a sampler that uses the target (``spxy``,
+        ``target_property``): within a class the target is constant.
+    """
+    sampler = SplitSampler(sampler)
+    if sampler in SAMPLERS_USING_TARGET:
+        raise ValueError(stratified_target_sampler_error(sampler))
+    values = np.asarray(labels)
+    parts: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+    for label in sorted(pd.unique(values)):
+        class_positions = np.flatnonzero(values == label)
+        try:
+            split = astartes_split(
+                len(class_positions),
+                val_ratio,
+                test_ratio,
+                random_seed,
+                sampler=sampler,
+                features=None if features is None else features[class_positions],
+                targets=None if targets is None else np.asarray(targets)[class_positions],
+            )
+        except ValueError as exc:
+            raise ValueError(
+                f"Stratified split: class {getattr(label, 'item', lambda: label)()} "
+                f"({len(class_positions)} sample(s)) cannot be split into training, validation "
+                f"and test sets: {exc}"
+            ) from exc
+        parts.append(tuple(class_positions[idx] for idx in split))
+    return tuple(np.concatenate([p[k] for p in parts]) for k in range(3))
+
+
+def _balance(
+    data: pd.DataFrame, target: str, train_set_balance: float, random_seed: int, name: str
+) -> pd.DataFrame:
+    """Undersample the majority class of one set (left unchanged if it has a single class)."""
+    if data[target].nunique() < 2:
+        logger.warning(f"The {name} set has a single class; it is not balanced.")
+        return data
+    return class_balancer(
+        data=data,
+        target=target,
+        desired_class_proportion=train_set_balance,
+        random_state=random_seed,
+    )
 
 
 def get_data_split_indices(
@@ -98,6 +311,8 @@ def get_data_split_indices(
     split_method: SplitMethod | str,
     train_set_balance: float,
     random_seed: int,
+    sampler: SplitSampler | str = SplitSampler.Random,
+    sampling_features: np.ndarray | None = None,
 ) -> tuple[list[list[int]], list[list[int]] | None, list[list[int]]]:
     """
     Compute train / val / test index lists for each iteration of a split.
@@ -122,12 +337,20 @@ def get_data_split_indices(
     split_method:
         Whether to split randomly or stratified by the target variable.
     train_set_balance:
-        Fraction of the training set to retain after class balancing.
-        A value of ``1.0`` disables balancing. Only meaningful for
-        classification tasks.
+        Desired proportion of the minority class after undersampling the
+        majority class (e.g. ``0.5`` for 50/50). ``None`` or ``1.0`` disables
+        balancing. Only meaningful for binary classification. The training
+        and validation sets are each balanced after the split, so only the
+        test set keeps the original class distribution (see
+        ``_train_val_test_indices``).
     random_seed:
         Base random seed. Each bootstrap iteration uses ``random_seed + i``
         to ensure reproducibility while varying the split.
+    sampler:
+        astartes sampler (see ``astartes_split``).
+    sampling_features:
+        Fingerprints of the rows of ``data`` (same order), required by the
+        fingerprint samplers.
 
     Returns
     -------
@@ -157,6 +380,8 @@ def get_data_split_indices(
                 split_method=split_method,
                 train_set_balance=train_set_balance,
                 random_seed=random_seed,
+                sampler=SplitSampler(sampler),
+                sampling_features=sampling_features,
             )
 
         case SplitType.LeaveOneOut:
@@ -196,42 +421,56 @@ def _train_val_test_indices(
     split_method: SplitMethod,
     train_set_balance: float | None,
     random_seed: int,
+    sampler: SplitSampler = SplitSampler.Random,
+    sampling_features: np.ndarray | None = None,
 ) -> tuple[list[list[int]], list[list[int]], list[list[int]]]:
-    """Compute indices for TrainValTest with bootstrap repetitions."""
+    """
+    Compute indices for TrainValTest with repeated splits.
+
+    For each iteration (seed ``random_seed + i``):
+
+    1. split the full dataset into training, validation and test sets with
+       the astartes ``sampler`` (per class for ``Stratified``), with
+       ``val_ratio`` and ``test_ratio`` as fractions of the full dataset;
+    2. optionally balance the training and the validation set, each by
+       undersampling its majority class to ``train_set_balance``.
+
+    As a result, training and validation sets are both balanced, while the
+    test set keeps the original class distribution. This follows the
+    protocol of ACS Appl. Mater. Interfaces 2023, 15 (11), 14155–14163, and is intentional.
+    """
 
     train_data_idxs: list[list[int]] = []
     val_data_idxs: list[list[int]] = []
     test_data_idxs: list[list[int]] = []
 
-    use_stratify = split_method == SplitMethod.Stratified
+    balance = train_set_balance is not None and train_set_balance < 1.0
 
     for i in range(n_bootstrap_iterations):
         seed = random_seed + i
 
-        # Step 1: hold out test set
-        train_data, test_data = _raw_split(
-            data=data,
-            test_size=test_ratio,
-            random_state=seed,
-            stratify=data[target_variable_col] if use_stratify else None,
+        sampler_inputs = dict(
+            sampler=sampler,
+            features=sampling_features,
+            targets=data[target_variable_col] if sampler in SAMPLERS_USING_TARGET else None,
         )
-
-        # Step 2: optional class balancing on training data
-        if train_set_balance is not None and train_set_balance < 1.0:
-            train_data = class_balancer(
-                data=train_data,
-                target=target_variable_col,
-                desired_class_proportion=train_set_balance,
-                random_state=seed,
+        if split_method == SplitMethod.Stratified:
+            positions = stratified_astartes_split(
+                data[target_variable_col], val_ratio, test_ratio, seed, **sampler_inputs
             )
+        else:
+            positions = astartes_split(len(data), val_ratio, test_ratio, seed, **sampler_inputs)
+        train_data, val_data, test_data = (data.iloc[p] for p in positions)
 
-        # Step 3: carve validation set out of training data
-        train_data, val_data = _raw_split(
-            data=train_data,
-            test_size=val_ratio,
-            random_state=seed,
-            stratify=train_data[target_variable_col] if use_stratify else None,
-        )
+        # Balance training and validation separately; test keeps the original
+        # class distribution (see the docstring).
+        if balance:
+            train_data = _balance(
+                train_data, target_variable_col, train_set_balance, seed, "training"
+            )
+            val_data = _balance(
+                val_data, target_variable_col, train_set_balance, seed, "validation"
+            )
 
         train_data_idxs.append(train_data.index)
         val_data_idxs.append(val_data.index)

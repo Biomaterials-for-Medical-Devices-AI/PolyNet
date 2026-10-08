@@ -11,8 +11,120 @@ import warnings
 
 from pydantic import Field, model_validator
 
-from polynet.config.enums import HpoSplitStrategy, Network, TraditionalMLModel, TransformDescriptor
-from polynet.config.schemas.base import HyperparamOptimConfig, PolynetBaseModel
+from polynet.config.enums import (
+    HpoSplitStrategy,
+    Network,
+    Optimizer,
+    RegressionLoss,
+    Scheduler,
+    TraditionalMLModel,
+    TrainingParam,
+    TransformDescriptor,
+)
+from polynet.config.schemas.base import (
+    HyperparamOptimConfig,
+    PolynetBaseModel,
+    check_grid_parameters,
+    resolve_hpo_flag,
+)
+from polynet.config.search_grid import (
+    RESERVED_GNN_GRID_KEYS,
+    RESERVED_TML_GRID_KEYS,
+    SHARED_GNN_GRID_KEY,
+    gnn_grid_parameters,
+    shared_gnn_grid_parameters,
+)
+
+# ---------------------------------------------------------------------------
+# GNN optimisation settings
+# ---------------------------------------------------------------------------
+
+
+class GNNOptimisationConfig(PolynetBaseModel):
+    """
+    Optimiser, learning-rate scheduler and loss used to train GNNs.
+
+    Applied identically to final training and to every HPO trial. The
+    defaults reproduce PolyNet's historical behaviour: Adam, ReduceLROnPlateau
+    (factor 0.9, patience 15, min_lr 1e-8) and an RMSE loss for regression.
+
+    Attributes
+    ----------
+    optimizer:
+        Gradient-descent optimiser (``adam``, ``sgd``, ``rmsprop``,
+        ``adadelta``, ``adagrad``). The learning rate comes from the
+        architecture block (``LearningRate``) or from HPO.
+    scheduler:
+        Learning-rate scheduler (``reduce_lr_on_plateau``, ``step_lr``,
+        ``multi_step_lr``, ``exponential_lr``). ``reduce_lr_on_plateau``
+        monitors the validation loss; the others step once per epoch.
+    scheduler_factor:
+        Multiplicative learning-rate decay (``gamma``). Used by every scheduler.
+    scheduler_patience:
+        Epochs without validation improvement before decaying the learning
+        rate. ``reduce_lr_on_plateau`` only.
+    scheduler_min_lr:
+        Lower bound on the learning rate. ``reduce_lr_on_plateau`` only.
+    scheduler_step_size:
+        Decay period in epochs. ``step_lr`` only.
+    scheduler_milestones:
+        Epochs at which to decay the learning rate. ``multi_step_lr`` only.
+    regression_loss:
+        Loss minimised for regression: ``rmse`` (default), ``mse`` or ``mae``.
+        Classification always uses cross-entropy.
+    """
+
+    optimizer: Optimizer = Field(default=Optimizer.Adam, description="GNN optimiser.")
+    scheduler: Scheduler = Field(
+        default=Scheduler.ReduceLROnPlateau, description="Learning-rate scheduler."
+    )
+    scheduler_factor: float = Field(
+        default=0.9, gt=0.0, lt=1.0, description="Learning-rate decay factor (gamma)."
+    )
+    scheduler_patience: int = Field(
+        default=15, ge=0, description="Patience in epochs (reduce_lr_on_plateau)."
+    )
+    scheduler_min_lr: float = Field(
+        default=1e-8, ge=0.0, description="Minimum learning rate (reduce_lr_on_plateau)."
+    )
+    scheduler_step_size: int = Field(default=10, ge=1, description="Decay period (step_lr).")
+    scheduler_milestones: list[int] = Field(
+        default_factory=lambda: [30, 60, 90], description="Decay epochs (multi_step_lr)."
+    )
+    regression_loss: RegressionLoss = Field(
+        default=RegressionLoss.RMSE, description="Loss minimised for regression targets."
+    )
+
+    @model_validator(mode="after")
+    def check_milestones(self) -> "GNNOptimisationConfig":
+        m = self.scheduler_milestones
+        if not m or any(e < 1 for e in m) or m != sorted(set(m)):
+            raise ValueError(
+                f"scheduler_milestones must be a non-empty, strictly increasing list of "
+                f"positive epochs, got {m}."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def warn_on_unused_scheduler_params(self) -> "GNNOptimisationConfig":
+        """Warn when a scheduler parameter is changed but the chosen scheduler ignores it."""
+        used_by = {
+            "scheduler_patience": Scheduler.ReduceLROnPlateau,
+            "scheduler_min_lr": Scheduler.ReduceLROnPlateau,
+            "scheduler_step_size": Scheduler.StepLR,
+            "scheduler_milestones": Scheduler.MultiStepLR,
+        }
+        for field, scheduler in used_by.items():
+            if self.scheduler != scheduler and field in self.model_fields_set:
+                warnings.warn(
+                    f"{field}={getattr(self, field)!r} has no effect with "
+                    f"scheduler='{self.scheduler.value}' (it is only used by "
+                    f"'{scheduler.value}').",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
+
 
 # ---------------------------------------------------------------------------
 # GNN training config
@@ -52,10 +164,15 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         If False, each architecture is configured with its own hyperparameter
         values. This controls hyperparameter sharing across architectures; it
         does not affect per-monomer message passing.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss, applied to
+        final training and to every HPO trial (``GNNOptimisationConfig``).
+        Defaults reproduce Adam + ReduceLROnPlateau + RMSE.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, a grid search
-        is run over the parameter space defined in ``config/search_grids.py``
-        before final training.
+        Inherited from ``HyperparamOptimConfig``. Records whether HPO runs: Ray
+        Tune tunes every architecture whose block is empty, sampling
+        ``hpo_num_samples`` configurations from the search grid
+        (``config/search_grid.py``, customised by ``hpo_search_grid``).
     """
 
     train_gnn: bool = Field(
@@ -73,13 +190,86 @@ class TrainGNNConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=HpoSplitStrategy.CrossValidation,
         description="Split strategy used inside the HPO loop.",
     )
-    hpo_n_folds: int = Field(default=5, ge=2, description="Folds for CrossValidation HPO strategy.")
     hpo_val_fraction: float = Field(
         default=0.2, gt=0.0, lt=1.0, description="Val fraction for Holdout / RepeatedHoldout HPO."
     )
     hpo_n_repeats: int = Field(
         default=3, ge=1, description="Number of random splits for RepeatedHoldout HPO."
     )
+    optimisation: GNNOptimisationConfig = Field(
+        default_factory=GNNOptimisationConfig,
+        description="Optimiser, scheduler and loss (training and HPO).",
+    )
+
+    @model_validator(mode="after")
+    def validate_hpo_search_grid(self) -> "TrainGNNConfig":
+        """
+        Check ``hpo_search_grid``: keys are selected architectures or ``shared``,
+        parameters are in that architecture's default grid, candidates are
+        non-empty lists. Warn when a grid can never be used.
+        """
+        selected = {net.value: net for net in self.gnn_convolutional_layers}
+        for key, params in self.hpo_search_grid.items():
+            where = f"gnn_training.hpo_search_grid.{key}"
+            if key == SHARED_GNN_GRID_KEY:
+                allowed = shared_gnn_grid_parameters()
+            elif key in selected:
+                allowed = gnn_grid_parameters(selected[key])
+            else:
+                raise ValueError(
+                    f"gnn_training.hpo_search_grid has an entry for '{key}', which is not a "
+                    f"selected architecture. Use one of {sorted(selected)} or "
+                    f"'{SHARED_GNN_GRID_KEY}'."
+                )
+            check_grid_parameters(where, params, allowed, RESERVED_GNN_GRID_KEYS)
+            for strength in params.get(TrainingParam.AsymmetricLossStrength, []):
+                if strength is not None and not 0.0 <= strength <= 1.0:
+                    raise ValueError(
+                        f"{where}.{TrainingParam.AsymmetricLossStrength.value} candidates must "
+                        f"be null or between 0 and 1, got {strength!r}."
+                    )
+
+            if key in selected and self.gnn_convolutional_layers[selected[key]]:
+                warnings.warn(
+                    f"{where} has no effect: '{key}' has explicit hyperparameters, so HPO "
+                    "does not run for it. Leave its gnn_convolutional_layers block empty "
+                    "({}) to search it.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        if SHARED_GNN_GRID_KEY in self.hpo_search_grid and all(
+            self.gnn_convolutional_layers.values()
+        ):
+            warnings.warn(
+                f"gnn_training.hpo_search_grid.{SHARED_GNN_GRID_KEY} has no effect: every "
+                "architecture has explicit hyperparameters, so HPO does not run.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return self
+
+    @model_validator(mode="after")
+    def check_architecture_parameters(self) -> "TrainGNNConfig":
+        """Reject unknown parameters in ``gnn_convolutional_layers`` (e.g. typos)."""
+        # Deferred import: the model registry imports torch.
+        from polynet.factories.network import architecture_parameters
+
+        # The seed is set by PolyNet for every split.
+        training_params = {str(p) for p in TrainingParam} - {str(TrainingParam.Seed)}
+        for network, params in self.gnn_convolutional_layers.items():
+            allowed = architecture_parameters(network) | training_params
+            unknown = sorted(str(p) for p in (params or {}) if str(p) not in allowed)
+            if unknown:
+                raise ValueError(
+                    f"gnn_convolutional_layers.{network.value}: unknown parameter(s) "
+                    f"{unknown}. Allowed: {sorted(allowed)}."
+                )
+        return self
+
+    @model_validator(mode="after")
+    def check_hpo_flag(self) -> "TrainGNNConfig":
+        resolve_hpo_flag(self, self.gnn_convolutional_layers, "gnn_training")
+        return self
 
     @model_validator(mode="after")
     def layers_required_when_training(self) -> "TrainGNNConfig":
@@ -202,9 +392,21 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         Feature scaling / transformation applied to descriptor inputs
         before training. Has no effect on raw graph inputs.
     hyperparameter_optimisation:
-        Inherited from ``HyperparamOptimConfig``. When True, a grid search
-        is run over the parameter space defined in ``config/search_grids.py``
-        for each selected model.
+        Inherited from ``HyperparamOptimConfig``. Records whether HPO runs; HPO
+        runs for every model with an empty block. The randomised
+        search (``RandomizedSearchCV``, ``hpo_num_samples`` configurations, ``hpo_n_folds``-fold
+        shuffled CV) is run over the search grid defined in
+        ``config/search_grid.py`` for each selected model.
+    hpo_n_folds:
+        Inherited from ``HyperparamOptimConfig`` (shared with GNN training).
+        Number of cross-validation folds used to score each configuration
+        (default 5, minimum 2).
+    include_validation_in_training:
+        If True (default), TML models are trained — and their feature
+        transformer, target scaler and hyperparameter search fitted — on the
+        training **and** validation samples of each split. If False, they use
+        the training samples only (the data GNNs train on) and the validation
+        samples are predicted and scored as a held-out validation set.
     """
 
     train_tml: bool = Field(
@@ -214,6 +416,52 @@ class TrainTMLConfig(PolynetBaseModel, HyperparamOptimConfig):
         default=None,
         description="Fixed hyperparameters per model. Overrides defaults, not the search grid.",
     )
+
+    include_validation_in_training: bool = Field(
+        default=True,
+        description="Train TML models on training + validation samples (True) or on the "
+        "training samples only, like GNNs (False).",
+    )
+
+    @model_validator(mode="after")
+    def check_hpo_flag(self) -> "TrainTMLConfig":
+        resolve_hpo_flag(self, self.selected_models, "tml_models")
+        return self
+
+    @model_validator(mode="after")
+    def validate_hpo_search_grid(self) -> "TrainTMLConfig":
+        """
+        Check ``hpo_search_grid``: keys are selected models, parameters are
+        constructor parameters of that model's estimator(s), candidates are
+        non-empty lists. Warn when a grid can never be used.
+        """
+        # Deferred import: polynet.training imports this schema module.
+        from polynet.training.tml import _TML_REGISTRY
+
+        selected = {m.value: m for m in (self.selected_models or {})}
+        for key, params in self.hpo_search_grid.items():
+            where = f"tml_models.hpo_search_grid.{key}"
+            if key not in selected:
+                raise ValueError(
+                    f"tml_models.hpo_search_grid has an entry for '{key}', which is not a "
+                    f"selected model. Use one of {sorted(selected)}."
+                )
+            model = selected[key]
+            # Classifier and regressor may differ; accept parameters of either.
+            allowed = set().union(
+                *(cls().get_params() for (m, _), cls in _TML_REGISTRY.items() if m == model)
+            )
+            check_grid_parameters(where, params, allowed, RESERVED_TML_GRID_KEYS)
+
+            if self.selected_models[model]:
+                warnings.warn(
+                    f"{where} has no effect: '{key}' has explicit hyperparameters, so HPO "
+                    "does not run for it. Leave its selected_models block empty ({}) to "
+                    "search it.",
+                    UserWarning,
+                    stacklevel=2,
+                )
+        return self
 
     @model_validator(mode="after")
     def models_required_when_training(self) -> "TrainTMLConfig":

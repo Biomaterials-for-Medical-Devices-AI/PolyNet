@@ -155,34 +155,49 @@ def _build_split_config(cfg: dict) -> SplitConfig:
 
 
 def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
-    """Build TrainGNNConfig from the 'gnn_training' section.
+    """Build TrainGNNConfig from the 'gnn_training' and 'training' sections.
 
-    YAML string keys ``"LearningRate"`` and ``"BatchSize"`` are remapped to
-    ``TrainingParam`` enum members, and architecture names to ``Network`` enum
-    members, before constructing the Pydantic model.
+    YAML string keys ``"LearningRate"``, ``"BatchSize"`` and
+    ``"AsymmetricLossStrength"`` are remapped to ``TrainingParam`` enum members, and architecture names to ``Network`` enum
+    members, before constructing the Pydantic model. The whole section is
+    validated, so unknown keys (e.g. typos) raise an error instead of being
+    ignored.
     """
     from polynet.config.enums import Network, TrainingParam
 
-    gnn_dict = cfg["gnn_training"]
-    raw_layers = gnn_dict.get("gnn_convolutional_layers", {})
-    _KEY_MAP = {"LearningRate": TrainingParam.LearningRate, "BatchSize": TrainingParam.BatchSize}
+    gnn_dict = dict(cfg["gnn_training"])
+    _KEY_MAP = {
+        "LearningRate": TrainingParam.LearningRate,
+        "BatchSize": TrainingParam.BatchSize,
+        "AsymmetricLossStrength": TrainingParam.AsymmetricLossStrength,
+    }
     layers = {}
-    for arch_name, arch_params in raw_layers.items():
+    for arch_name, arch_params in (gnn_dict.get("gnn_convolutional_layers") or {}).items():
         net = Network(arch_name)
         params = dict(arch_params) if arch_params else {}
         layers[net] = {_KEY_MAP.get(k, k): v for k, v in params.items()}
+    gnn_dict["gnn_convolutional_layers"] = layers
 
-    epochs = cfg.get("training", {}).get("epochs", 250)
-    return TrainGNNConfig(
-        train_gnn=gnn_dict.get("train_gnn", True),
-        gnn_convolutional_layers=layers,
-        share_gnn_parameters=gnn_dict.get("share_gnn_parameters", True),
-        epochs=epochs,
-        hpo_split_strategy=gnn_dict.get("hpo_split_strategy", "cross_validation"),
-        hpo_n_folds=gnn_dict.get("hpo_n_folds", 5),
-        hpo_val_fraction=gnn_dict.get("hpo_val_fraction", 0.2),
-        hpo_n_repeats=gnn_dict.get("hpo_n_repeats", 3),
-    )
+    # Same key spelling as the architecture blocks (LearningRate / BatchSize / ...).
+    if "hpo_search_grid" in gnn_dict:
+        gnn_dict["hpo_search_grid"] = {
+            key: {_KEY_MAP.get(p, p): v for p, v in (params or {}).items()}
+            for key, params in (gnn_dict["hpo_search_grid"] or {}).items()
+        }
+    if gnn_dict.get("optimisation") is None:
+        gnn_dict.pop("optimisation", None)
+
+    # Epochs live in the 'training' section (also set by --epochs).
+    training = cfg.get("training") or {}
+    unknown = sorted(set(training) - {"epochs"})
+    if unknown:
+        raise ValueError(f"training: unknown key(s) {unknown}. Allowed: ['epochs'].")
+    if "epochs" in gnn_dict:
+        raise ValueError("Set the number of epochs in 'training.epochs', not in 'gnn_training'.")
+    if "epochs" in training:
+        gnn_dict["epochs"] = training["epochs"]
+
+    return TrainGNNConfig.model_validate(gnn_dict)
 
 
 def _build_tml_config(cfg: dict) -> TrainTMLConfig:
@@ -193,6 +208,48 @@ def _build_tml_config(cfg: dict) -> TrainTMLConfig:
 def _build_preprocessing_config(cfg: dict) -> FeatureTransformConfig:
     """Build FeatureTransformConfig from the 'feature_preprocessing' section."""
     return FeatureTransformConfig.model_validate(cfg["feature_preprocessing"])
+
+
+def _resolve_preprocessing_config(
+    cfg: dict, train_tml: bool, gnn_polymer_descriptors: bool
+) -> FeatureTransformConfig | None:
+    """
+    Build the pipeline-wide feature preprocessing config, if one is given.
+
+    ``feature_preprocessing.scaler`` applies to every tabular feature the
+    pipeline uses: the molecular descriptors of TML models and the
+    ``representations.polymer_descriptors`` concatenated to the GNN graph
+    embedding. ``selectors`` apply to TML models only.
+
+    Parameters
+    ----------
+    cfg:
+        Raw experiment config dict.
+    train_tml:
+        Whether TML models will be trained.
+    gnn_polymer_descriptors:
+        Whether GNNs will be trained with user-supplied polymer descriptors.
+
+    Returns
+    -------
+    FeatureTransformConfig | None
+        The validated config, or ``None`` when the section is absent.
+    """
+    if not cfg.get("feature_preprocessing"):
+        return None
+
+    preprocessing_cfg = _build_preprocessing_config(cfg)
+    if not train_tml and not gnn_polymer_descriptors:
+        logger.warning(
+            "feature_preprocessing has no effect: no TML models are trained and no "
+            "representations.polymer_descriptors are given for the GNNs."
+        )
+    elif not train_tml and preprocessing_cfg.selectors:
+        logger.warning(
+            "feature_preprocessing.selectors apply to TML models only and are ignored for "
+            "the GNN polymer descriptors (only the scaler is applied)."
+        )
+    return preprocessing_cfg
 
 
 def _build_target_config(cfg: dict) -> TargetTransformConfig:
@@ -226,20 +283,23 @@ def _build_tml_explainability_config(cfg: dict):
 
 
 def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
-    """Load and validate the dataset from disk. Script-specific stage."""
-    from polynet.data.loader import load_dataset
+    """Load and validate the dataset (a CSV file or a built-in benchmark). Script-specific stage."""
+    from polynet.data.loader import load_benchmark_dataset, load_dataset
 
     data_cfg = cfg["data"]
-    data_path = resolve_path(data_cfg["data_path"], root)
-
-    df = load_dataset(
-        path=data_path,
+    columns = dict(
         smiles_cols=data_cfg["smiles_cols"],
         target_col=data_cfg["target_variable_col"],
         id_col=data_cfg.get("id_col"),
         problem_type=data_cfg["problem_type"],
     )
-    logger.info(f"  Loaded {len(df)} samples from {data_path}")
+    if data_cfg.get("benchmark_dataset"):
+        source = f"benchmark dataset '{data_cfg['benchmark_dataset']}'"
+        df = load_benchmark_dataset(data_cfg["benchmark_dataset"], **columns)
+    else:
+        source = resolve_path(data_cfg["data_path"], root)
+        df = load_dataset(path=source, **columns)
+    logger.info(f"  Loaded {len(df)} samples from {source}")
     logger.info(f"  Columns: {list(df.columns)}")
     save_options(path=out_dir / "data_options.json", options=data_cfg)
     return df
@@ -313,6 +373,9 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    from polynet.config.paths import hpo_search_spaces_path
+    from polynet.config.search_grid import effective_search_spaces
+    from polynet.data.structures import prepare_structures
     from polynet.pipeline import (
         build_graph_dataset,
         compute_data_splits,
@@ -327,6 +390,7 @@ def main() -> None:
         train_gnn,
         train_tml,
     )
+    from polynet.utils.validation import validate_hpo_folds
 
     args = parse_args()
     root = Path(args.root).resolve()
@@ -367,6 +431,14 @@ def main() -> None:
     # ------------------------------------------------------------------
     t0 = announce("1. Load & validate data")
     df = _load_data(cfg, root, out_dir)
+    # Same structure preparation as the GUI: detect → validate → canonicalise.
+    # Invalid or missing structures stop the run.
+    df, _ = prepare_structures(
+        df,
+        smiles_cols=data_cfg.smiles_cols,
+        representation=data_cfg.string_representation,
+        canonicalise=data_cfg.canonicalise_smiles,
+    )
     df.to_csv(out_dir / cfg["data"]["data_name"])
     done(t0)
 
@@ -430,11 +502,48 @@ def main() -> None:
     # ------------------------------------------------------------------
     t0 = announce("4. Compute data splits")
     train_idxs, val_idxs, test_idxs = compute_data_splits(
-        data=df, data_cfg=data_cfg, split_cfg=split_cfg, random_seed=random_seed, out_dir=out_dir
+        data=df,
+        data_cfg=data_cfg,
+        split_cfg=split_cfg,
+        random_seed=random_seed,
+        out_dir=out_dir,
+        weights_col=repr_cfg.weights_col,
     )
     split_indexes = (train_idxs, val_idxs, test_idxs)
     save_options(out_dir / "split_options.json", split_cfg)
     done(t0)
+
+    # Pipeline-wide feature preprocessing: TML descriptors and GNN polymer descriptors.
+    preprocessing_cfg = _resolve_preprocessing_config(
+        cfg,
+        train_tml=tml_enabled and desc_dfs is not None,
+        gnn_polymer_descriptors=(
+            gnn_enabled and dataset is not None and bool(repr_cfg.polymer_descriptors)
+        ),
+    )
+    if preprocessing_cfg is not None:
+        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
+
+    # Config errors must stop the run before any (possibly long) training starts.
+    hpo_tml_cfg = _build_tml_config(cfg) if tml_enabled and desc_dfs is not None else None
+    hpo_gnn_cfg = _build_gnn_config(cfg) if gnn_enabled and dataset is not None else None
+    validate_hpo_folds(
+        data=df,
+        data_cfg=data_cfg,
+        split_indexes=split_indexes,
+        tml_cfg=hpo_tml_cfg,
+        gnn_cfg=hpo_gnn_cfg,
+    )
+    # Provenance: the HPO grids actually searched (default candidates, with any
+    # parameter set in hpo_search_grid replacing its defaults).
+    search_spaces = effective_search_spaces(
+        data_cfg.problem_type, gnn_cfg=hpo_gnn_cfg, tml_cfg=hpo_tml_cfg
+    )
+    spaces_file = hpo_search_spaces_path(out_dir)
+    if search_spaces:
+        save_options(spaces_file, search_spaces)
+    elif spaces_file.exists():
+        spaces_file.unlink()  # stale from an earlier run in the same directory
 
     all_predictions = []
     all_trained_models = {}
@@ -451,7 +560,14 @@ def main() -> None:
         save_options(out_dir / "train_gnn_options.json", gnn_cfg)
         try:
             gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
-                dataset, split_indexes, data_cfg, gnn_cfg, random_seed, out_dir, target_cfg
+                dataset,
+                split_indexes,
+                data_cfg,
+                gnn_cfg,
+                random_seed,
+                out_dir,
+                target_cfg,
+                preprocessing_cfg=preprocessing_cfg,
             )
             done(t0)
 
@@ -473,10 +589,10 @@ def main() -> None:
     if tml_enabled and desc_dfs is not None:
         t0 = announce("7. Train TML ensemble")
         tml_cfg = _build_tml_config(cfg)
-        preprocessing_cfg = _build_preprocessing_config(cfg)
+        if preprocessing_cfg is None:
+            preprocessing_cfg = _build_preprocessing_config(cfg)  # required for TML
         target_cfg = _build_target_config(cfg)
         save_options(out_dir / "train_tml_options.json", tml_cfg)
-        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
         try:
             tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
                 desc_dfs,
@@ -572,7 +688,13 @@ def main() -> None:
         try:
             tml_explain_cfg = _build_tml_explainability_config(cfg)
             run_tml_explainability(
-                tml_trained, desc_dfs, split_indexes, data_cfg, tml_explain_cfg, out_dir
+                tml_trained,
+                desc_dfs,
+                split_indexes,
+                data_cfg,
+                tml_explain_cfg,
+                out_dir,
+                validation_in_training=_build_tml_config(cfg).include_validation_in_training,
             )
             done(t0)
         except Exception as e:

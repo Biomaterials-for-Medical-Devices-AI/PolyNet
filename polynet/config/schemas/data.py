@@ -6,7 +6,7 @@ Pydantic schema for dataset loading and target variable configuration.
 
 from pydantic import Field, field_validator, model_validator
 
-from polynet.config.enums import ProblemType, StringRepresentation
+from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
 from polynet.config.schemas.base import PolynetBaseModel
 
 
@@ -20,7 +20,13 @@ class DataConfig(PolynetBaseModel):
         A short human-readable name for the dataset. Used in plot titles
         and result filenames.
     data_path:
-        Path to the CSV (or compatible) file containing the dataset.
+        Path to the CSV (or compatible) file containing the dataset. Give
+        either ``data_path`` or ``benchmark_dataset``.
+    benchmark_dataset:
+        A built-in benchmark dataset to load instead of a file (e.g.
+        ``curated_tg``, the curated glass-transition-temperature dataset,
+        downloaded once and cached). Give either ``data_path`` or
+        ``benchmark_dataset``.
     smiles_cols:
         One or more column names that contain SMILES strings. Multiple
         columns are used when modelling polymer blends or co-polymers.
@@ -51,7 +57,10 @@ class DataConfig(PolynetBaseModel):
     """
 
     data_name: str = Field(..., description="Short human-readable dataset name.")
-    data_path: str = Field(..., description="Path to the dataset file.")
+    data_path: str | None = Field(default=None, description="Path to the dataset file.")
+    benchmark_dataset: DatasetName | None = Field(
+        default=None, description="Built-in benchmark dataset to load instead of a file."
+    )
     smiles_cols: list[str] = Field(
         ..., min_length=1, description="Column(s) containing SMILES strings."
     )
@@ -108,4 +117,13 @@ class DataConfig(PolynetBaseModel):
                     f"class_names has {len(self.class_names)} entries but "
                     f"num_classes is {self.num_classes}. They must match."
                 )
+        return self
+
+    @model_validator(mode="after")
+    def one_data_source(self) -> "DataConfig":
+        if (self.data_path is None) == (self.benchmark_dataset is None):
+            raise ValueError(
+                "Give exactly one data source: data_path (a CSV file) or benchmark_dataset "
+                f"(one of {[d.value for d in DatasetName]})."
+            )
         return self

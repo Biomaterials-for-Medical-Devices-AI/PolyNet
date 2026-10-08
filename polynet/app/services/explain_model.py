@@ -114,8 +114,13 @@ def explain_model_global(
     top_n: int | None = None,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     cache_root: Path | None = None,
+    mols_per_model: dict[str, set[str]] | None = None,
 ) -> None:
-    """Compute and render the population-level fragment attribution plot."""
+    """Compute and render the population-level fragment attribution plot.
+
+    ``mols_per_model`` restricts each model to its own molecules (e.g. the
+    test set of its split); ``None`` explains every molecule with every model.
+    """
     result: GlobalAttributionResult = compute_global_attribution(
         models=models,
         experiment_path=experiment_path,
@@ -130,6 +135,7 @@ def explain_model_global(
         top_n=top_n,
         plot_type=plot_type,
         cache_root=cache_root,
+        mols_per_model=mols_per_model,
     )
 
     st.info(

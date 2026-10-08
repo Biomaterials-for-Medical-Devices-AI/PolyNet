@@ -341,6 +341,16 @@ def model_metrics_file_path(experiment_path: Path) -> Path:
     return ml_results_parent_directory(experiment_path) / "metrics.json"
 
 
+def hpo_search_spaces_path(experiment_path: Path) -> Path:
+    """Return the path to ``hpo_search_spaces.json`` (HPO grids actually searched)."""
+    return experiment_path / "hpo_search_spaces.json"
+
+
+def split_indices_path(experiment_path: Path) -> Path:
+    """Return the path to ``split_indices.json`` (train/val/test sample IDs per split)."""
+    return experiment_path / "split_indices.json"
+
+
 def explanation_parent_directory(experiment_path: Path) -> Path:
     """Return the path to the explanations directory in the experiment.
 

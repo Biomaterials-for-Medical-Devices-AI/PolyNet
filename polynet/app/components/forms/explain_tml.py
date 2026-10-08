@@ -29,6 +29,11 @@ from polynet.config.enums import (
     ShapGlobalPlotType,
 )
 from polynet.config.schemas import DataConfig
+from polynet.explainability.selection import (
+    TML_VALIDATION_IS_TRAINING_WARNING,
+    samples_per_model_from_predictions,
+    tml_explain_set_includes_validation,
+)
 
 # ---------------------------------------------------------------------------
 # Shared parameters
@@ -157,6 +162,7 @@ def _tml_global_tab(
     preds: pd.DataFrame,
     data_options: DataConfig,
     cache_root: Path | None = None,
+    validation_in_training: bool = True,
 ) -> None:
     st.markdown(
         "**Which molecular features drive predictions across the population?**  \n"
@@ -165,11 +171,29 @@ def _tml_global_tab(
         "ensemble models, giving one attribution per sample per feature."
     )
 
+    # Offer the chosen set of the selected splits only; each model then
+    # explains only its own split's samples.
+    iterator_cols = [c for c in preds.columns if c in {it.value for it in IteratorType}]
+    iterator_col = iterator_cols[0] if iterator_cols else None
+    selected_iterations = shared.get("selected_iterations")
+    preds_selected = preds
+    if iterator_col and selected_iterations:
+        preds_selected = preds[preds[iterator_col].isin(selected_iterations)]
+
     explain_samples = explain_mols_widget(
-        data=preds,
+        data=preds_selected,
         SetStateKey=TMLExplainStateKeys.GlobalTMLExplainSet,
         ManuallySelectStateKey=TMLExplainStateKeys.GlobalTMLManualSelector,
         MolsStateKey=TMLExplainStateKeys.GlobalTMLIDSelector,
+    )
+    explain_set = st.session_state.get(TMLExplainStateKeys.GlobalTMLExplainSet)
+    if validation_in_training and tml_explain_set_includes_validation(explain_set):
+        st.warning(TML_VALIDATION_IS_TRAINING_WARNING)
+    per_model_samples = samples_per_model_from_predictions(
+        predictions=preds_selected,
+        model_keys=models.keys(),
+        iterator_col=iterator_col,
+        set_name=explain_set,
     )
 
     cols = st.columns(2)
@@ -217,6 +241,7 @@ def _tml_global_tab(
             plot_type=plot_type,
             cache_root=cache_root,
             target_col=data_options.target_variable_col,
+            samples_per_model=per_model_samples,
         )
 
 
@@ -435,6 +460,7 @@ def explain_tml_form(
     data_options: DataConfig,
     preds: pd.DataFrame,
     cache_root: Path | None = None,
+    validation_in_training: bool = True,
 ) -> None:
     """
     Render the full TML SHAP explainability form with shared params + two tabs.
@@ -449,6 +475,10 @@ def explain_tml_form(
         Descriptor DataFrames keyed by descriptor name (e.g. ``"morgan"``).
     data_options:
         Data configuration (problem type, class names, etc.).
+    validation_in_training:
+        ``tml_models.include_validation_in_training`` of the experiment; when
+        True, explaining the validation set shows a warning (it is training
+        data for TML).
     preds:
         Predictions DataFrame with ``SET`` column and sample IDs as index.
     """
@@ -491,6 +521,7 @@ def explain_tml_form(
             preds=preds,
             data_options=data_options,
             cache_root=cache_root,
+            validation_in_training=validation_in_training,
         )
 
     with local_tab:

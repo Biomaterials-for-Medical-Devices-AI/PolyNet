@@ -34,16 +34,18 @@ from torch_geometric.loader import DataLoader
 from polynet.config.enums import (
     HpoSplitStrategy,
     Network,
-    Optimizer,
     ProblemType,
-    Scheduler,
     TargetTransformDescriptor,
     TrainingParam,
+    TransformDescriptor,
 )
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
+from polynet.config.schemas.training import GNNOptimisationConfig
+from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
 from polynet.factories.loss import create_loss
 from polynet.factories.network import create_network
-from polynet.factories.optimizer import create_optimizer, create_scheduler
+from polynet.factories.optimizer import create_optimizer, create_scheduler, step_scheduler
 from polynet.training.metrics import compute_class_weights
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,142 @@ def _scale_dataset_targets(dataset: list, scaler: "TargetScaler") -> list:
     return scaled
 
 
+def fit_polymer_descriptor_scaler(
+    train_set: list, scaler: TransformDescriptor | str
+) -> FeatureTransformer | None:
+    """
+    Fit the tabular feature scaler on the polymer descriptors of ``train_set``.
+
+    Uses the same ``FeatureTransformer`` as the traditional-ML pipeline, with
+    the same scaling strategy but without feature selection: the GNN readout
+    has a fixed input width, and polymer descriptors are chosen explicitly by
+    the user.
+
+    Parameters
+    ----------
+    train_set:
+        Training graphs only — the scaler must never see validation or
+        test descriptors.
+    scaler:
+        Scaling strategy (``feature_preprocessing.scaler``).
+
+    Returns
+    -------
+    FeatureTransformer | None
+        The fitted transformer, or ``None`` when the graphs carry no polymer
+        descriptors or ``scaler`` is ``no_transformation``.
+
+    Raises
+    ------
+    ValueError
+        If a polymer descriptor contains NaN or ±inf in the training set
+        (the transformer would drop the column and change the model input
+        width).
+    """
+    if TransformDescriptor(scaler) == TransformDescriptor.NoTransformation:
+        return None
+    if not train_set or getattr(train_set[0], "polymer_descriptors", None) is None:
+        return None
+
+    X = torch.cat([d.polymer_descriptors for d in train_set], dim=0).cpu().numpy()
+    transformer = FeatureTransformer(scaler=TransformDescriptor(scaler), selectors={}).fit(X)
+    if len(transformer.feature_names_in_) != X.shape[1]:
+        raise ValueError(
+            "Polymer descriptors contain NaN or infinite values in the training set. "
+            "Clean or impute these columns before training a GNN."
+        )
+    return transformer
+
+
+def build_optimisation(
+    model: Module,
+    lr: float,
+    problem_type: ProblemType,
+    optimisation: GNNOptimisationConfig | None = None,
+    class_weights: torch.Tensor | None = None,
+) -> tuple:
+    """
+    Build the optimiser, learning-rate scheduler and loss for one GNN.
+
+    Shared by final training and every HPO trial so both use exactly the
+    same settings.
+
+    Parameters
+    ----------
+    model:
+        The GNN whose parameters are optimised.
+    lr:
+        Initial learning rate.
+    problem_type:
+        Classification or regression.
+    optimisation:
+        Optimiser, scheduler and loss settings. ``None`` uses the defaults
+        (Adam, ReduceLROnPlateau, RMSE).
+    class_weights:
+        Optional cross-entropy class weights (classification only).
+
+    Returns
+    -------
+    tuple
+        ``(optimizer, scheduler, loss_fn)``.
+    """
+    opt = optimisation or GNNOptimisationConfig()
+    optimizer = create_optimizer(opt.optimizer, model, lr=lr)
+    scheduler = create_scheduler(
+        opt.scheduler,
+        optimizer,
+        gamma=opt.scheduler_factor,
+        patience=opt.scheduler_patience,
+        min_lr=opt.scheduler_min_lr,
+        step_size=opt.scheduler_step_size,
+        milestones=list(opt.scheduler_milestones),
+    )
+    loss_fn = create_loss(
+        problem_type, class_weights=class_weights, regression_loss=opt.regression_loss
+    )
+    return optimizer, scheduler, loss_fn
+
+
+def class_weights_for(
+    graphs: list, num_classes: int, problem_type: ProblemType, loss_strength: float | None
+) -> torch.Tensor | None:
+    """
+    Cross-entropy class weights for ``AsymmetricLossStrength`` (or ``None``).
+
+    Used by final training and by every HPO trial, always computed from the
+    training graphs of that model.
+
+    Parameters
+    ----------
+    graphs:
+        Training graphs (their ``y`` holds the class label).
+    num_classes:
+        Number of classes.
+    problem_type:
+        Classification or regression; regression never uses class weights.
+    loss_strength:
+        ``AsymmetricLossStrength`` in [0, 1], or ``None`` for no weighting.
+
+    Returns
+    -------
+    torch.Tensor or None
+        Weights of shape ``(num_classes,)``, or ``None``.
+    """
+    if problem_type != ProblemType.Classification or loss_strength is None:
+        return None
+    return compute_class_weights(
+        labels=[int(g.y.item()) for g in graphs],
+        num_classes=int(num_classes),
+        imbalance_strength=loss_strength,
+    )
+
+
+def n_polymer_descriptors_of(graph) -> int:
+    """Number of polymer descriptors stored on a graph (0 if none)."""
+    poly_desc = getattr(graph, "polymer_descriptors", None)
+    return poly_desc.shape[1] if poly_desc is not None else 0
+
+
 # ---------------------------------------------------------------------------
 # Ensemble training
 # ---------------------------------------------------------------------------
@@ -104,6 +242,10 @@ def train_gnn_ensemble(
     hpo_n_folds: int = 5,
     hpo_val_fraction: float = 0.2,
     hpo_n_repeats: int = 3,
+    polymer_descriptor_scaler: TransformDescriptor | str = TransformDescriptor.StandardScaler,
+    optimisation: GNNOptimisationConfig | None = None,
+    hpo_num_samples: int = DEFAULT_HPO_NUM_SAMPLES,
+    hpo_search_grid: dict | None = None,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble across all bootstrap iterations and architectures.
@@ -147,6 +289,22 @@ def train_gnn_ensemble(
         Validation fraction for ``Holdout`` / ``RepeatedHoldout``.
     hpo_n_repeats:
         Number of independent splits for ``RepeatedHoldout``.
+    polymer_descriptor_scaler:
+        Scaling strategy for user-supplied polymer descriptors — the same
+        ``TransformDescriptor`` used for tabular features. A
+        ``FeatureTransformer`` is fitted on the training graphs of each
+        iteration and attached to every model trained in that iteration
+        (see ``BaseNetwork.set_polymer_descriptor_scaler``). Ignored when the
+        graphs carry no polymer descriptors.
+    optimisation:
+        Optimiser, learning-rate scheduler and regression loss, used for the
+        final models and for every HPO trial. ``None`` uses the defaults
+        (Adam, ReduceLROnPlateau, RMSE).
+    hpo_num_samples:
+        Number of configurations Ray Tune samples per HPO run.
+    hpo_search_grid:
+        User search-grid candidates (``gnn_training.hpo_search_grid``); each
+        parameter they set replaces the default candidates.
 
     Returns
     -------
@@ -213,6 +371,9 @@ def train_gnn_ensemble(
             test_set_fit = test_set
         target_scalers[str(iteration)] = target_scaler
 
+        # Fit the polymer descriptor scaler on training graphs only.
+        descriptor_scaler = fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
+
         for gnn_arch, arch_params in gnn_conv_params.items():
             arch_params = arch_params or {}
             is_hpo = not arch_params
@@ -228,7 +389,7 @@ def train_gnn_ensemble(
                     gnn_arch=gnn_arch,
                     dataset=train_set + val_set,
                     num_classes=int(num_classes),
-                    num_samples=150,
+                    num_samples=hpo_num_samples,
                     iteration=iteration,
                     problem_type=problem_type,
                     random_seed=seed,
@@ -236,6 +397,10 @@ def train_gnn_ensemble(
                     n_folds=hpo_n_folds,
                     val_fraction=hpo_val_fraction,
                     n_repeats=hpo_n_repeats,
+                    polymer_descriptor_scaler=polymer_descriptor_scaler,
+                    optimisation=optimisation,
+                    custom_grid=hpo_search_grid,
+                    epochs=epochs,
                 )
                 del arch_params["seed"]
                 logger.info(f"HPO complete. Best params: {arch_params}")
@@ -254,19 +419,17 @@ def train_gnn_ensemble(
                 lr = arch_lr[gnn_arch]
                 batch_size = arch_batch_size[gnn_arch]
 
-            _poly_desc = getattr(dataset[0], "polymer_descriptors", None)
-            n_polymer_descriptors = _poly_desc.shape[1] if _poly_desc is not None else 0
-
             model = create_network(
                 network=gnn_arch,
                 problem_type=problem_type,
                 n_node_features=dataset[0].num_node_features,
                 n_edge_features=dataset[0].num_edge_features,
                 n_classes=int(num_classes),
-                n_polymer_descriptors=n_polymer_descriptors,
+                n_polymer_descriptors=n_polymer_descriptors_of(dataset[0]),
                 seed=seed,
                 **arch_params,
             ).to(device)
+            model.set_polymer_descriptor_scaler(descriptor_scaler)
 
             train_loader = DataLoader(
                 train_set_fit,
@@ -277,20 +440,16 @@ def train_gnn_ensemble(
             val_loader = DataLoader(val_set_fit, shuffle=False)
             test_loader = DataLoader(test_set_fit, shuffle=False)
 
-            class_weights = None
-            if problem_type == ProblemType.Classification and loss_strength is not None:
-                all_labels = [data.y.item() for data in train_set]
-                class_weights = compute_class_weights(
-                    labels=all_labels,
-                    num_classes=int(num_classes),
-                    imbalance_strength=loss_strength,
-                )
+            class_weights = class_weights_for(train_set, num_classes, problem_type, loss_strength)
 
-            optimizer = create_optimizer(Optimizer.Adam, model, lr=lr)
-            scheduler = create_scheduler(
-                Scheduler.ReduceLROnPlateau, optimizer, patience=15, gamma=0.9, min_lr=1e-8
+            optimizer, scheduler, loss_fn = build_optimisation(
+                model=model,
+                lr=lr,
+                problem_type=problem_type,
+                optimisation=optimisation,
+                class_weights=class_weights,
             )
-            loss_fn = create_loss(problem_type, class_weights=class_weights).to(device)
+            loss_fn = loss_fn.to(device)
 
             model = train_model(
                 model=model,
@@ -342,7 +501,8 @@ def train_model(
     optimizer:
         Instantiated optimizer bound to ``model.parameters()``.
     scheduler:
-        Learning rate scheduler. Expected to accept ``scheduler.step(val_loss)``.
+        Learning rate scheduler; advanced once per epoch with
+        ``step_scheduler`` (only ``ReduceLROnPlateau`` sees the validation loss).
     device:
         ``"cuda"`` or ``"cpu"``.
     epochs:
@@ -366,7 +526,7 @@ def train_model(
             best_val_loss = val_loss
             best_state = deepcopy(model.state_dict())
 
-        scheduler.step(val_loss)
+        step_scheduler(scheduler, val_loss)
 
         logger.info(
             f"Epoch {epoch:03d} | "
@@ -444,7 +604,13 @@ def eval_network(
     model: Module, loader: DataLoader, loss_fn: Module, device: str | torch.device
 ) -> float:
     """
-    Evaluate a model on a DataLoader and return the mean loss.
+    Evaluate a model on a DataLoader and return its loss over the whole set.
+
+    Predictions for every sample are collected first and the loss is computed
+    once over all of them, so the value does not depend on the batch size:
+    RMSE is the RMSE of the set (not a mean of per-batch RMSEs, which with a
+    batch size of 1 would be the MAE), and MSE, MAE and cross-entropy are the
+    usual set means.
 
     Parameters
     ----------
@@ -460,33 +626,63 @@ def eval_network(
     Returns
     -------
     float
-        Mean loss per sample.
+        Loss over the whole set.
+    """
+    return evaluate_losses(model, loader, [loss_fn], device)[0]
+
+
+def evaluate_losses(
+    model: Module, loader: DataLoader, loss_fns: list[Module], device: str | torch.device
+) -> list[float]:
+    """
+    Losses of one model over a whole set, for several loss functions.
+
+    The model is run once; each loss is computed over all predictions (see
+    ``eval_network``).
+
+    Parameters
+    ----------
+    model:
+        GNN model.
+    loader:
+        DataLoader for the evaluation set.
+    loss_fns:
+        Loss functions to compute.
+    device:
+        Target device.
+
+    Returns
+    -------
+    list[float]
+        One loss per entry of ``loss_fns``.
     """
     model.eval()
-    total_loss = 0.0
+    outputs, targets = [], []
 
     with torch.no_grad():
         for batch in loader:
             batch = batch.to(device)
-            out = model(
-                x=batch.x,
-                edge_index=batch.edge_index,
-                batch_index=batch.batch,
-                edge_attr=batch.edge_attr,
-                monomer_weight=getattr(batch, "weight_monomer", None),
-                monomer_id=getattr(batch, "monomer_id", None),
-                polymer_descriptors=getattr(batch, "polymer_descriptors", None),
+            outputs.append(
+                model(
+                    x=batch.x,
+                    edge_index=batch.edge_index,
+                    batch_index=batch.batch,
+                    edge_attr=batch.edge_attr,
+                    monomer_weight=getattr(batch, "weight_monomer", None),
+                    monomer_id=getattr(batch, "monomer_id", None),
+                    polymer_descriptors=getattr(batch, "polymer_descriptors", None),
+                )
             )
-            loss = _compute_loss(out, batch.y, loss_fn, model.problem_type)
-            total_loss += loss.item() * batch.num_graphs
+            targets.append(batch.y)
 
-    return total_loss / len(loader.dataset)
+        out, y = torch.cat(outputs), torch.cat(targets)
+        return [_compute_loss(out, y, loss_fn, model.problem_type).item() for loss_fn in loss_fns]
 
 
 def _compute_loss(
     out: torch.Tensor, y: torch.Tensor, loss_fn: Module, problem_type: ProblemType
 ) -> torch.Tensor:
-    """Compute the appropriate loss based on problem type."""
+    """Compute the loss for a batch (the loss module defines RMSE / MSE / MAE / CE)."""
     if problem_type == ProblemType.Regression:
-        return torch.sqrt(loss_fn(out.squeeze(1), y.float()))
+        return loss_fn(out.squeeze(1), y.float())
     return loss_fn(out, y.long())

@@ -24,11 +24,24 @@ from __future__ import annotations
 import torch
 import torch.nn as nn
 
-from polynet.config.enums import ProblemType
+from polynet.config.enums import ProblemType, RegressionLoss
+
+
+class RMSELoss(nn.Module):
+    """Root mean squared error: ``sqrt(mean((y_pred - y_true) ** 2))`` over the batch."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.mse = nn.MSELoss()
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+        return torch.sqrt(self.mse(y_pred, y_true))
 
 
 def create_loss(
-    problem_type: ProblemType | str, class_weights: torch.Tensor | None = None
+    problem_type: ProblemType | str,
+    class_weights: torch.Tensor | None = None,
+    regression_loss: RegressionLoss | str = RegressionLoss.RMSE,
 ) -> nn.Module:
     """
     Construct and return a PyTorch loss function for the given task type.
@@ -47,13 +60,17 @@ def create_loss(
         before passing here.
 
         Ignored for regression tasks.
+    regression_loss:
+        Loss for regression tasks: ``rmse`` (default, ``RMSELoss``), ``mse``
+        (``nn.MSELoss``) or ``mae`` (``nn.L1Loss``). Ignored for
+        classification.
 
     Returns
     -------
     nn.Module
         An instantiated loss function:
         - Classification → ``nn.CrossEntropyLoss``
-        - Regression → ``nn.MSELoss``
+        - Regression → ``RMSELoss`` / ``nn.MSELoss`` / ``nn.L1Loss``
 
     Raises
     ------
@@ -69,15 +86,17 @@ def create_loss(
     """
     problem_type = ProblemType(problem_type) if isinstance(problem_type, str) else problem_type
 
-    _LOSS_REGISTRY: dict[ProblemType, nn.Module] = {
-        ProblemType.Classification: nn.CrossEntropyLoss(weight=class_weights),
-        ProblemType.Regression: nn.MSELoss(),
-    }
+    if problem_type == ProblemType.Classification:
+        return nn.CrossEntropyLoss(weight=class_weights)
+    if problem_type == ProblemType.Regression:
+        _REGRESSION_LOSSES = {
+            RegressionLoss.RMSE: RMSELoss,
+            RegressionLoss.MSE: nn.MSELoss,
+            RegressionLoss.MAE: nn.L1Loss,
+        }
+        return _REGRESSION_LOSSES[RegressionLoss(regression_loss)]()
 
-    if problem_type not in _LOSS_REGISTRY:
-        raise ValueError(
-            f"Problem type '{problem_type.value}' is not supported. "
-            f"Available: {[p.value for p in _LOSS_REGISTRY]}."
-        )
-
-    return _LOSS_REGISTRY[problem_type]
+    raise ValueError(
+        f"Problem type '{problem_type.value}' is not supported. "
+        f"Available: {[p.value for p in ProblemType]}."
+    )

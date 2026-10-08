@@ -29,7 +29,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from polynet.config.enums import ProblemType, TargetTransformDescriptor
+from polynet.config.enums import ProblemType, TargetTransformDescriptor, TransformDescriptor
+from polynet.config.paths import split_indices_path
 from polynet.config.schemas import (
     DataConfig,
     ExplainabilityConfig,
@@ -198,6 +199,7 @@ def compute_data_splits(
     split_cfg: SplitConfig,
     random_seed: int,
     out_dir: Path | None = None,
+    weights_col: dict[str, str] | None = None,
 ) -> tuple[list, list, list]:
     """
     Compute train/val/test split indices and optionally persist them to disk.
@@ -213,7 +215,11 @@ def compute_data_splits(
     random_seed:
         Global random seed for reproducibility.
     out_dir:
-        If provided, writes ``split_indices.json`` to this directory.
+        If provided, writes ``split_indices.json`` to this directory, with a
+        ``sampling`` record of the sampler and sampling fingerprint.
+    weights_col:
+        Ratio columns used to weight the monomer fingerprints of the
+        fingerprint samplers (``representations.weights_col``).
 
     Returns
     -------
@@ -221,6 +227,7 @@ def compute_data_splits(
         ``(train_idxs, val_idxs, test_idxs)`` — each a list of length
         ``n_bootstrap_iterations``.
     """
+    from polynet.data.sampling import sampling_features, sampling_metadata
     from polynet.factories.dataloader import get_data_split_indices
 
     train_idxs, val_idxs, test_idxs = get_data_split_indices(
@@ -233,19 +240,22 @@ def compute_data_splits(
         target_variable_col=data_cfg.target_variable_col,
         train_set_balance=split_cfg.train_set_balance,
         random_seed=random_seed,
+        sampler=split_cfg.sampler,
+        sampling_features=sampling_features(data, data_cfg.smiles_cols, weights_col, split_cfg),
     )
 
     for i, (tr, va, te) in enumerate(zip(train_idxs, val_idxs, test_idxs)):
         logger.info(f"Split {i + 1}: train={len(tr)}, val={len(va)}, test={len(te)}")
 
     if out_dir is not None:
-        splits_file = out_dir / "split_indices.json"
+        splits_file = split_indices_path(out_dir)
         with open(splits_file, "w") as f:
             json.dump(
                 {
                     "train": [list(map(str, s)) for s in train_idxs],
                     "val": [list(map(str, s)) for s in val_idxs],
                     "test": [list(map(str, s)) for s in test_idxs],
+                    "sampling": sampling_metadata(split_cfg, weights_col),
                 },
                 f,
                 indent=2,
@@ -268,6 +278,7 @@ def train_gnn(
     random_seed: int,
     out_dir: Path,
     target_cfg: TargetTransformConfig | None = None,
+    preprocessing_cfg: FeatureTransformConfig | None = None,
 ) -> tuple[dict, dict, dict]:
     """
     Train a GNN ensemble, save ``.pt`` model files, and return
@@ -292,6 +303,12 @@ def train_gnn(
     target_cfg:
         Optional target variable scaling configuration. Defaults to no
         scaling when ``None``.
+    preprocessing_cfg:
+        Tabular feature preprocessing configuration. Its ``scaler`` is also
+        applied to the polymer descriptors fed to the GNN readout (fitted on
+        the training graphs of each split; feature selection is not
+        applied). When ``None`` — e.g. a GNN-only experiment with no
+        ``feature_preprocessing`` section — ``standard_scaler`` is used.
 
     Returns
     -------
@@ -318,6 +335,17 @@ def train_gnn(
         )
         target_cfg = TargetTransformConfig()  # reset to NoTransformation
 
+    polymer_descriptor_scaler = (
+        preprocessing_cfg.scaler
+        if preprocessing_cfg is not None
+        else TransformDescriptor.StandardScaler
+    )
+    if getattr(dataset[0], "polymer_descriptors", None) is not None:
+        logger.info(
+            "Polymer descriptors will be scaled with '%s' (fitted on each training split).",
+            polymer_descriptor_scaler,
+        )
+
     models_dir = out_dir / "ml_results" / "models"
     models_dir.mkdir(parents=True, exist_ok=True)
 
@@ -335,10 +363,21 @@ def train_gnn(
         hpo_n_folds=gnn_cfg.hpo_n_folds,
         hpo_val_fraction=gnn_cfg.hpo_val_fraction,
         hpo_n_repeats=gnn_cfg.hpo_n_repeats,
+        polymer_descriptor_scaler=polymer_descriptor_scaler,
+        optimisation=gnn_cfg.optimisation,
+        hpo_num_samples=gnn_cfg.hpo_num_samples,
+        hpo_search_grid=gnn_cfg.hpo_search_grid,
     )
 
     for model_name, model in trained_models.items():
         torch_save(model, models_dir / f"{model_name}.pt")
+
+        # The scaler is also pickled inside the .pt (it is applied in the
+        # model's forward pass); it is written separately for provenance.
+        descriptor_scaler = getattr(model, "polymer_descriptor_scaler", None)
+        if descriptor_scaler is not None:
+            iter_key = model_name.rsplit("_", 1)[-1]
+            joblib.dump(descriptor_scaler, models_dir / f"polymer_descriptor_scaler_{iter_key}.pkl")
 
     # TODO: create function to save this scaler
     for iter_key, scaler in target_scalers.items():
@@ -469,10 +508,24 @@ def train_tml(
         random_seed=random_seed,
         train_val_test_idxs=split_indexes,
         target_transform=target_cfg.strategy,
+        hpo_n_folds=tml_cfg.hpo_n_folds,
+        hpo_num_samples=tml_cfg.hpo_num_samples,
+        hpo_search_grid=tml_cfg.hpo_search_grid,
+        include_validation_in_training=tml_cfg.include_validation_in_training,
     )
 
     for model_name, model in trained.items():
         joblib.dump(model, models_dir / f"{model_name}.joblib")
+
+    # Provenance of automatic HPO: searched grid, samples used, best parameters.
+    hpo_records = {n: m.polynet_hpo_ for n, m in trained.items() if hasattr(m, "polynet_hpo_")}
+    if hpo_records:
+        hpo_dir = out_dir / "tml_hyp_opt"
+        hpo_dir.mkdir(parents=True, exist_ok=True)
+        for model_name, record in hpo_records.items():
+            with open(hpo_dir / f"{model_name}.json", "w") as f:
+                json.dump(record, f, indent=2, default=str)
+        logger.info(f"TML HPO search spaces and best parameters saved to {hpo_dir}.")
     if scalers:
         for scaler_name, scaler in scalers.items():
             joblib.dump(scaler, models_dir / f"{scaler_name}.pkl")
@@ -630,6 +683,14 @@ def predict_external(
     are loaded automatically.  If the target column is present in ``data``,
     per-model metrics are computed and returned; otherwise metrics are ``None``.
 
+    The models trained on the different splits are also combined into
+    ensembles (see ``polynet.inference.ensemble``): one per GNN architecture,
+    one across all GNNs, and one per TML model × representation. Regression
+    ensembles report the mean prediction and the standard deviation across
+    members; classification ensembles report the majority vote and the vote
+    fraction. Ensemble metrics are stored under the ``"ensemble"`` key of the
+    returned metrics, next to the per-split keys (``"1"``, ``"2"``, …).
+
     Parameters
     ----------
     data:
@@ -669,8 +730,10 @@ def predict_external(
     )
     from polynet.config.constants import ResultColumn
     from polynet.data.preprocessing import sanitise_df
+    from polynet.data.structures import prepare_structures
     from polynet.featurizer.descriptors import build_vector_representation
     from polynet.featurizer.polymer_graph import CustomPolymerGraph
+    from polynet.inference.ensemble import ensemble_predictions
     from polynet.inference.utils import prepare_probs_df
     from polynet.training.metrics import calculate_metrics
 
@@ -682,6 +745,15 @@ def predict_external(
     df = data.copy()
     if data_cfg.id_col and df.index.name == data_cfg.id_col:
         df = df.reset_index()
+
+    # Prepare the new structures exactly like the training data (validate, and
+    # canonicalise with the training representation when training did).
+    df, _ = prepare_structures(
+        df,
+        smiles_cols=data_cfg.smiles_cols,
+        representation=data_cfg.string_representation,
+        canonicalise=data_cfg.canonicalise_smiles,
+    )
 
     has_target = data_cfg.target_variable_col in df.columns
 
@@ -744,6 +816,11 @@ def predict_external(
 
     predictions_tml: pd.DataFrame | None = None
     predictions_gnn: pd.DataFrame | None = None
+
+    # Per-split predicted column → (split number, model name, probability columns),
+    # and ensemble predicted column → ensemble model name; used for metrics.
+    split_cols: dict[str, tuple[str, str, list[str]]] = {}
+    ensemble_cols: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # TML path: descriptors → predict
@@ -829,6 +906,7 @@ def predict_external(
 
             preds_df = pd.DataFrame({predicted_col: preds})
 
+            probs_cols: list[str] = []
             if data_cfg.problem_type == ProblemType.Classification:
                 probs_df = prepare_probs_df(
                     probs=model.predict_proba(desc_df),
@@ -836,10 +914,26 @@ def predict_external(
                     model_name=model_log_name,
                 )
                 preds_df[probs_df.columns] = probs_df.to_numpy()
+                probs_cols = list(probs_df.columns)
 
+            # e.g. "random forest-rdkit" (model × representation), split "1"
+            split_cols[predicted_col] = (iteration, ml_model.replace("_", " "), probs_cols)
             preds_all = preds_df if preds_all is None else pd.concat([preds_all, preds_df], axis=1)
 
         if preds_all is not None:
+            # Ensemble per model × representation across splits
+            tml_groups: dict[str, list[str]] = {}
+            for col in preds_all.columns:
+                if col in split_cols:
+                    tml_groups.setdefault(split_cols[col][1], []).append(col)
+            ensemble_df, tml_ensemble_cols = ensemble_predictions(
+                predictions=preds_all,
+                groups=tml_groups,
+                problem_type=data_cfg.problem_type,
+                target_variable_name=data_cfg.target_variable_name,
+            )
+            ensemble_cols.update(tml_ensemble_cols)
+            preds_all = pd.concat([preds_all, ensemble_df], axis=1)
             predictions_tml = pd.concat([id_df, preds_all], axis=1, ignore_index=False)
 
     # ------------------------------------------------------------------
@@ -890,6 +984,7 @@ def predict_external(
 
             preds_df = pd.DataFrame({ResultColumn.INDEX: preds[0], predicted_col: y_pred})
 
+            probs_cols = []
             if data_cfg.problem_type == ProblemType.Classification:
                 probs_df = prepare_probs_df(
                     probs=preds[-1],
@@ -897,6 +992,10 @@ def predict_external(
                     model_name=model_log_name,
                 )
                 preds_df[probs_df.columns] = probs_df.to_numpy()
+                probs_cols = list(probs_df.columns)
+
+            # e.g. "GCN", split "1"
+            split_cols[predicted_col] = (gnn_iteration, model_name.rsplit("_", 1)[0], probs_cols)
 
             preds_all = (
                 preds_df
@@ -905,40 +1004,21 @@ def predict_external(
             )
 
         if preds_all is not None:
-            # Ensemble voting per architecture
-            pred_cols = [c for c in preds_all.columns if ResultColumn.PREDICTED in c]
+            # Ensemble per architecture across splits, plus one across all GNNs
+            gnn_pred_cols = [c for c in preds_all.columns if c in split_cols]
             arch_groups: dict[str, list[str]] = {}
-            for col in pred_cols:
-                arch = col.split(" ")[0]
-                arch_groups.setdefault(arch, []).append(col)
-            arch_groups["GNN"] = pred_cols  # all GNN models together
+            for col in gnn_pred_cols:
+                arch_groups.setdefault(split_cols[col][1], []).append(col)
+            arch_groups["GNN"] = gnn_pred_cols
 
-            ensemble_series = []
-            for arch, cols in arch_groups.items():
-                if len(cols) < 2:
-                    continue
-                arch_preds = preds_all[cols]
-                if data_cfg.problem_type == ProblemType.Classification:
-                    from scipy.stats import mode as scipy_mode
-
-                    votes, _ = scipy_mode(arch_preds.values, axis=1, keepdims=False)
-                    ensemble_series.append(
-                        pd.Series(
-                            votes,
-                            index=arch_preds.index,
-                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
-                        )
-                    )
-                else:
-                    ensemble_series.append(
-                        pd.Series(
-                            arch_preds.mean(axis=1),
-                            index=arch_preds.index,
-                            name=f"{arch} Ensemble {ResultColumn.PREDICTED}",
-                        )
-                    )
-            if ensemble_series:
-                preds_all = pd.concat([preds_all] + ensemble_series, axis=1)
+            ensemble_df, gnn_ensemble_cols = ensemble_predictions(
+                predictions=preds_all,
+                groups=arch_groups,
+                problem_type=data_cfg.problem_type,
+                target_variable_name=data_cfg.target_variable_name,
+            )
+            ensemble_cols.update(gnn_ensemble_cols)
+            preds_all = pd.concat([preds_all, ensemble_df], axis=1)
 
             predictions_gnn = pd.merge(id_df, preds_all, on=[ResultColumn.INDEX])
 
@@ -968,23 +1048,25 @@ def predict_external(
     metrics: dict | None = None
     if has_target:
         label_col = true_label_name
+        set_name = dataset_name.split(".")[0]
         metrics = {}
-        for col in predictions.columns:
-            if ResultColumn.PREDICTED not in col or "Ensemble" in col:
-                continue
-            split_name = col.rsplit(" ", 3)
-            model, number = split_name[0], split_name[1]
-            model_name_key = f"{model} {number}"
-            probs_cols = [
-                c for c in predictions.columns if ResultColumn.SCORE in c and model_name_key in c
-            ]
-            metrics.setdefault(number, {}).setdefault(model, {})[dataset_name.split(".")[0]] = (
-                calculate_metrics(
-                    y_true=predictions[label_col],
-                    y_pred=predictions[col],
-                    y_probs=predictions[probs_cols] if probs_cols else None,
-                    problem_type=data_cfg.problem_type,
-                )
+        # Per-split models: metrics[split][model][set]
+        for col, (number, model, probs_cols) in split_cols.items():
+            metrics.setdefault(number, {}).setdefault(model, {})[set_name] = calculate_metrics(
+                y_true=predictions[label_col],
+                y_pred=predictions[col],
+                y_probs=predictions[probs_cols] if probs_cols else None,
+                problem_type=data_cfg.problem_type,
+            )
+        # Ensembles: metrics["ensemble"]["<name> Ensemble"][set]. Classification
+        # ensembles have hard votes only, so probability-based metrics (AUROC)
+        # are not computed for them.
+        for col, model in ensemble_cols.items():
+            metrics.setdefault("ensemble", {}).setdefault(model, {})[set_name] = calculate_metrics(
+                y_true=predictions[label_col],
+                y_pred=predictions[col],
+                y_probs=None,
+                problem_type=data_cfg.problem_type,
             )
 
         with open(out_dir / "metrics.json", "w") as f:
@@ -1010,7 +1092,8 @@ def run_explainability(
     """
     Run chemistry-masking explainability and save plots and CSVs to disk.
 
-    Implements the Wellawatte et al. (2023) fragment-masking approach:
+    Implements the substructure-masking approach of Wu et al., Nat. Commun. 14, 2585
+    (2023), https://doi.org/10.1038/s41467-023-38192-3:
     for each fragment, atoms are removed from the pre-pooling embedding and
     attribution is defined as ``Y_pred_full − Y_pred_masked``.
 
@@ -1041,6 +1124,12 @@ def run_explainability(
         Per-fragment attribution table for each molecule.
     """
     from polynet.explainability import compute_global_attribution, compute_local_attribution
+    from polynet.explainability.selection import (
+        match_dataset_ids,
+        samples_per_model,
+        select_splits,
+        split_index_of_model,
+    )
     from polynet.visualization.utils import save_plot
 
     explain_dir = out_dir / "explanations"
@@ -1052,16 +1141,7 @@ def run_explainability(
     # ------------------------------------------------------------------
     # 1. Resolve which model instances to explain
     # ------------------------------------------------------------------
-    if exp_cfg.bootstraps == "all":
-        selected_iters = set(range(n_iters))
-    else:
-        selected_iters = {i for i in exp_cfg.bootstraps if i < n_iters}
-        invalid = set(exp_cfg.bootstraps) - selected_iters
-        if invalid:
-            logger.warning(
-                f"Bootstrap indices {sorted(invalid)} are out of range "
-                f"(only {n_iters} iteration(s) trained). They will be skipped."
-            )
+    selected_splits = select_splits(exp_cfg.bootstraps, n_iters)
 
     if exp_cfg.models == "all":
         selected_archs = {key.split("_", 1)[0] for key in trained_models}
@@ -1079,7 +1159,7 @@ def run_explainability(
     models_to_explain = {
         key: model
         for key, model in trained_models.items()
-        if key.split("_", 1)[0] in selected_archs and int(key.split("_", 1)[1]) in selected_iters
+        if key.split("_", 1)[0] in selected_archs and split_index_of_model(key) in selected_splits
     }
 
     if not models_to_explain:
@@ -1101,7 +1181,7 @@ def run_explainability(
     mol_id_set: set[str] = set()
 
     def _collect(idx_lists):
-        for i in sorted(selected_iters):
+        for i in selected_splits:
             if i < len(idx_lists):
                 mol_id_set.update(str(idx) for idx in idx_lists[i])
 
@@ -1112,7 +1192,7 @@ def run_explainability(
     if exp_cfg.explain_set in ("validation", "all"):
         _collect(val_idxs)
 
-    explain_mol_ids = sorted(mol_id_set)
+    explain_mol_ids = match_dataset_ids(dataset, sorted(mol_id_set), "molecule")
     logger.info(f"Explaining {len(explain_mol_ids)} molecule(s) from '{exp_cfg.explain_set}' set.")
 
     if not explain_mol_ids:
@@ -1134,6 +1214,8 @@ def run_explainability(
         target_class=exp_cfg.target_class,
         top_n=exp_cfg.top_n,
         plot_type=exp_cfg.plot_type,
+        # Each model explains only its own split's explain_set molecules.
+        mols_per_model=samples_per_model(models_to_explain, split_indexes, exp_cfg.explain_set),
     )
 
     if global_result.warning:
@@ -1154,7 +1236,9 @@ def run_explainability(
         logger.info("No local_explain_mol_ids set — skipping per-molecule heatmaps.")
         return
 
-    local_mol_ids = [str(m) for m in exp_cfg.local_explain_mol_ids]
+    local_mol_ids = match_dataset_ids(
+        dataset, exp_cfg.local_explain_mol_ids, "local_explain_mol_ids"
+    )
     logger.info(
         f"Computing per-molecule attribution heatmaps for {len(local_mol_ids)} molecule(s)…"
     )
@@ -1196,6 +1280,7 @@ def run_tml_explainability(
     data_cfg: DataConfig,
     tml_exp_cfg: TMLExplainabilityConfig,
     out_dir: Path,
+    validation_in_training: bool = True,
 ) -> None:
     """
     Run SHAP-based explainability for TML models and save outputs to disk.
@@ -1216,6 +1301,9 @@ def run_tml_explainability(
         ``TMLExplainabilityConfig`` instance.
     out_dir:
         Experiment root directory.  All outputs go to ``out_dir/explanations/tml/``.
+    validation_in_training:
+        ``tml_models.include_validation_in_training``: whether the validation
+        samples were TML training data (then explaining them is warned about).
 
     Outputs
     -------
@@ -1228,6 +1316,13 @@ def run_tml_explainability(
     ``explanations/tml/{descriptor}_{sample_id}_shap.csv``
         Per-instance SHAP attribution table.
     """
+    from polynet.explainability.selection import (
+        TML_VALIDATION_IS_TRAINING_WARNING,
+        samples_per_model,
+        select_splits,
+        split_index_of_model,
+        tml_explain_set_includes_validation,
+    )
     from polynet.explainability.shap_explain import (
         compute_global_shap_attribution,
         compute_local_shap_attribution,
@@ -1243,21 +1338,9 @@ def run_tml_explainability(
     # ------------------------------------------------------------------
     # 1. Filter models by config
     # ------------------------------------------------------------------
-    if tml_exp_cfg.bootstraps == "all":
-        selected_iters = set(range(n_iters))
-    else:
-        selected_iters = {i for i in tml_exp_cfg.bootstraps if i < n_iters}
-        invalid = set(tml_exp_cfg.bootstraps) - selected_iters
-        if invalid:
-            logger.warning(
-                f"Bootstrap indices {sorted(invalid)} are out of range "
-                f"(only {n_iters} iteration(s) trained). They will be skipped."
-            )
+    selected_splits = select_splits(tml_exp_cfg.bootstraps, n_iters)
 
     # Parse model log names: "{ModelType}-{descriptor}_{iter}"
-    def _iter_of(key: str) -> int:
-        return int(key.rsplit("_", 1)[1])
-
     def _model_type_of(key: str) -> str:
         return key.split("-", 1)[0]
 
@@ -1296,7 +1379,7 @@ def run_tml_explainability(
         for key, model in tml_trained.items()
         if _model_type_of(key) in selected_model_types
         and _descriptor_of(key) in selected_reprs
-        and _iter_of(key) in selected_iters
+        and split_index_of_model(key) in selected_splits
     }
 
     if not models_to_explain:
@@ -1318,7 +1401,7 @@ def run_tml_explainability(
     sample_id_set: set[str] = set()
 
     def _collect(idx_lists):
-        for i in sorted(selected_iters):
+        for i in selected_splits:
             if i < len(idx_lists):
                 sample_id_set.update(str(idx) for idx in idx_lists[i])
 
@@ -1333,6 +1416,8 @@ def run_tml_explainability(
     logger.info(
         f"Explaining {len(explain_sample_ids)} sample(s) from '{tml_exp_cfg.explain_set}' set."
     )
+    if validation_in_training and tml_explain_set_includes_validation(tml_exp_cfg.explain_set):
+        logger.warning(TML_VALIDATION_IS_TRAINING_WARNING)
 
     if not explain_sample_ids:
         logger.warning("No samples to explain. Skipping TML explainability stage.")
@@ -1352,6 +1437,10 @@ def run_tml_explainability(
         target_class=tml_exp_cfg.target_class,
         top_n=tml_exp_cfg.top_n,
         plot_type=tml_exp_cfg.plot_type,
+        # Each model explains only its own split's explain_set samples.
+        samples_per_model=samples_per_model(
+            models_to_explain, split_indexes, tml_exp_cfg.explain_set
+        ),
     )
 
     for descriptor, result in global_results.items():

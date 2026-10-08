@@ -48,13 +48,13 @@ def get_predictions_df_tml(
     """
     Collect TML predictions across all models and iterations into a DataFrame.
 
-    For each trained model, runs inference on the train and test DataFrames
-    and assembles a wide DataFrame where multiple models from the same
-    iteration appear as separate columns.
+    For each trained model, runs inference on the train, validation (if held
+    out) and test DataFrames and assembles a wide DataFrame where multiple
+    models from the same iteration appear as separate columns.
 
-    Note: There is no validation split in TML inference. Validation indices
-    were merged into the training set during ``train_tml_ensemble`` to
-    maximise the data available for HPO cross-validation.
+    When ``tml_models.include_validation_in_training`` is True (default), the
+    validation samples were part of TML training and are reported in the
+    ``Training`` set; when False, they are reported as ``Validation``.
 
     Parameters
     ----------
@@ -62,8 +62,9 @@ def get_predictions_df_tml(
         Dict of ``{"{algo}-{df_name}_{iteration}": fitted_model}`` as
         returned by ``train_tml_ensemble``.
     training_data:
-        Dict of ``{"{df_name}_{iteration}": (train_df, test_df)}``
-        as returned by ``train_tml_ensemble``.
+        Dict of ``{"{df_name}_{iteration}": (train_df, val_df, test_df)}``
+        as returned by ``train_tml_ensemble`` (``val_df`` is ``None`` when the
+        validation samples were used for training).
     split_type:
         The split strategy used — determines the iterator column name.
     target_variable_col:
@@ -104,9 +105,11 @@ def get_predictions_df_tml(
 
         predicted_col = get_predicted_label_column_name(display_name, ml_model)
 
-        train_df, test_df = training_data[f"{df_name}_{iteration}"]
+        train_df, val_df, test_df = training_data[f"{df_name}_{iteration}"]
 
         splits = [(train_df, DataSet.Training), (test_df, DataSet.Test)]
+        if val_df is not None:
+            splits.insert(1, (val_df, DataSet.Validation))
 
         split_dfs: list[pd.DataFrame] = []
 

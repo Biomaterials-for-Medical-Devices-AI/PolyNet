@@ -34,6 +34,7 @@ a full config object::
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from polynet.config.enums import Network, ProblemType
@@ -128,6 +129,45 @@ def create_network(network: Network | str, problem_type: ProblemType | str, **kw
 
     model_cls = _NETWORK_REGISTRY[key]
     return model_cls(**kwargs)
+
+
+# Constructor arguments PolyNet sets itself from the data and the experiment.
+_SET_BY_POLYNET = frozenset(
+    {
+        "n_node_features",
+        "n_edge_features",
+        "n_classes",
+        "n_polymer_descriptors",
+        "seed",
+        "problem_type",
+    }
+)
+
+
+def architecture_parameters(network: Network | str) -> set[str]:
+    """
+    Architecture parameters a user may set for ``network``.
+
+    These are the constructor arguments of the network's model classes
+    (regression and classification), minus the ones PolyNet derives from the
+    data and the experiment (feature counts, number of classes, seed, ...).
+
+    Parameters
+    ----------
+    network:
+        The GNN architecture.
+
+    Returns
+    -------
+    set[str]
+        Parameter names, e.g. ``{"embedding_dim", "n_convolutions", ...}``.
+    """
+    network = Network(network) if isinstance(network, str) else network
+    params: set[str] = set()
+    for (net, _), model_cls in _NETWORK_REGISTRY.items():
+        if net == network:
+            params |= set(inspect.signature(model_cls.__init__).parameters) - {"self"}
+    return params - _SET_BY_POLYNET
 
 
 def list_available_networks() -> dict[str, list[str]]:

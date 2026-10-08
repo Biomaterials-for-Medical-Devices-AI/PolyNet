@@ -63,6 +63,34 @@ logger = logging.getLogger(__name__)
 _REGRESSION_KEY = "regression"
 _META_COLS = ["model_type", "iteration", "sample_id", "class_idx"]
 
+# Fixed seed for the random sampling of SHAP's KernelExplainer (used for models
+# without a tree or linear explainer, e.g. SVMs): its background sample and its
+# coalition sampling. Each sample's SHAP values then depend only on the model,
+# the data and the sample — not on the run or on which samples were explained
+# before it.
+KERNEL_EXPLAINER_SEED = 0
+
+# Version of the SHAP values stored in the cache files; bump when the
+# computation changes so stale values are recomputed.
+# Version 2: seeded KernelExplainer (reproducible SVM SHAP values).
+SHAP_CACHE_VERSION = 2
+_SHAP_CACHE_VERSION_COL = "shap_cache_version"
+
+
+@contextmanager
+def _seeded_global_numpy(seed: int):
+    """
+    Seed NumPy's global random generator inside the block, then restore it.
+
+    SHAP's KernelExplainer samples with the global generator and takes no seed.
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -140,10 +168,23 @@ def _shap_cache_path(experiment_path: Path, descriptor: str) -> Path:
 
 
 def _load_shap_cache(experiment_path: Path, descriptor: str) -> pd.DataFrame:
-    """Load the SHAP cache for a descriptor, returning an empty DataFrame if absent."""
+    """
+    Load the SHAP cache for a descriptor, returning an empty DataFrame if absent.
+
+    A cache written by an older version of the computation (no or another
+    ``SHAP_CACHE_VERSION``) is discarded, so its values are recomputed.
+    """
     path = _shap_cache_path(experiment_path, descriptor)
     if path.exists():
         df = pd.read_csv(path, dtype={col: str for col in _META_COLS})
+        versions = df.get(_SHAP_CACHE_VERSION_COL)
+        if versions is None or not (versions == SHAP_CACHE_VERSION).all():
+            logger.warning(
+                f"SHAP cache {path.name} was written by an older version of PolyNet; "
+                "recomputing its SHAP values."
+            )
+            return pd.DataFrame(columns=_META_COLS)
+        df = df.drop(columns=[_SHAP_CACHE_VERSION_COL])
         feat_cols = [c for c in df.columns if c not in _META_COLS]
         if feat_cols:
             df[feat_cols] = df[feat_cols].apply(pd.to_numeric, errors="coerce")
@@ -155,7 +196,7 @@ def _save_shap_cache(cache_df: pd.DataFrame, experiment_path: Path, descriptor: 
     """Persist the SHAP cache for a descriptor to disk."""
     path = _shap_cache_path(experiment_path, descriptor)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cache_df.to_csv(path, index=False)
+    cache_df.assign(**{_SHAP_CACHE_VERSION_COL: SHAP_CACHE_VERSION}).to_csv(path, index=False)
 
 
 def _load_feature_transformer(experiment_path: Path, descriptor: str, iteration: int):
@@ -198,9 +239,11 @@ def _select_shap_explainer(model, X_background: np.ndarray):
         background = shap.maskers.Independent(X_background, max_samples=min(100, len(X_background)))
         return shap.LinearExplainer(model, background)
 
-    # Fallback: KernelExplainer (slow, model-agnostic)
+    # Fallback: KernelExplainer (slow, model-agnostic). The background sample
+    # is drawn with a fixed seed so explanations are reproducible.
     n_bg = min(50, len(X_background))
-    bg_sample = X_background[np.random.choice(len(X_background), n_bg, replace=False)]
+    rng = np.random.default_rng(KERNEL_EXPLAINER_SEED)
+    bg_sample = X_background[rng.choice(len(X_background), n_bg, replace=False)]
     logger.warning(
         f"Using KernelExplainer for {model_name} — this may be slow. "
         "Consider using a tree-based or linear model for faster SHAP computation."
@@ -222,7 +265,10 @@ def _compute_shap_values_for_row(
     - 3-D array (newer SHAP multiclass): ``(1, n_features, n_classes)``
     """
     x_2d = x_row.reshape(1, -1)
-    values = explainer.shap_values(x_2d)
+    # KernelExplainer samples coalitions with NumPy's global generator: seed it
+    # per sample, so the values do not depend on the order of explanation.
+    with _seeded_global_numpy(KERNEL_EXPLAINER_SEED):
+        values = explainer.shap_values(x_2d)
 
     # Track whether the per-class slice has already been chosen, so the 2-D
     # branch below doesn't re-apply class handling to an already-selected array.
@@ -529,8 +575,37 @@ def _aligned_feature_matrix(
     return aligned.to_numpy(dtype=float)
 
 
+def _rows_of_models(
+    cache_df: pd.DataFrame,
+    model_log_names: list[str],
+    sample_ids: list[str],
+    samples_per_model: dict[str, set[str]] | None = None,
+) -> pd.DataFrame:
+    """
+    Keep the cache rows of exactly these model instances and samples.
+
+    A row is kept when its (model type, split, sample) matches one of
+    ``model_log_names`` and one of ``sample_ids`` — restricted, per model, to
+    ``samples_per_model[model]`` when given.
+    """
+    sample_ids_set = {str(s) for s in sample_ids}
+    allowed = set()
+    for key in model_log_names:
+        model_type, _, iteration = _parse_model_log_name(key)
+        samples = sample_ids_set
+        if samples_per_model is not None:
+            samples = sample_ids_set & {str(s) for s in samples_per_model.get(key, ())}
+        allowed.update((model_type, str(iteration), s) for s in samples)
+
+    keys = pd.MultiIndex.from_frame(cache_df[["model_type", "iteration", "sample_id"]].astype(str))
+    return cache_df.loc[keys.isin(allowed)]
+
+
 def merge_shap_attributions(
-    cache_df: pd.DataFrame, model_log_names: list[str], sample_ids: list[str]
+    cache_df: pd.DataFrame,
+    model_log_names: list[str],
+    sample_ids: list[str],
+    samples_per_model: dict[str, set[str]] | None = None,
 ) -> pd.DataFrame:
     """
     Average SHAP values across ensemble models for each sample.
@@ -540,15 +615,20 @@ def merge_shap_attributions(
     cache_df:
         Filtered SHAP cache (output of :func:`compute_and_cache_shap`).
     model_log_names:
-        Model log names defining the ensemble.
+        Model log names defining the ensemble. Only these exact
+        (model type, split) instances are used.
     sample_ids:
         Sample IDs to include.
+    samples_per_model:
+        Optional ``{model_log_name: {sample IDs}}`` restricting each model to
+        its own samples (e.g. the test set of its split, see
+        ``polynet.explainability.selection.samples_per_model``).
 
     Returns
     -------
     pd.DataFrame
         Indexed by ``sample_id``, one column per feature, values are mean SHAP
-        values across models.
+        values across the models that explain that sample.
     """
     if cache_df.empty:
         return pd.DataFrame()
@@ -557,18 +637,7 @@ def merge_shap_attributions(
     if not feature_cols:
         return pd.DataFrame()
 
-    sample_ids_set = set(str(s) for s in sample_ids)
-
-    # Use vectorized filtering — avoids slow row-wise apply and list & Series issues.
-    model_types_set = {_parse_model_log_name(k)[0] for k in model_log_names}
-    iterations_set = {str(_parse_model_log_name(k)[2]) for k in model_log_names}
-
-    mask = (
-        cache_df["model_type"].isin(model_types_set)
-        & cache_df["iteration"].isin(iterations_set)
-        & cache_df["sample_id"].isin(sample_ids_set)
-    )
-    subset = cache_df.loc[mask]
+    subset = _rows_of_models(cache_df, model_log_names, sample_ids, samples_per_model)
 
     if subset.empty:
         return pd.DataFrame()
@@ -841,6 +910,7 @@ def compute_global_shap_attribution(
     plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
     cache_root: Path | None = None,
     target_col: str | None = None,
+    samples_per_model: dict[str, set[str]] | None = None,
 ) -> dict[str, GlobalAttributionResult]:
     """
     Compute global SHAP feature attribution across the selected population.
@@ -872,22 +942,50 @@ def compute_global_shap_attribution(
         ``None`` shows all features.
     plot_type:
         ``Beeswarm``, ``Bar``, or ``Violin`` (native ``shap`` summary styles).
+    samples_per_model:
+        Optional ``{model_log_name: {sample IDs}}``: each model only explains
+        the samples listed for it (intersected with ``explain_sample_ids``),
+        e.g. the test set of its own split. ``None`` explains every sample
+        with every model.
 
     Returns
     -------
     dict[str, GlobalAttributionResult]
         Keyed by descriptor name.
     """
-    cache_by_descriptor = compute_and_cache_shap(
-        models=models,
-        descriptor_dfs=descriptor_dfs,
-        experiment_path=experiment_path,
-        problem_type=problem_type,
-        explain_sample_ids=explain_sample_ids,
-        target_class=target_class,
-        cache_root=cache_root,
-        target_col=target_col,
-    )
+    # Compute SHAP only for the (model, sample) pairs that will be shown:
+    # models sharing the same sample list are computed together.
+    groups: dict[tuple, list[str]] = {}
+    for key in models:
+        ids = (
+            tuple(explain_sample_ids)
+            if samples_per_model is None
+            else tuple(s for s in explain_sample_ids if str(s) in samples_per_model.get(key, set()))
+        )
+        groups.setdefault(ids, []).append(key)
+
+    parts: dict[str, list[pd.DataFrame]] = {}
+    for ids, keys in groups.items():
+        if not ids:
+            continue
+        group_cache = compute_and_cache_shap(
+            models={k: models[k] for k in keys},
+            descriptor_dfs=descriptor_dfs,
+            experiment_path=experiment_path,
+            problem_type=problem_type,
+            explain_sample_ids=list(ids),
+            target_class=target_class,
+            cache_root=cache_root,
+            target_col=target_col,
+        )
+        for descriptor, df in group_cache.items():
+            parts.setdefault(descriptor, []).append(df)
+    cache_by_descriptor = {
+        descriptor: pd.concat(dfs, ignore_index=True).drop_duplicates(
+            subset=[c for c in _META_COLS if c in dfs[0].columns]
+        )
+        for descriptor, dfs in parts.items()
+    }
 
     # Normalise descriptor_dfs keys to strings for lookup
     str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
@@ -898,15 +996,18 @@ def compute_global_shap_attribution(
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
         n_models = len({_parse_model_log_name(k)[0] for k in model_log_names})
 
-        # Normalise per trained instance (representation × model × bootstrap)
-        # FIRST, then average across the ensemble → one row per sample. Doing the
-        # normalisation before the merge is what makes PerModel/Local meaningful
+        # Keep only each model's own samples, normalise per trained instance
+        # (representation × model × bootstrap) FIRST, then average across the
+        # ensemble → one row per sample. Doing the normalisation before the
+        # merge is what makes PerModel/Local meaningful
         # (see _normalise_cache_attributions).
+        cache_df = _rows_of_models(cache_df, model_log_names, explain_sample_ids, samples_per_model)
         normalised_cache = _normalise_cache_attributions(cache_df, normalisation_type)
         merged_df = merge_shap_attributions(
             cache_df=normalised_cache,
             model_log_names=model_log_names,
             sample_ids=explain_sample_ids,
+            samples_per_model=samples_per_model,
         )
 
         if merged_df.empty:

@@ -39,7 +39,10 @@ class DescriptorCalculationStateKeys(StrEnum):
     DescriptorsRDKit = "DescriptorsRDKit"
     polyBERTfp = "polyBERTfp"
     Morganfp = "morganfp"
+    MorganFPSize = "morganfp_size"
+    MorganRadius = "morganfp_radius"
     RDKitfp = "rdkitfp"
+    RDKitFPSize = "rdkitfp_size"
     PMXDescriptors = "pmx_descriptors"
     PMXSideChainDescriptors = "pmx_side_chain_descriptors"
     PMXBackboneDescriptors = "pmx_backbone_descriptors"
@@ -76,6 +79,10 @@ class PlotOptionsStateKeys(StrEnum):
 class TrainTMLStateKeys(StrEnum):
     TrainTML = "TrainTML"
     PerformHyperparameterTuning = "PerformHyperparameterTuning"
+    HPONumFolds = "TMLHPONumFolds"
+    IncludeValidation = "TMLIncludeValidation"
+    HPONumSamples = "TMLHPONumSamples"
+    SearchGrid = "TMLSearchGrid"
 
     TrainLinearRegression = "LinearRegression"
     TrainLogisticRegression = "LogisticRegression"
@@ -113,6 +120,9 @@ class TrainGNNStateKeys(StrEnum):
 
     TrainGNN = "TrainGNN"
     HypTunning = "HypTunning"
+    Epochs = "GNNEpochs"
+    HPONumSamples = "GNNHPONumSamples"
+    SearchGrid = "GNNSearchGrid"
     SharedGNNParams = "SharedGNNParams"
     GNNConvolutionalLayers = "GNNConvolutionalLayers"
     GNNNumberOfLayers = "GNNNumberOfLayers"
@@ -125,6 +135,16 @@ class TrainGNNStateKeys(StrEnum):
     GNNMonomerWeighting = "GNNMonomerWeighting"
     AsymmetricLoss = "AsymmetricLoss"
     ImbalanceStrength = "ImbalanceStrength"
+
+    # Advanced training options (optimiser, scheduler, loss)
+    Optimizer = "GNNOptimizer"
+    Scheduler = "GNNScheduler"
+    SchedulerFactor = "GNNSchedulerFactor"
+    SchedulerPatience = "GNNSchedulerPatience"
+    SchedulerMinLR = "GNNSchedulerMinLR"
+    SchedulerStepSize = "GNNSchedulerStepSize"
+    SchedulerMilestones = "GNNSchedulerMilestones"
+    RegressionLoss = "GNNRegressionLoss"
 
     # Specific GNN Hyperparameters
 
@@ -155,6 +175,10 @@ class GeneralConfigStateKeys(StrEnum):
     ValidationSize = "ValidationSize"
     RandomSeed = "RandomSeed"
     BootstrapIterations = "BootstrapIterations"
+    Sampler = "Sampler"
+    SamplingFingerprint = "SamplingFingerprint"
+    SamplingFpSize = "SamplingFpSize"
+    SamplingFpRadius = "SamplingFpRadius"
 
     Stratify = "Stratify"
     Shuffle = "Shuffle"

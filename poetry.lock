@@ -241,6 +241,30 @@ spglib = ["spglib (>=1.9)"]
 test = ["pytest (>=7.4.0)", "pytest-xdist (>=3.2.0)"]
 
 [[package]]
+name = "astartes"
+version = "1.3.3"
+description = "Train:Test Algorithmic Sampling for Molecules and Arbitrary Arrays"
+optional = false
+python-versions = ">=3.9"
+groups = ["main"]
+files = [
+    {file = "astartes-1.3.3-py3-none-any.whl", hash = "sha256:362447c5ceb77567dd9ea9c5a780d86fe36ba47b27184ba565ba2959a846c672"},
+    {file = "astartes-1.3.3.tar.gz", hash = "sha256:fedaa54e705ef0d100adb59067db196d440a42e7a30787caca1b53cf33beda5b"},
+]
+
+[package.dependencies]
+numpy = "*"
+pandas = "*"
+scikit_learn = "*"
+scipy = "*"
+tabulate = "*"
+
+[package.extras]
+demos = ["kaleido", "plotly", "py2opsin", "tabulate"]
+dev = ["black", "isort", "pytest"]
+molecules = ["aimsim_core"]
+
+[[package]]
 name = "asttokens"
 version = "3.0.0"
 description = "Annotate AST trees with source code positions"
@@ -6381,4 +6405,4 @@ propcache = ">=0.2.1"
 [metadata]
 lock-version = "2.1"
 python-versions = "~3.11"
-content-hash = "7bba1a807f9917adbe5727b70aca1553f8ab9c6993c1e68d8a81ac8cf20096fd"
+content-hash = "013c723e2783871063cf53b3b57e86bd46674839a7e2e3c18e3f977df7895caa"

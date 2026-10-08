@@ -27,6 +27,7 @@ from polynet.config.enums import (
     ProblemType,
 )
 from polynet.config.schemas import DataConfig
+from polynet.explainability.selection import samples_per_model_from_predictions
 from polynet.featurizer import compute_rdkit_descriptors
 
 # ---------------------------------------------------------------------------
@@ -301,6 +302,9 @@ def _shared_params_section(
     else:
         _preds_iter = preds
     preds_filtered = _preds_iter[~_preds_iter.index.duplicated(keep="first")]
+    # ``preds_filtered`` keeps one row per molecule (labels, local selector);
+    # ``_preds_iter`` keeps every (molecule × selected split) row, so set
+    # membership is known per split for the global explanation.
 
     predicted_col_name = get_predicted_label_column_name(
         target_variable_name=data_options.target_variable_name, model_name=gnn_model_name
@@ -393,6 +397,7 @@ def _shared_params_section(
         "predicted_col_name": predicted_col_name,
         "true_col_name": true_col_name,
         "preds_filtered": preds_filtered,
+        "preds_selected_splits": _preds_iter,
         "preds": preds,
         "iterator_col": iterator_col,
     }
@@ -417,11 +422,19 @@ def _global_tab_section(
         "real model prediction, preserving the full spread of the ensemble."
     )
 
+    # Offer the chosen set of every selected split (not just the first row per
+    # molecule); each model then explains only its own split's molecules.
     explain_mols = explain_mols_widget(
-        data=shared["preds_filtered"],
+        data=shared["preds_selected_splits"],
         SetStateKey=ExplainModelStateKeys.GlobalExplainSet,
         ManuallySelectStateKey=ExplainModelStateKeys.GlobalExplainManuallySelector,
         MolsStateKey=ExplainModelStateKeys.GlobalExplainIDSelector,
+    )
+    mols_per_model = samples_per_model_from_predictions(
+        predictions=shared["preds_selected_splits"],
+        model_keys=shared["models_dict"].keys(),
+        iterator_col=shared["iterator_col"],
+        set_name=st.session_state.get(ExplainModelStateKeys.GlobalExplainSet),
     )
 
     cols = st.columns(2)
@@ -465,6 +478,7 @@ def _global_tab_section(
             top_n=int(top_n),
             plot_type=plot_type,
             cache_root=cache_root,
+            mols_per_model=mols_per_model,
         )
 
 

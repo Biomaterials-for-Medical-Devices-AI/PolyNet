@@ -322,7 +322,7 @@ def stage_gnn_training(dataset, split_indexes, task: str, epochs: int, tmp_path:
         }
     }
 
-    trained_models, loaders = train_gnn_ensemble(
+    trained_models, loaders, _target_scalers = train_gnn_ensemble(
         experiment_path=tmp_path,
         dataset=dataset,
         split_indexes=split_indexes,
@@ -375,7 +375,7 @@ def stage_tml_training(df: pd.DataFrame, split_indexes, task: str):
     tml_models_config = {TraditionalMLModel.RandomForest: {"n_estimators": 10, "max_depth": 3}}
     feature_selection = {FeatureSelection.Variance: {"threshold": 0}}
 
-    trained, training_data, scalers = train_tml_ensemble(
+    trained, training_data, scalers, _target_scalers = train_tml_ensemble(
         tml_models=tml_models_config,
         problem_type=ProblemType(task),
         transform_type=TransformDescriptor.StandardScaler,

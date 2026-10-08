@@ -4,12 +4,20 @@ polynet.explainability.masking
 Chemistry-aware masking attribution for GNN explainability.
 
 Implements the fragment-masking strategy from:
-    Wellawatte et al., Nat. Commun. 14, 2023. https://doi.org/10.1038/s41467-023-38192-3
+    Wu, Z. et al., "Chemistry-intuitive explanation of graph neural networks for molecular
+    property prediction with substructure masking", Nat. Commun. 14, 2585 (2023).
+    https://doi.org/10.1038/s41467-023-38192-3
 
-For each fragment found in a molecule, all atoms belonging to that fragment are
-zeroed out in the pre-pooling node embedding space.  The attribution is defined as:
+For each occurrence of a fragment in a molecule, the nodes of that occurrence are
+removed from the pooling step (after message passing), and the attribution of that
+occurrence is:
 
-    attribution(fragment) = Y_pred_full − Y_pred_masked
+    attribution(fragment occurrence) = Y_pred_full − Y_pred_masked
+
+Removing (rather than zeroing) the nodes keeps mean pooling from being diluted.
+The remaining nodes are pooled with the model's own pooling step, so monomer
+weighting (per-monomer pooling, or the weighted mean used with
+``BeforePooling``) is applied to the masked prediction exactly as to the full one.
 
 Molecules that do not contain a given fragment produce no entry for that fragment
 — they are not counted as zero.
@@ -44,6 +52,36 @@ from polynet.utils.chem_utils import fragment_and_match
 logger = logging.getLogger(__name__)
 
 _ALGORITHM_KEY = ExplainAlgorithm.ChemistryMasking.value
+
+# Version of the masking attributions stored in ``explanation.json``. Bump it
+# whenever the computation changes so that stale cached scores are recomputed.
+# Version 2: masked embeddings are pooled with the model's own monomer weighting.
+MASKING_CACHE_VERSION = 2
+MASKING_CACHE_VERSION_KEY = "_masking_cache_version"
+
+
+def load_masking_cache(cache: dict) -> dict:
+    """
+    Return the cached masking attributions if they were computed by the current code.
+
+    Parameters
+    ----------
+    cache : dict
+        Contents of ``explanation.json`` (empty if the file does not exist).
+
+    Returns
+    -------
+    dict
+        ``cache`` unchanged when its version matches ``MASKING_CACHE_VERSION``;
+        otherwise an empty dict, so every attribution is recomputed.
+    """
+    if not cache or cache.get(MASKING_CACHE_VERSION_KEY) == MASKING_CACHE_VERSION:
+        return cache
+    logger.warning(
+        "Cached masking attributions were computed by an older version of PolyNet; "
+        "recomputing them."
+    )
+    return {}
 
 
 def _class_key(target_class: int | None) -> str:
@@ -358,9 +396,10 @@ def _compute_masking_attributions(
     """
     Core masking computation for a single molecule against a single model.
 
-    For each fragment found in the molecule, ALL occurrences are masked
-    simultaneously (their pre-pooling node embeddings are zeroed out).
-    Attribution is Y_pred_full − Y_pred_masked.
+    For each fragment found in the molecule, each occurrence is masked
+    separately: its nodes are removed from the pooling step and the
+    attribution of that occurrence is Y_pred_full − Y_pred_masked, giving one
+    score per occurrence.
 
     Returns
     -------
@@ -396,9 +435,6 @@ def _compute_masking_attributions(
             edge_attr=mol.edge_attr,
             monomer_weight=monomer_weight,
         )
-
-        # batch_index required by PyG pooling functions; single graph → all zeros
-        batch_idx = torch.zeros(h.shape[0], dtype=torch.long)
 
         # Per-node monomer ids let us locate each monomer's graph nodes exactly,
         # even when wildcard ('*') atoms were stripped during featurisation
@@ -503,15 +539,15 @@ def _compute_masking_attributions(
                         )
                         continue
 
-                    pooled = model.pooling_fn(h[keep], batch_idx[keep])
-
-                    # Polymer descriptors are concatenated to the pooled embedding
-                    # before the readout MLP (mirrors BaseNetwork.forward)
-                    if polymer_descriptors is not None and model.n_polymer_descriptors > 0:
-                        pooled = torch.cat([pooled, polymer_descriptors], dim=1)
-
                     y_masked = _get_scalar_prediction(
-                        model.readout_function(pooled),
+                        _predict_from_node_embeddings(
+                            model,
+                            h=h,
+                            keep=keep,
+                            monomer_weight=monomer_weight,
+                            monomer_id=monomer_id,
+                            polymer_descriptors=polymer_descriptors,
+                        ),
                         problem_type=problem_type,
                         target_class=target_class,
                     )
@@ -525,6 +561,60 @@ def _compute_masking_attributions(
                 frag_attributions[smiles] = monomer_frags
 
     return frag_attributions
+
+
+def _predict_from_node_embeddings(
+    model,
+    h: torch.Tensor,
+    keep: torch.Tensor,
+    monomer_weight: torch.Tensor | None,
+    monomer_id: torch.Tensor | None,
+    polymer_descriptors: torch.Tensor | None,
+) -> torch.Tensor:
+    """
+    Model output for a single graph when only the ``keep`` nodes are pooled.
+
+    Mirrors ``BaseNetwork.forward`` after message passing: the kept node
+    embeddings are pooled with the model's own ``_pool`` (so monomer weighting
+    — per-monomer pooling or the weighted mean of ``BeforePooling`` — is applied
+    exactly as in the full prediction), polymer descriptors are appended and
+    the readout MLP is applied. With every node kept, the output equals
+    ``model.forward`` on the same graph.
+
+    Parameters
+    ----------
+    model:
+        Trained GNN (a ``BaseNetwork`` subclass).
+    h:
+        Pre-pooling node embeddings from ``model.get_node_embeddings``.
+    keep:
+        Boolean mask over the nodes of ``h``; ``False`` nodes are removed from
+        pooling.
+    monomer_weight, monomer_id:
+        Per-node monomer weights and ids of the graph (or ``None``).
+    polymer_descriptors:
+        Graph-level polymer descriptors (raw; scaled by the model) or ``None``.
+
+    Returns
+    -------
+    torch.Tensor
+        Output of shape ``(1, n_classes)``.
+    """
+    batch_idx = torch.zeros(int(keep.sum()), dtype=torch.long, device=h.device)
+    pooled = model._pool(
+        h[keep],
+        batch_idx,
+        monomer_weight[keep] if monomer_weight is not None else None,
+        monomer_id[keep] if monomer_id is not None else None,
+    )
+
+    if polymer_descriptors is not None and model.n_polymer_descriptors > 0:
+        pooled = torch.cat([pooled, model.scale_polymer_descriptors(polymer_descriptors)], dim=1)
+
+    output = model.readout_function(pooled)
+    if model.n_classes == 1:
+        output = output.float()
+    return output
 
 
 def _get_scalar_prediction(

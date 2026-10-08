@@ -28,7 +28,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from polynet.config.enums import ProblemType
+from polynet.config.enums import DatasetName, ProblemType
+from polynet.utils.validation import find_duplicate_ids
 
 logger = logging.getLogger(__name__)
 
@@ -97,7 +98,62 @@ def load_dataset(
     logger.info(f"Loading dataset from '{path}'...")
     df = pd.read_csv(path, **read_csv_kwargs)
     logger.info(f"Loaded {len(df)} rows and {len(df.columns)} columns.")
+    return validate_dataset(df, smiles_cols, target_col, id_col, problem_type)
 
+
+def load_benchmark_dataset(
+    dataset_name: DatasetName | str,
+    smiles_cols: list[str],
+    target_col: str,
+    id_col: str | None = None,
+    problem_type: ProblemType | str | None = None,
+) -> pd.DataFrame:
+    """
+    Load a built-in benchmark dataset and validate it like ``load_dataset``.
+
+    The data come from ``polynet.data.creator.DatasetCreator`` (the same
+    datasets the GUI offers); they are downloaded on first use and cached.
+
+    Parameters
+    ----------
+    dataset_name:
+        The benchmark dataset (e.g. ``"curated_tg"``).
+    smiles_cols, target_col, id_col, problem_type:
+        As in ``load_dataset``.
+
+    Returns
+    -------
+    pd.DataFrame
+        The validated dataset, indexed by ``id_col`` when given.
+    """
+    from polynet.data.creator import DatasetCreator
+
+    df = DatasetCreator(dataset_name).create_dataset()
+    logger.info(f"Loaded benchmark dataset '{DatasetName(dataset_name).value}': {len(df)} rows.")
+    return validate_dataset(df, smiles_cols, target_col, id_col, problem_type)
+
+
+def validate_dataset(
+    df: pd.DataFrame,
+    smiles_cols: list[str],
+    target_col: str,
+    id_col: str | None = None,
+    problem_type: ProblemType | str | None = None,
+) -> pd.DataFrame:
+    """
+    Check the required columns, structures, IDs and target of a loaded dataset.
+
+    Returns
+    -------
+    pd.DataFrame
+        The dataset, indexed by ``id_col`` when given.
+
+    Raises
+    ------
+    ValueError
+        If required columns are missing, SMILES columns are empty, IDs are
+        duplicated or the target column is invalid.
+    """
     _validate_columns(df, smiles_cols, target_col, id_col)
     _validate_smiles_columns(df, smiles_cols)
 
@@ -108,10 +164,12 @@ def load_dataset(
                 "Rows with null IDs may cause issues downstream."
             )
 
-        if not df[id_col].is_unique:
+        duplicates = find_duplicate_ids(df[id_col])
+        if duplicates:
             raise ValueError(
-                f"ID column '{id_col}' contains duplicate values. "
-                "IDs must be unique to be used as an index."
+                f"ID column '{id_col}' contains {len(duplicates)} duplicated value(s), e.g. "
+                f"{', '.join(map(str, duplicates[:5]))}. IDs must be unique: fix the IDs, or "
+                "remove id_col from the config to number the samples by row order."
             )
 
         df = df.set_index(id_col, drop=True)

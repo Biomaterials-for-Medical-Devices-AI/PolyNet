@@ -37,8 +37,6 @@ _MODEL_NAMES: dict[str, tuple[str, str]] = {
     "random_forest": ("Random Forest", "RF"),
     "xgboost": ("XGBoost", "XGB"),
     "support_vector_machine": ("Support Vector Machine", "SVM"),
-    "k_neighbors_classifier": ("K-Neighbors Classifier", "KNN"),
-    "decision_tree_classifier": ("Decision Tree", "DT"),
     # GNN architectures
     "GCN": ("GCN", "GCN"),
     "TransformerConvGNN": ("Transformer GNN", "TF-GNN"),

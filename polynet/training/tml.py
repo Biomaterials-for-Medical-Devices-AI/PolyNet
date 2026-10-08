@@ -22,7 +22,7 @@ import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.linear_model import LinearRegression, LogisticRegression
-from sklearn.model_selection import RandomizedSearchCV, StratifiedKFold
+from sklearn.model_selection import RandomizedSearchCV
 from sklearn.svm import SVC, SVR
 from xgboost import XGBClassifier, XGBRegressor
 
@@ -33,9 +33,11 @@ from polynet.config.enums import (
     TraditionalMLModel,
     TransformDescriptor,
 )
-from polynet.config.search_grid import get_tml_search_grid
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
+from polynet.config.search_grid import get_tml_search_grid, n_grid_combinations
 from polynet.data.feature_transformer import FeatureTransformer
 from polynet.data.preprocessing import TargetScaler
+from polynet.training.cv import make_kfold
 
 logger = logging.getLogger(__name__)
 
@@ -143,13 +145,18 @@ def train_tml_ensemble(
     random_seed: int,
     train_val_test_idxs: tuple[list, list | None, list],
     target_transform: TargetTransformDescriptor | str = TargetTransformDescriptor.NoTransformation,
+    hpo_n_folds: int = 5,
+    hpo_num_samples: int = DEFAULT_HPO_NUM_SAMPLES,
+    hpo_search_grid: dict | None = None,
+    include_validation_in_training: bool = True,
 ) -> tuple[dict, dict, dict, dict]:
     """
     Train an ensemble of TML models across all bootstrap iterations.
 
     For each iteration and each descriptor DataFrame, each requested model
-    is either fitted with the provided hyperparameters or tuned via
-    ``GridSearchCV`` if no hyperparameters are provided.
+    is either fitted with the provided hyperparameters or tuned via a
+    randomised search (``RandomizedSearchCV``, ``hpo_n_folds``-fold shuffled
+    CV) if no hyperparameters are provided.
 
     Note: The validation set is merged into the training set for TML
     models, as TML training uses internal cross-validation for HPO
@@ -159,7 +166,7 @@ def train_tml_ensemble(
     ----------
     tml_models:
         Mapping from model identifier to hyperparameter dict. Pass an
-        empty dict or ``None`` to trigger GridSearchCV HPO for that model.
+        empty dict or ``None`` to trigger randomised-search HPO for that model.
     problem_type:
         Classification or regression.
     transform_type:
@@ -179,13 +186,29 @@ def train_tml_ensemble(
         fitted on the training set only; ``training_data`` always stores
         the original (unscaled) target values so that ``y_true`` in the
         predictions DataFrame is always in the original range.
+    hpo_n_folds:
+        Cross-validation folds used to score HPO configurations.
+    hpo_num_samples:
+        Configurations sampled per randomised search (``n_iter``); capped at
+        the number of distinct grid combinations.
+    hpo_search_grid:
+        User search-grid candidates keyed by model name
+        (``tml_models.hpo_search_grid``); each parameter they set replaces the
+        default candidates.
+    include_validation_in_training:
+        If True, the validation samples are added to the training samples
+        (feature transformer, target scaler, hyperparameter search and model
+        are fitted on both). If False, everything is fitted on the training
+        samples only and the validation samples are kept as a held-out set.
 
     Returns
     -------
     tuple[dict, dict, dict, dict]
         ``(trained_models, training_data, scalers, target_scalers)`` where:
         - ``trained_models``: ``{model_log_name: fitted_model}``
-        - ``training_data``: ``{log_name: (train_df, test_df)}``
+        - ``training_data``: ``{log_name: (train_df, val_df, test_df)}``;
+          ``val_df`` is ``None`` when the validation samples were used for
+          training
         - ``scalers``: ``{log_name: fitted_feature_scaler}`` or empty dict
         - ``target_scalers``: ``{log_name: TargetScaler}``
     """
@@ -199,6 +222,14 @@ def train_tml_ensemble(
         else target_transform
     )
 
+    logger.info(
+        "TML models are trained on the "
+        + (
+            "training + validation samples."
+            if include_validation_in_training
+            else "training samples only (validation held out, as for GNNs)."
+        )
+    )
     train_ids, val_ids, test_ids = deepcopy(train_val_test_idxs)
     trained_models: dict = {}
     training_data: dict = {}
@@ -209,9 +240,15 @@ def train_tml_ensemble(
         iteration = i + 1
         seed = random_seed + i
 
-        # TML does not use a separate validation set — merge val into train
+        # Either merge the validation samples into training, or keep them as a
+        # held-out set (training samples only, like the GNNs).
         val_idxs = pd.Index(val_idxs) if val_idxs is not None else pd.Index([])
-        combined_train_idxs = train_idxs.append(val_idxs)
+        if include_validation_in_training:
+            combined_train_idxs = pd.Index(train_idxs).append(val_idxs)
+            held_out_val_idxs = None
+        else:
+            combined_train_idxs = pd.Index(train_idxs)
+            held_out_val_idxs = val_idxs
 
         for df_name, df in dataframes.items():
             log_name = f"{df_name}_{iteration}"
@@ -245,10 +282,20 @@ def train_tml_ensemble(
             )
             test_df = pd.concat([X_test, y_test], axis=1)
 
+            val_df = None
+            if held_out_val_idxs is not None and len(held_out_val_idxs):
+                val_raw = df.loc[held_out_val_idxs]
+                X_val = pd.DataFrame(
+                    transformer.transform(val_raw.iloc[:, :-1]),
+                    index=held_out_val_idxs,
+                    columns=transformer.get_feature_names_out(),
+                )
+                val_df = pd.concat([X_val, val_raw.iloc[:, -1]], axis=1)
+
             scalers[log_name] = transformer
             # training_data always stores original (unscaled) y so that y_true
             # in the predictions DataFrame is always in the original target range.
-            training_data[log_name] = (train_df, test_df)
+            training_data[log_name] = (train_df, val_df, test_df)
 
             # Fit target scaler on training y; models are trained on scaled y.
             target_scaler = TargetScaler(strategy=target_transform)
@@ -284,12 +331,15 @@ def train_tml_ensemble(
                 model = get_model(model_cls=model_cls, model_params=model_params, random_state=seed)
 
                 if is_hpo:
-                    model = _run_grid_search(
+                    model = _run_random_search(
                         model=model,
                         model_id=model_id,
                         train_df=train_df_fit,
                         problem_type=problem_type,
                         random_seed=seed,
+                        n_folds=hpo_n_folds,
+                        n_iter=hpo_num_samples,
+                        custom_grid=(hpo_search_grid or {}).get(model_id.value),
                     )
                 else:
                     logger.info(f"Fitting {model_id.value} (iteration {iteration}, {df_name})...")
@@ -301,35 +351,118 @@ def train_tml_ensemble(
     return trained_models, training_data, scalers, target_scalers
 
 
-def _run_grid_search(
+def tml_search_space(
+    model_id: TraditionalMLModel,
+    problem_type: ProblemType,
+    random_seed: int,
+    n_iter: int,
+    custom_grid: dict | None = None,
+) -> tuple[dict, int]:
+    """
+    Return the grid and number of samples for a TML randomised search.
+
+    The grid is the default grid of ``model_id``, with each parameter set in
+    ``custom_grid`` replacing its default candidates. ``n_iter`` is capped at the number of
+    distinct grid combinations — sampling more would only repeat
+    configurations — with a warning.
+
+    Returns
+    -------
+    tuple[dict, int]
+        ``(grid, n_iter_used)``.
+    """
+    grid = get_tml_search_grid(
+        model=model_id, problem_type=problem_type, random_seed=random_seed, custom_grid=custom_grid
+    )
+    n_combinations = n_grid_combinations(grid)
+    if n_iter > n_combinations:
+        logger.warning(
+            f"hpo_num_samples={n_iter} exceeds the {n_combinations} distinct configurations of "
+            f"the {model_id.value} search grid; sampling all {n_combinations} instead."
+        )
+        n_iter = n_combinations
+    return grid, n_iter
+
+
+def _run_random_search(
     model,
     model_id: TraditionalMLModel,
     train_df: pd.DataFrame,
     problem_type: ProblemType,
     random_seed: int,
+    n_folds: int = 5,
+    n_iter: int = DEFAULT_HPO_NUM_SAMPLES,
+    custom_grid: dict | None = None,
 ) -> object:
-    """Run GridSearchCV HPO and return the best estimator."""
-    param_grid = get_tml_search_grid(
-        model=model_id, problem_type=problem_type, random_seed=random_seed
+    """
+    Tune a TML model with a randomised hyperparameter search.
+
+    Samples ``n_iter`` configurations from the model's search grid (the
+    defaults, with ``custom_grid`` replacing individual parameters; see
+    ``tml_search_space``) with
+    ``RandomizedSearchCV`` and scores them by ``n_folds``-fold shuffled
+    cross-validation (stratified for classification). A summary of the search
+    is attached to the returned estimator as ``polynet_hpo_`` (search grid,
+    samples used, folds, best parameters and CV score) for provenance.
+
+    Parameters
+    ----------
+    model:
+        Unfitted estimator to tune.
+    model_id:
+        Model identifier, used to look up the search grid.
+    train_df:
+        Training data: features in all columns except the last, target last.
+    problem_type:
+        Classification or regression.
+    random_seed:
+        Seed for the fold shuffling and the configuration sampling.
+    n_folds:
+        Number of CV folds. Checked against the data before training starts
+        (``polynet.utils.validation.validate_hpo_folds``).
+    n_iter:
+        Number of configurations to sample (``tml_models.hpo_num_samples``);
+        capped at the number of distinct grid combinations.
+    custom_grid:
+        User candidates for this model (``tml_models.hpo_search_grid[model]``).
+
+    Returns
+    -------
+    object
+        The best estimator, refitted on the full ``train_df``.
+    """
+    param_grid, n_iter = tml_search_space(
+        model_id=model_id,
+        problem_type=problem_type,
+        random_seed=random_seed,
+        n_iter=n_iter,
+        custom_grid=custom_grid,
+    )
+    cv = make_kfold(problem_type=problem_type, n_folds=n_folds, random_seed=random_seed)
+
+    logger.info(
+        f"Running RandomizedSearchCV for {model_id.value} "
+        f"({n_iter} samples, {n_folds}-fold CV, seed={random_seed})..."
     )
 
-    cv = (
-        StratifiedKFold(n_splits=5, shuffle=True, random_state=random_seed)
-        if problem_type == ProblemType.Classification
-        else 5
-    )
-
-    logger.info(f"Running GridSearchCV for {model_id.value} (seed={random_seed})...")
-
-    grid_search = RandomizedSearchCV(
+    random_search = RandomizedSearchCV(
         estimator=model,
         param_distributions=param_grid,
-        n_iter=30,
+        n_iter=n_iter,
         cv=cv,
         random_state=random_seed,
         n_jobs=-1,
     )
-    grid_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
+    random_search.fit(train_df.iloc[:, :-1], train_df.iloc[:, -1])
 
-    logger.info(f"Best params for {model_id.value}: {grid_search.best_params_}")
-    return grid_search.best_estimator_
+    logger.info(f"Best params for {model_id.value}: {random_search.best_params_}")
+    best = random_search.best_estimator_
+    best.polynet_hpo_ = {
+        "search_grid": param_grid,
+        "n_iter": n_iter,
+        "n_folds": n_folds,
+        "seed": random_seed,
+        "best_params": random_search.best_params_,
+        "best_cv_score": float(random_search.best_score_),
+    }
+    return best

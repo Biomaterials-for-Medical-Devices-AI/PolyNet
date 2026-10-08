@@ -6,6 +6,9 @@ import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
+    feature_transformer_widgets,
+    gnn_optimisation_widgets,
+    sampling_fingerprint_from_state,
     split_data_form,
     target_transform_widget,
     train_GNN_models_form,
@@ -18,6 +21,7 @@ from polynet.app.options.file_paths import (
     general_options_path,
     gnn_raw_data_file,
     gnn_raw_data_path,
+    hpo_search_spaces_path,
     ml_results_file_path,
     ml_results_parent_directory,
     model_metrics_file_path,
@@ -41,16 +45,20 @@ from polynet.app.services.model_training import load_dataframes
 from polynet.app.utils import save_data
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
+from polynet.config.enums import SplitSampler
 from polynet.config.schemas import (
     DataConfig,
     FeatureTransformConfig,
     GeneralConfig,
+    GNNOptimisationConfig,
     RepresentationConfig,
     SplitConfig,
     TargetTransformConfig,
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
+from polynet.config.search_grid import effective_search_spaces
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.pipeline import (
     compute_data_splits,
@@ -61,16 +69,18 @@ from polynet.pipeline import (
     train_gnn,
     train_tml,
 )
+from polynet.utils.validation import validate_hpo_folds
 
 
 def train_models(
     experiment_name: str,
     tml_models: dict,
-    preprocessing_cfg: FeatureTransformConfig,
+    preprocessing_cfg: FeatureTransformConfig | None,
     gnn_conv_params: dict,
     representation_options: RepresentationConfig,
     data_options: DataConfig,
     target_cfg: TargetTransformConfig | None = None,
+    gnn_optimisation_cfg: GNNOptimisationConfig | None = None,
 ):
 
     if target_cfg is None:
@@ -95,6 +105,8 @@ def train_models(
         gnn_training_opts_path.unlink()
     if target_transform_opts_path.exists():
         target_transform_opts_path.unlink()
+    if hpo_search_spaces_path(experiment_path).exists():
+        hpo_search_spaces_path(experiment_path).unlink()
     if ml_results_dir.exists():
         rmtree(ml_results_dir)
     if split_cfg_path.exists():
@@ -109,9 +121,15 @@ def train_models(
         test_ratio=st.session_state[GeneralConfigStateKeys.TestSize],
         val_ratio=st.session_state[GeneralConfigStateKeys.ValidationSize],
         n_bootstrap_iterations=st.session_state.get(GeneralConfigStateKeys.BootstrapIterations, 1),
+        sampler=st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random),
+        sampling_fingerprint=sampling_fingerprint_from_state(),
     )
     save_options(split_cfg_path, split_cfg)
     save_options(target_transform_opts_path, target_cfg)
+    # Pipeline-wide feature preprocessing (TML descriptors and GNN polymer
+    # descriptors); only set when there are tabular features to scale.
+    if preprocessing_cfg is not None:
+        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
     # read the data
     data = pd.read_csv(
@@ -119,14 +137,87 @@ def train_models(
         index_col=0,
     )
 
-    # Compute data splits using the shared pipeline stage
-    train_val_test_idxs = compute_data_splits(
-        data=data,
-        data_cfg=data_options,
-        split_cfg=split_cfg,
-        random_seed=general_experiment_options.random_seed,
-        out_dir=experiment_path,
+    # Compute data splits using the shared pipeline stage. Some samplers cannot
+    # split some datasets (e.g. clusters larger than the validation set); show
+    # why instead of a traceback.
+    try:
+        train_val_test_idxs = compute_data_splits(
+            data=data,
+            data_cfg=data_options,
+            split_cfg=split_cfg,
+            random_seed=general_experiment_options.random_seed,
+            out_dir=experiment_path,
+            weights_col=representation_options.weights_col,
+        )
+    except ValueError as e:
+        st.error(
+            f"The data could not be split with these settings: {e} Try another sampler, "
+            "the 'random' split method or larger validation/test ratios."
+        )
+        st.stop()
+
+    tml_cfg = (
+        TrainTMLConfig(
+            train_tml=st.session_state[TrainTMLStateKeys.TrainTML],
+            selected_models=tml_models,
+            hpo_n_folds=int(st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5)),
+            include_validation_in_training=st.session_state.get(
+                TrainTMLStateKeys.IncludeValidation, True
+            ),
+            hyperparameter_optimisation=bool(
+                st.session_state.get(TrainTMLStateKeys.PerformHyperparameterTuning, False)
+            ),
+            hpo_num_samples=int(
+                st.session_state.get(TrainTMLStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+            ),
+            hpo_search_grid=st.session_state.get(TrainTMLStateKeys.SearchGrid, {}),
+        )
+        if tml_models
+        else None
     )
+    gnn_cfg = (
+        TrainGNNConfig(
+            train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
+            gnn_convolutional_layers=gnn_conv_params,
+            share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
+            epochs=int(
+                st.session_state.get(
+                    TrainGNNStateKeys.Epochs, TrainGNNConfig.model_fields["epochs"].default
+                )
+            ),
+            hyperparameter_optimisation=bool(
+                st.session_state.get(TrainGNNStateKeys.HypTunning, False)
+            ),
+            hpo_num_samples=int(
+                st.session_state.get(TrainGNNStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+            ),
+            hpo_search_grid=st.session_state.get(TrainGNNStateKeys.SearchGrid, {}),
+            optimisation=gnn_optimisation_cfg or GNNOptimisationConfig(),
+        )
+        if gnn_conv_params
+        else None
+    )
+
+    # Check the HPO fold count against the data before any training starts.
+    try:
+        validate_hpo_folds(
+            data=data,
+            data_cfg=data_options,
+            split_indexes=train_val_test_idxs,
+            tml_cfg=tml_cfg,
+            gnn_cfg=gnn_cfg,
+        )
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
+
+    # Provenance: the HPO grids actually searched (default candidates, with any
+    # parameter set in hpo_search_grid replacing its defaults).
+    search_spaces = effective_search_spaces(
+        data_options.problem_type, gnn_cfg=gnn_cfg, tml_cfg=tml_cfg
+    )
+    if search_spaces:
+        save_options(hpo_search_spaces_path(experiment_path), search_spaces)
 
     # Create directory to save plots
     plots_dir = plots_directory(experiment_path=experiment_path)
@@ -138,11 +229,7 @@ def train_models(
     # TML training
     # ------------------------------------------------------------------
     if tml_models:
-        tml_cfg = TrainTMLConfig(
-            train_tml=st.session_state[TrainTMLStateKeys.TrainTML], selected_models=tml_models
-        )
         save_options(path=tml_training_opts_path, options=tml_cfg)
-        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
         # load descriptor DataFrames from disk (saved by Page 2)
         dataframes = load_dataframes(
@@ -191,11 +278,6 @@ def train_models(
     # GNN training
     # ------------------------------------------------------------------
     if gnn_conv_params:
-        gnn_cfg = TrainGNNConfig(
-            train_gnn=st.session_state[TrainGNNStateKeys.TrainGNN],
-            gnn_convolutional_layers=gnn_conv_params,
-            share_gnn_parameters=st.session_state.get(TrainGNNStateKeys.SharedGNNParams, False),
-        )
         save_options(path=gnn_training_opts_path, options=gnn_cfg)
 
         dataset = CustomPolymerGraph(
@@ -219,6 +301,8 @@ def train_models(
             random_seed=general_experiment_options.random_seed,
             out_dir=experiment_path,
             target_cfg=target_cfg,
+            # Polymer descriptors use the pipeline-wide feature scaler.
+            preprocessing_cfg=preprocessing_cfg,
         )
 
         gnn_predictions_df = run_gnn_inference(
@@ -252,12 +336,13 @@ def train_models(
         label_col_name = get_true_label_column_name(
             target_variable_name=data_options.target_variable_name
         )
-        gnn_predictions_df = gnn_predictions_df.drop(columns=[label_col_name])
-
+        # Same merge as the CLI: the set label comes from the GNN predictions.
+        # TML reports the validation samples as Training when they were used
+        # for TML training, so merging on the set would drop them.
         predictions = pd.merge(
-            left=tml_predictions_df,
-            right=gnn_predictions_df,
-            on=[ResultColumn.INDEX, ResultColumn.SET, iterator],
+            left=gnn_predictions_df.drop(columns=[label_col_name]),
+            right=tml_predictions_df.drop(columns=[ResultColumn.SET]),
+            on=[ResultColumn.INDEX, iterator],
         )
 
         metrics = {}
@@ -320,12 +405,11 @@ if experiment_name:
 
     if representation_file_path(experiment_path=experiment_path).exists():
 
-        tml_models, preprocessing_cfg = train_TML_models(problem_type=data_opts.problem_type)
+        tml_models = train_TML_models(problem_type=data_opts.problem_type)
 
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
         tml_models = {}
-        preprocessing_cfg = {}
 
     st.markdown("## Graph Neural Networks (GNNs)")
 
@@ -334,15 +418,35 @@ if experiment_name:
         gnn_conv_params = train_GNN_models_form(
             representation_opts=representation_opts, problem_type=data_opts.problem_type
         )
+        gnn_optimisation_cfg = (
+            gnn_optimisation_widgets(problem_type=data_opts.problem_type)
+            if gnn_conv_params
+            else None
+        )
 
     else:
         st.error(
             "No graph representation found. Please build a graph representation of your polymers first."
         )
         gnn_conv_params = {}
+        gnn_optimisation_cfg = None
+
+    # ------------------------------------------------------------------
+    # Feature preprocessing (pipeline-wide): only meaningful when there are
+    # tabular features to scale — TML descriptors and/or GNN polymer descriptors.
+    # ------------------------------------------------------------------
+    gnn_polymer_descriptors = bool(gnn_conv_params) and bool(
+        representation_opts.polymer_descriptors
+    )
+    preprocessing_cfg = None
+    if tml_models or gnn_polymer_descriptors:
+        st.markdown("## Feature Preprocessing")
+        preprocessing_cfg = feature_transformer_widgets(
+            train_tml=bool(tml_models), gnn_polymer_descriptors=gnn_polymer_descriptors
+        )
 
     st.markdown("## Data Splitting Options")
-    split_data_form(problem_type=data_opts.problem_type)
+    valid_split = split_data_form(problem_type=data_opts.problem_type)
 
     # ------------------------------------------------------------------
     # Target variable scaling (regression only)
@@ -352,7 +456,7 @@ if experiment_name:
         st.markdown("## Target Variable Scaling")
         target_cfg = target_transform_widget()
 
-    if gnn_conv_params or tml_models:
+    if (gnn_conv_params or tml_models) and valid_split:
         disabled = False
     else:
         disabled = True
@@ -365,6 +469,7 @@ if experiment_name:
             tml_models=tml_models,
             preprocessing_cfg=preprocessing_cfg,
             gnn_conv_params=gnn_conv_params,
+            gnn_optimisation_cfg=gnn_optimisation_cfg,
             representation_options=representation_opts,
             data_options=data_opts,
             target_cfg=target_cfg,

@@ -15,6 +15,7 @@ from polynet.config.constants import ResultColumn
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.general import GeneralConfig
 from polynet.utils.graph_analysis import compute_graph_feature_analysis, save_graph_feature_analysis
+from polynet.utils.validation import find_duplicate_ids
 
 
 def save_experiment(df: pd.DataFrame):
@@ -31,9 +32,11 @@ def save_experiment(df: pd.DataFrame):
 
     path_to_data = data_file_path(file_name=dataset_name, experiment_path=experiment_path)
 
+    # Duplicated IDs were replaced by row numbers in select_data_form.
+    selected_id = st.session_state[CreateExperimentStateKeys.IDCol]
     id_col = (
-        st.session_state[CreateExperimentStateKeys.IDCol]
-        if st.session_state[CreateExperimentStateKeys.IDCol] is not None
+        selected_id
+        if selected_id is not None and not find_duplicate_ids(df[selected_id])
         else ResultColumn.INDEX
     )
 

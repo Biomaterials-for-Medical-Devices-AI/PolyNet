@@ -46,13 +46,13 @@ polynet/
 │   ├── metrics.py          # evaluation metrics
 │   └── hyperopt.py         # gnn_hyp_opt() — Ray Tune + ASHA HPO for GNN
 │
-├── inference/       # Prediction assembly + unseen-data prediction (predict_unseen_*)
+├── inference/       # Prediction assembly, unseen-data prediction (predict_unseen_*), split ensembles (ensemble.py)
 ├── pipeline/        # Shared pipeline stage functions (stages.py)
 ├── explainability/  # Attribution
 │   ├── masking.py          # GNN chemistry-masking attribution
 │   ├── explain.py          # compute_global_attribution(), compute_local_attribution() (GNN)
 │   ├── shap_explain.py     # compute_global_shap_attribution(), compute_local_shap_attribution() (TML)
-│   ├── embeddings.py       # Graph embedding extraction (PCA, t-SNE)
+│   ├── embeddings.py       # Graph embedding extraction (PCA, t-SNE) — not currently exposed in the GUI
 │   └── visualization.py    # Shared plotting helpers
 │
 ├── plotting/        # Data-exploration plots

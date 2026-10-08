@@ -16,7 +16,7 @@ Public API
 ----------
 ::
 
-    from polynet.factories.optimizer import create_optimizer, create_scheduler
+    from polynet.factories.optimizer import create_optimizer, create_scheduler, step_scheduler
     from polynet.config.enums import Optimizer, Scheduler
 
     optimizer = create_optimizer(
@@ -195,3 +195,24 @@ def create_scheduler(
         )
 
     return _SCHEDULER_REGISTRY[scheduler]()
+
+
+def step_scheduler(scheduler: Any, val_loss: float) -> None:
+    """
+    Advance a learning rate scheduler by one epoch.
+
+    ``ReduceLROnPlateau`` decides on the validation loss, so it receives it;
+    every other scheduler steps on the epoch count alone (passing a metric to
+    their ``step`` would be interpreted as an epoch number).
+
+    Parameters
+    ----------
+    scheduler:
+        The scheduler returned by ``create_scheduler``.
+    val_loss:
+        Validation loss of the epoch that just finished.
+    """
+    if isinstance(scheduler, ReduceLROnPlateau):
+        scheduler.step(val_loss)
+    else:
+        scheduler.step()

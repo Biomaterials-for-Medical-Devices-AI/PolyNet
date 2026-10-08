@@ -1,18 +1,25 @@
 import streamlit as st
 
+from polynet.app.components.forms.search_grid import num_samples_widget, search_grid_editor
 from polynet.app.options.state_keys import (
     GeneralConfigStateKeys,
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
+from polynet.config.constants import POLYBERT_MODEL
 from polynet.config.enums import (
     ApplyWeightingToGraph,
     ArchitectureParam,
     FeatureSelection,
+    MolecularDescriptor,
     Network,
+    Optimizer,
     Pooling,
     ProblemType,
+    RegressionLoss,
+    Scheduler,
     SplitMethod,
+    SplitSampler,
     SplitType,
     TargetTransformDescriptor,
     TraditionalMLModel,
@@ -20,14 +27,27 @@ from polynet.config.enums import (
     TransformDescriptor,
 )
 from polynet.config.schemas.feature_preprocessing import FeatureTransformConfig
+from polynet.config.schemas.fingerprints import MorganFingerprintConfig, RDKitFingerprintConfig
 from polynet.config.schemas.representation import RepresentationConfig
+from polynet.config.schemas.split_data import (
+    DETERMINISTIC_SAMPLERS,
+    SAMPLERS_USING_FINGERPRINTS,
+    available_samplers,
+    deterministic_sampler_warning,
+)
 from polynet.config.schemas.target_preprocessing import TargetTransformConfig
+from polynet.config.schemas.training import GNNOptimisationConfig, TrainGNNConfig
+from polynet.config.search_grid import (
+    SHARED_GNN_GRID_KEY,
+    default_gnn_architecture_grid,
+    default_gnn_shared_grid,
+    default_tml_grid,
+)
 
 
-def train_TML_models(problem_type: ProblemType):
+def train_TML_models(problem_type: ProblemType) -> dict:
 
     models = {}
-    feature_cfg = {}
 
     st.write(
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
@@ -35,11 +55,42 @@ def train_TML_models(problem_type: ProblemType):
 
     if st.toggle("Train TML models", key=TrainTMLStateKeys.TrainTML):
 
+        st.toggle(
+            "Include the validation set in TML training",
+            value=True,
+            key=TrainTMLStateKeys.IncludeValidation,
+            help="On (default): TML models, their feature scaling and their hyperparameter "
+            "search use the training and validation samples of each split. Off: they use "
+            "the training samples only — the same data the GNNs train on — and the "
+            "validation samples are scored as a held-out validation set.",
+        )
+
         hyperparameter_tunning = st.checkbox(
             "Perform hyperparameter tuning",
             key=TrainTMLStateKeys.PerformHyperparameterTuning,
-            help="If enabled, the hyperparameters of the models will be tuned using a grid search. This may take a long time depending on the number of models and hyperparameters selected.",
+            help="If enabled, the hyperparameters of the models will be tuned with a "
+            "randomised search (configurations sampled from a search grid, scored by k-fold "
+            "shuffled cross-validation; the grids can be customised below). This may take a "
+            "long time depending on the number of models selected.",
         )
+
+        if hyperparameter_tunning:
+            st.number_input(
+                "Number of cross-validation folds (k)",
+                min_value=2,
+                value=5,
+                step=1,
+                key=TrainTMLStateKeys.HPONumFolds,
+                help="Folds used to score each configuration (shuffled; stratified for "
+                "classification). k must not exceed the number of training samples or, for "
+                "classification, the size of the smallest class — this is checked before "
+                "training starts.",
+            )
+            num_samples_widget(
+                key=TrainTMLStateKeys.HPONumSamples,
+                help_text="Configurations RandomizedSearchCV samples per model and split "
+                "(capped at the number of distinct configurations in the grid).",
+            )
 
         st.markdown(
             """
@@ -247,16 +298,56 @@ def train_TML_models(problem_type: ProblemType):
                 )
                 models[TraditionalMLModel.XGBoost]["max_depth"] = max_depth
 
-        st.divider()
+        st.session_state[TrainTMLStateKeys.SearchGrid] = {}
+        if hyperparameter_tunning:
+            grid = {}
+            for model in models:
+                custom = search_grid_editor(
+                    default_tml_grid(model, problem_type),
+                    key_prefix=f"tml_grid_{model.value}_",
+                    title=f"Search grid — {model.value}",
+                )
+                if custom:
+                    grid[model.value] = custom
+            st.session_state[TrainTMLStateKeys.SearchGrid] = grid
 
-        feature_cfg = feature_transformer_widgets()
-
-    return models, feature_cfg
+    return models
 
 
-def feature_transformer_widgets() -> FeatureTransformConfig:
-    st.markdown("### Feature preprocessing")
-    st.caption("Scale features and optionally apply feature selection (fit on train only).")
+def feature_transformer_widgets(
+    train_tml: bool, gnn_polymer_descriptors: bool
+) -> FeatureTransformConfig:
+    """
+    Render the pipeline-wide feature preprocessing widgets.
+
+    The scaler applies to every tabular feature the pipeline uses: the
+    molecular descriptors of traditional ML models and the user-supplied
+    polymer descriptors concatenated to the GNN graph embedding. Feature
+    selection is only offered when traditional ML models are trained, since
+    it does not apply to GNNs.
+
+    Parameters
+    ----------
+    train_tml:
+        Whether traditional ML models will be trained.
+    gnn_polymer_descriptors:
+        Whether GNNs will be trained with user-supplied polymer descriptors.
+
+    Returns
+    -------
+    FeatureTransformConfig
+        The selected scaler and (TML only) feature selection steps.
+    """
+    applies_to = []
+    if train_tml:
+        applies_to.append("the molecular descriptors of the TML models")
+    if gnn_polymer_descriptors:
+        applies_to.append("the polymer descriptors concatenated to the GNN graph embedding")
+    st.caption(
+        "Scaling is fitted on the training set of each split and applied to "
+        + " and to ".join(applies_to)
+        + "."
+    )
 
     scaler = st.selectbox(
         "Scaling / normalization",
@@ -274,8 +365,9 @@ def feature_transformer_widgets() -> FeatureTransformConfig:
         help="Applied to X (independent variables). Fit on training set, reused for val/test.",
     )
 
-    enable_fs = st.toggle(
-        "Enable feature selection",
+    # Feature selection applies to TML models only.
+    enable_fs = train_tml and st.toggle(
+        "Enable feature selection (TML models only)",
         value=False,
         key=getattr(TrainTMLStateKeys, "EnableFeatureSelection", "EnableFeatureSelection"),
         help="Applies selection after scaling. Steps are applied sequentially in the order chosen.",
@@ -395,7 +487,19 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     hyperparameter_tunning = st.checkbox(
         "Perform hyperparameter tuning",
         key=TrainGNNStateKeys.HypTunning,
-        help="If enabled, hyperparameters will be tuned via grid search (can be slow).",
+        help="If enabled, hyperparameters will be tuned with Ray Tune by sampling "
+        "configurations from a search grid (defaults can be customised below; can be slow).",
+    )
+
+    st.number_input(
+        "Number of training epochs",
+        min_value=1,
+        value=TrainGNNConfig.model_fields["epochs"].default,
+        step=10,
+        key=TrainGNNStateKeys.Epochs,
+        help="Epochs each GNN is trained for (the weights of the epoch with the lowest "
+        "validation loss are kept). Hyperparameter-tuning trials train for the same number "
+        "of epochs.",
     )
 
     st.markdown("### Select the GNN convolutional layers you want to train")
@@ -417,6 +521,31 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     if not conv_layers:
         st.error("Please select at least one GNN convolutional layer to train.")
         st.stop()
+
+    st.session_state[TrainGNNStateKeys.SearchGrid] = {}
+    if hyperparameter_tunning:
+        num_samples_widget(
+            key=TrainGNNStateKeys.HPONumSamples,
+            help_text="Configurations Ray Tune samples from the search grid for each "
+            "architecture and split.",
+        )
+        grid = {}
+        shared = search_grid_editor(
+            default_gnn_shared_grid(problem_type),
+            key_prefix="gnn_grid_shared_",
+            title="Search grid — parameters shared by all architectures",
+        )
+        if shared:
+            grid[SHARED_GNN_GRID_KEY] = shared
+        for network in conv_layers:
+            specific = search_grid_editor(
+                default_gnn_architecture_grid(network),
+                key_prefix=f"gnn_grid_{network.value}_",
+                title=f"Search grid — {network.value}-specific parameters",
+            )
+            if specific:
+                grid[network.value] = specific
+        st.session_state[TrainGNNStateKeys.SearchGrid] = grid
 
     if not hyperparameter_tunning:
         share_params = st.checkbox(
@@ -496,6 +625,114 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
             gnn_conv_params[net].update(shared_params)
 
     return gnn_conv_params
+
+
+def gnn_optimisation_widgets(problem_type: ProblemType) -> GNNOptimisationConfig:
+    """
+    Render the "Advanced training options" expander for GNNs.
+
+    Lets the user choose the optimiser, the learning-rate scheduler (with only
+    the parameters that scheduler uses) and, for regression, the loss. The
+    defaults reproduce PolyNet's historical settings (Adam, ReduceLROnPlateau
+    with factor 0.9 / patience 15 / min_lr 1e-8, RMSE loss). The same
+    settings are used for final training and for every HPO trial.
+
+    Parameters
+    ----------
+    problem_type:
+        Classification or regression (the loss choice is regression-only).
+
+    Returns
+    -------
+    GNNOptimisationConfig
+        The selected settings.
+    """
+    defaults = GNNOptimisationConfig()
+    options: dict = {}
+
+    with st.expander("Advanced training options (optimiser, scheduler, loss)", expanded=False):
+        st.caption(
+            "Applied to final training and to every hyperparameter-optimisation trial. "
+            "The defaults reproduce PolyNet's standard settings."
+        )
+        options["optimizer"] = st.selectbox(
+            "Optimiser",
+            options=list(Optimizer),
+            index=list(Optimizer).index(defaults.optimizer),
+            key=TrainGNNStateKeys.Optimizer,
+        )
+        scheduler = st.selectbox(
+            "Learning-rate scheduler",
+            options=list(Scheduler),
+            index=list(Scheduler).index(defaults.scheduler),
+            key=TrainGNNStateKeys.Scheduler,
+            help="reduce_lr_on_plateau lowers the learning rate when the validation loss "
+            "stops improving; the other schedulers decay it on a fixed epoch schedule.",
+        )
+        options["scheduler"] = scheduler
+        options["scheduler_factor"] = st.number_input(
+            "Decay factor (gamma)",
+            min_value=0.01,
+            max_value=0.99,
+            value=defaults.scheduler_factor,
+            step=0.01,
+            key=TrainGNNStateKeys.SchedulerFactor,
+            help="The learning rate is multiplied by this factor at each decay.",
+        )
+        if scheduler == Scheduler.ReduceLROnPlateau:
+            options["scheduler_patience"] = st.number_input(
+                "Patience (epochs)",
+                min_value=0,
+                value=defaults.scheduler_patience,
+                step=1,
+                key=TrainGNNStateKeys.SchedulerPatience,
+            )
+            options["scheduler_min_lr"] = st.number_input(
+                "Minimum learning rate",
+                min_value=0.0,
+                value=defaults.scheduler_min_lr,
+                format="%.1e",
+                key=TrainGNNStateKeys.SchedulerMinLR,
+            )
+        elif scheduler == Scheduler.StepLR:
+            options["scheduler_step_size"] = st.number_input(
+                "Decay every N epochs",
+                min_value=1,
+                value=defaults.scheduler_step_size,
+                step=1,
+                key=TrainGNNStateKeys.SchedulerStepSize,
+            )
+        elif scheduler == Scheduler.MultiStepLR:
+            milestones = st.text_input(
+                "Decay at epochs (comma-separated)",
+                value=", ".join(str(m) for m in defaults.scheduler_milestones),
+                key=TrainGNNStateKeys.SchedulerMilestones,
+            )
+            try:
+                options["scheduler_milestones"] = [
+                    int(m) for m in milestones.replace(" ", "").split(",") if m
+                ]
+            except ValueError:
+                st.error("Milestones must be whole numbers separated by commas, e.g. 30, 60, 90.")
+                st.stop()
+
+        if problem_type == ProblemType.Regression:
+            options["regression_loss"] = st.selectbox(
+                "Regression loss",
+                options=list(RegressionLoss),
+                index=list(RegressionLoss).index(defaults.regression_loss),
+                key=TrainGNNStateKeys.RegressionLoss,
+                help="rmse: root mean squared error (default); mse: mean squared error; "
+                "mae: mean absolute error (less sensitive to outliers).",
+            )
+        else:
+            st.caption("Classification models are trained with cross-entropy loss.")
+
+    try:
+        return GNNOptimisationConfig(**options)
+    except ValueError as e:
+        st.error(str(e))
+        st.stop()
 
 
 def GNN_shared_params_form(
@@ -610,7 +847,120 @@ def GNN_shared_params_form(
     return shared_params
 
 
-def split_data_form(problem_type: ProblemType):
+_SAMPLER_HELP = {
+    SplitSampler.Random: "Random split.",
+    SplitSampler.KennardStone: "Kennard–Stone: training set spans the fingerprint space "
+    "(deterministic).",
+    SplitSampler.SPXY: "SPXY: like Kennard–Stone on fingerprints and target values "
+    "(deterministic).",
+    SplitSampler.KMeans: "k-means clusters of fingerprints; each cluster stays in one set.",
+    SplitSampler.OptiSim: "OptiSim diverse clusters of fingerprints; each cluster stays in one set.",
+    SplitSampler.TargetProperty: "Ordered by target value: extreme values go to the test "
+    "set (deterministic).",
+}
+
+
+def sampler_widgets(problem_type: ProblemType, split_method: SplitMethod) -> None:
+    """
+    astartes sampler and, for fingerprint samplers, the sampling fingerprint.
+
+    Only the samplers valid for ``problem_type`` and ``split_method`` are
+    offered (``available_samplers``). The sampling fingerprint is used only to
+    split the data; it does not change the representations.
+    """
+    options = available_samplers(problem_type, split_method)
+    # A sampler chosen earlier may no longer be valid (e.g. after switching to
+    # stratified); fall back to random instead of keeping an invalid choice.
+    if st.session_state.get(GeneralConfigStateKeys.Sampler) not in options:
+        st.session_state[GeneralConfigStateKeys.Sampler] = SplitSampler.Random
+    sampler = st.selectbox(
+        "Select the sampler",
+        options=options,
+        index=0,
+        key=GeneralConfigStateKeys.Sampler,
+        format_func=lambda s: s.value,
+        help="astartes sampler that draws the training, validation and test sets "
+        "(astartes default hyperparameters). "
+        + " ".join(f"{s.value}: {_SAMPLER_HELP[s]}" for s in options),
+    )
+    st.caption(_SAMPLER_HELP[sampler])
+
+    if sampler not in SAMPLERS_USING_FINGERPRINTS:
+        return
+    st.markdown(
+        "**Sampling fingerprint** — each monomer's fingerprint is weighted by its ratio, as "
+        "in the representations. Used only to split the data; it does not change the "
+        "representations."
+    )
+    cols = st.columns(3)
+    with cols[0]:
+        fingerprint = st.selectbox(
+            "Fingerprint",
+            options=[
+                MolecularDescriptor.Morgan,
+                MolecularDescriptor.RDKitFP,
+                MolecularDescriptor.PolyBERT,
+            ],
+            key=GeneralConfigStateKeys.SamplingFingerprint,
+            format_func=lambda f: f.value,
+        )
+    if fingerprint == MolecularDescriptor.PolyBERT:
+        st.caption(
+            f"polyBERT embedding ({POLYBERT_MODEL}, downloaded on first use). It expects "
+            "PSMILES; plain SMILES are embedded as given."
+        )
+        return
+    with cols[1]:
+        st.number_input(
+            "Fingerprint size",
+            min_value=1,
+            value=MorganFingerprintConfig().fp_size,
+            step=1,
+            key=GeneralConfigStateKeys.SamplingFpSize,
+        )
+    with cols[2]:
+        if fingerprint == MolecularDescriptor.Morgan:
+            st.number_input(
+                "Radius",
+                min_value=0,
+                value=MorganFingerprintConfig().radius,
+                step=1,
+                key=GeneralConfigStateKeys.SamplingFpRadius,
+            )
+
+
+def sampling_fingerprint_from_state() -> dict | None:
+    """The ``sampling_fingerprint`` settings chosen in ``sampler_widgets`` (``None`` if unused)."""
+    sampler = st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random)
+    if sampler not in SAMPLERS_USING_FINGERPRINTS:
+        return None
+    fingerprint = st.session_state.get(
+        GeneralConfigStateKeys.SamplingFingerprint, MolecularDescriptor.Morgan
+    )
+    if fingerprint == MolecularDescriptor.PolyBERT:
+        return {"fingerprint": fingerprint}
+    settings = {
+        "fingerprint": fingerprint,
+        "fp_size": st.session_state.get(
+            GeneralConfigStateKeys.SamplingFpSize, RDKitFingerprintConfig().fp_size
+        ),
+    }
+    if fingerprint == MolecularDescriptor.Morgan:
+        settings["radius"] = st.session_state.get(
+            GeneralConfigStateKeys.SamplingFpRadius, MorganFingerprintConfig().radius
+        )
+    return settings
+
+
+def split_data_form(problem_type: ProblemType) -> bool:
+    """
+    Data splitting widgets.
+
+    Returns
+    -------
+    bool
+        Whether the chosen ratios leave data for training.
+    """
 
     split_type = st.selectbox(
         "Select the split method",
@@ -636,6 +986,10 @@ def split_data_form(problem_type: ProblemType):
                 options=[0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65],
                 value=0.5,
                 key=GeneralConfigStateKeys.DesiredProportion,
+                help="Proportion of the minority class after undersampling the majority "
+                "class. The training and validation sets are each balanced after the "
+                "split; the test set keeps the original class distribution (ACS Appl. "
+                "Mater. Interfaces 2023, 15 (11), 14155–14163).",
             )
 
     else:
@@ -647,26 +1001,51 @@ def split_data_form(problem_type: ProblemType):
             key=GeneralConfigStateKeys.SplitMethod,
         )
 
+    sampler_widgets(
+        problem_type, st.session_state.get(GeneralConfigStateKeys.SplitMethod, SplitMethod.Random)
+    )
+
     if split_type == SplitType.TrainValTest:
-        st.select_slider(
+        n_repetitions = st.select_slider(
             "Select the number of bootstrap iterations",
             options=list(range(1, 11)),
             value=1,
             key=GeneralConfigStateKeys.BootstrapIterations,
         )
+        sampler = st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random)
+        if sampler in DETERMINISTIC_SAMPLERS and n_repetitions > 1:
+            st.warning(deterministic_sampler_warning(sampler, n_repetitions))
 
-    st.slider(
+    test_ratio = st.slider(
         "Select the test split ratio",
         min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.TestSize,
+        help="Fraction of the full dataset held out for testing.",
     )
 
-    st.slider(
+    val_ratio = st.slider(
         "Select the validation split ratio",
         min_value=0.01,
         max_value=0.9,
         value=0.2,
         key=GeneralConfigStateKeys.ValidationSize,
+        help="Fraction of the full dataset used for validation (e.g. test 0.1 and "
+        "validation 0.1 give an 80/10/10 split).",
     )
+
+    train_ratio = 1.0 - test_ratio - val_ratio
+    if train_ratio <= 0:
+        st.error(
+            f"Test ({test_ratio:.0%}) and validation ({val_ratio:.0%}) ratios add up to "
+            f"{test_ratio + val_ratio:.0%}, leaving no data for training. Their sum must be "
+            "below 100%."
+        )
+        return False
+
+    st.caption(
+        f"Split: {train_ratio:.0%} training / {val_ratio:.0%} validation / "
+        f"{test_ratio:.0%} test of the full dataset."
+    )
+    return True

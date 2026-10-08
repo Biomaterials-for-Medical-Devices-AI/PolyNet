@@ -4,15 +4,15 @@ import streamlit as st
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
-from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
+from polynet.config.enums import DatasetName, ProblemType
 from polynet.data.creator import DatasetCreator
-from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
-from polynet.utils.chem_utils import (
-    canonicalise_psmiles,
-    canonicalise_smiles,
-    check_smiles_cols,
-    determine_string_representation,
+from polynet.data.structures import (
+    canonicalise_structures,
+    detect_string_representation,
+    find_invalid_structures,
 )
+from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
+from polynet.utils.validation import find_duplicate_ids
 
 
 @st.cache_data
@@ -25,25 +25,23 @@ def _load_benchmark_dataset(dataset_name) -> pd.DataFrame:
     return DatasetCreator(dataset_name).create_dataset()
 
 
+# Thin cached wrappers around the shared, Streamlit-free structure preparation
+# in ``polynet.data.structures`` (also used by the CLI and ``predict_external``).
+
+
 @st.cache_data
-def _validate_smiles_cols(df: pd.DataFrame, smiles_cols: tuple) -> dict:
-    return check_smiles_cols(col_names=list(smiles_cols), df=df)
+def _validate_smiles_cols(df: pd.DataFrame, smiles_cols: tuple, str_representation: str) -> dict:
+    return find_invalid_structures(df, list(smiles_cols), str_representation)
 
 
 @st.cache_data
 def _determine_string_representation(df: pd.DataFrame, smiles_cols: tuple) -> str:
-    return determine_string_representation(df=df, smiles_cols=list(smiles_cols))
+    return detect_string_representation(df, list(smiles_cols))
 
 
 @st.cache_data
 def _canonicalise_df(df: pd.DataFrame, smiles_cols: tuple, str_representation: str) -> pd.DataFrame:
-    df = df.copy()
-    for col in smiles_cols:
-        if str_representation == StringRepresentation.SMILES:
-            df[col] = df[col].apply(canonicalise_smiles)
-        elif str_representation == StringRepresentation.PSMILES:
-            df[col] = df[col].apply(canonicalise_psmiles)
-    return df
+    return canonicalise_structures(df, list(smiles_cols), str_representation)
 
 
 @st.cache_data
@@ -124,7 +122,10 @@ def select_data_form():
             st.stop()
 
         else:
-            invalid_smiles = _validate_smiles_cols(df, tuple(smiles_cols))
+            # Detect first so validation uses the right parser for the representation.
+            str_representation = _determine_string_representation(df, tuple(smiles_cols))
+
+            invalid_smiles = _validate_smiles_cols(df, tuple(smiles_cols), str_representation)
             if invalid_smiles:
                 for col, smiles in invalid_smiles.items():
                     st.error(
@@ -136,7 +137,6 @@ def select_data_form():
                 )
                 st.stop()
 
-            str_representation = _determine_string_representation(df, tuple(smiles_cols))
             st.write(f"The `{str_representation}` representation has been identified.")
             st.success(f"`{str_representation}` columns checked successfully.")
             st.session_state[CreateExperimentStateKeys.StringRepresentation] = str_representation
@@ -148,7 +148,11 @@ def select_data_form():
             value=True,
             disabled=True,
         ):
-            df = _canonicalise_df(df, tuple(smiles_cols), str_representation)
+            try:
+                df = _canonicalise_df(df, tuple(smiles_cols), str_representation)
+            except ValueError as e:
+                st.error(str(e))
+                st.stop()
             st.success(f"`{str_representation}` columns canonicalized successfully.")
 
         # Columns that are already spoken for — exclude from downstream selectors.
@@ -170,7 +174,17 @@ def select_data_form():
             key=CreateExperimentStateKeys.IDCol,
         )
 
-        if id_col is None:
+        duplicate_ids = find_duplicate_ids(df[id_col]) if id_col is not None else []
+        if duplicate_ids:
+            st.warning(
+                f"The ID column '{id_col}' has {len(duplicate_ids)} duplicated value(s), e.g. "
+                f"{', '.join(map(str, duplicate_ids[:5]))}. IDs must be unique, so the samples "
+                f"will be numbered from 0 to {len(df) - 1} in row order instead "
+                f"('{id_col}' is kept as a regular column)."
+            )
+            df.index.name = ResultColumn.INDEX
+            df = df.reset_index()
+        elif id_col is None:
             st.warning("An ID column to identify your polymers is highly recommended.")
             st.info(
                 f"To differentiate the instances, we will number your instances in from 0 to {len(df)-1} in order of appereance"

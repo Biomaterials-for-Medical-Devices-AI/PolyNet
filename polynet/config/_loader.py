@@ -98,8 +98,6 @@ _TML_MODEL_COMPAT: dict[str, str] = {
     "Random Forest": "random_forest",
     "XGBoost": "xgboost",
     "Support Vector Machine": "support_vector_machine",
-    "K-Neighbors Classifier": "k_neighbors_classifier",
-    "Decision Tree Classifier": "decision_tree_classifier",
 }
 
 _NETWORK_COMPAT: dict[str, str] = {
