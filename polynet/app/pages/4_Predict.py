@@ -4,6 +4,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.forms.applicability_domain import applicability_domain_form
 from polynet.app.components.plots import (
     display_mean_std_model_metrics,
     display_model_results,
@@ -22,6 +23,7 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
+from polynet.applicability import summarise_domain
 from polynet.config.enums import ProblemType, TransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
@@ -213,6 +215,8 @@ if experiment_name:
                         )
                     )
 
+        ad_cfg = applicability_domain_form()
+
         if st.button("Predict"):
             if out_dir.exists():
                 rmtree(out_dir)
@@ -225,12 +229,30 @@ if experiment_name:
                     experiment_path=experiment_path,
                     out_dir=out_dir,
                     dataset_name=csv_file.name,
+                    ad_cfg=ad_cfg,
                 )
 
             if metrics is not None and st.session_state.get(
                 PredictPageStateKeys.CompareTarget, False
             ):
                 display_mean_std_model_metrics(metrics)
+
+            if ad_cfg.enabled:
+                st.subheader("Applicability Domain")
+                domain = summarise_domain(predictions)
+                if domain.empty:
+                    st.warning(
+                        "The applicability domain could not be assessed for this experiment "
+                        "(e.g. its training dataset is missing); see the log for details."
+                    )
+                else:
+                    st.dataframe(domain)
+                    if domain["Out of domain"].any():
+                        st.warning(
+                            "Some polymers are outside the applicability domain of the models: "
+                            "their predictions are extrapolations and should be treated with "
+                            "caution (see the `AD` columns of the predictions)."
+                        )
 
             st.subheader("Predictions")
             st.dataframe(predictions)
