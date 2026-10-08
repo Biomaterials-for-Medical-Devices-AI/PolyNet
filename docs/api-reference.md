@@ -47,6 +47,7 @@ polynet/
 │   └── hyperopt.py         # gnn_hyp_opt() — Ray Tune + ASHA HPO for GNN
 │
 ├── inference/       # Prediction assembly, unseen-data prediction (predict_unseen_*), split ensembles (ensemble.py)
+├── applicability/   # Applicability domain of new polymers: kNN domain (Ruzicka or Euclidean), expected error from test errors
 ├── pipeline/        # Shared pipeline stage functions (stages.py)
 ├── explainability/  # Attribution
 │   ├── masking.py          # GNN chemistry-masking attribution

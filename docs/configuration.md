@@ -741,6 +741,19 @@ covered in [Explainability](explainability.md).
 prediction:
   enabled: true
   data_path: "data/new_polymers.csv"
+
+  # Applicability domain of the new polymers (optional; these are the defaults).
+  applicability_domain:
+    enabled: true          # false skips it
+    metric: ruzicka_morgan # ruzicka_morgan | euclidean_model_inputs | a list of both
+    k_neighbours: 5        # nearest training polymers
+    z: 0.5                 # in domain if distance <= <d> + z·sigma; larger z widens the domain
+    n_bins: 5              # score bins for the expected error
+    fingerprint:           # count fingerprint of ruzicka_morgan (morgan | rdkitfp)
+      fingerprint: morgan
+      fp_size: 2048
+      radius: 3            # morgan only
 ```
 
-See [Predicting on external data](running-and-outputs.md#predicting-on-external-data).
+See [Predicting on external data](running-and-outputs.md#predicting-on-external-data)
+and [Applicability domain](running-and-outputs.md#applicability-domain).
