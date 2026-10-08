@@ -63,6 +63,34 @@ logger = logging.getLogger(__name__)
 _REGRESSION_KEY = "regression"
 _META_COLS = ["model_type", "iteration", "sample_id", "class_idx"]
 
+# Fixed seed for the random sampling of SHAP's KernelExplainer (used for models
+# without a tree or linear explainer, e.g. SVMs): its background sample and its
+# coalition sampling. Each sample's SHAP values then depend only on the model,
+# the data and the sample — not on the run or on which samples were explained
+# before it.
+KERNEL_EXPLAINER_SEED = 0
+
+# Version of the SHAP values stored in the cache files; bump when the
+# computation changes so stale values are recomputed.
+# Version 2: seeded KernelExplainer (reproducible SVM SHAP values).
+SHAP_CACHE_VERSION = 2
+_SHAP_CACHE_VERSION_COL = "shap_cache_version"
+
+
+@contextmanager
+def _seeded_global_numpy(seed: int):
+    """
+    Seed NumPy's global random generator inside the block, then restore it.
+
+    SHAP's KernelExplainer samples with the global generator and takes no seed.
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
+
 
 # ---------------------------------------------------------------------------
 # Result dataclass
@@ -140,10 +168,23 @@ def _shap_cache_path(experiment_path: Path, descriptor: str) -> Path:
 
 
 def _load_shap_cache(experiment_path: Path, descriptor: str) -> pd.DataFrame:
-    """Load the SHAP cache for a descriptor, returning an empty DataFrame if absent."""
+    """
+    Load the SHAP cache for a descriptor, returning an empty DataFrame if absent.
+
+    A cache written by an older version of the computation (no or another
+    ``SHAP_CACHE_VERSION``) is discarded, so its values are recomputed.
+    """
     path = _shap_cache_path(experiment_path, descriptor)
     if path.exists():
         df = pd.read_csv(path, dtype={col: str for col in _META_COLS})
+        versions = df.get(_SHAP_CACHE_VERSION_COL)
+        if versions is None or not (versions == SHAP_CACHE_VERSION).all():
+            logger.warning(
+                f"SHAP cache {path.name} was written by an older version of PolyNet; "
+                "recomputing its SHAP values."
+            )
+            return pd.DataFrame(columns=_META_COLS)
+        df = df.drop(columns=[_SHAP_CACHE_VERSION_COL])
         feat_cols = [c for c in df.columns if c not in _META_COLS]
         if feat_cols:
             df[feat_cols] = df[feat_cols].apply(pd.to_numeric, errors="coerce")
@@ -155,7 +196,7 @@ def _save_shap_cache(cache_df: pd.DataFrame, experiment_path: Path, descriptor: 
     """Persist the SHAP cache for a descriptor to disk."""
     path = _shap_cache_path(experiment_path, descriptor)
     path.parent.mkdir(parents=True, exist_ok=True)
-    cache_df.to_csv(path, index=False)
+    cache_df.assign(**{_SHAP_CACHE_VERSION_COL: SHAP_CACHE_VERSION}).to_csv(path, index=False)
 
 
 def _load_feature_transformer(experiment_path: Path, descriptor: str, iteration: int):
@@ -198,9 +239,11 @@ def _select_shap_explainer(model, X_background: np.ndarray):
         background = shap.maskers.Independent(X_background, max_samples=min(100, len(X_background)))
         return shap.LinearExplainer(model, background)
 
-    # Fallback: KernelExplainer (slow, model-agnostic)
+    # Fallback: KernelExplainer (slow, model-agnostic). The background sample
+    # is drawn with a fixed seed so explanations are reproducible.
     n_bg = min(50, len(X_background))
-    bg_sample = X_background[np.random.choice(len(X_background), n_bg, replace=False)]
+    rng = np.random.default_rng(KERNEL_EXPLAINER_SEED)
+    bg_sample = X_background[rng.choice(len(X_background), n_bg, replace=False)]
     logger.warning(
         f"Using KernelExplainer for {model_name} — this may be slow. "
         "Consider using a tree-based or linear model for faster SHAP computation."
@@ -222,7 +265,10 @@ def _compute_shap_values_for_row(
     - 3-D array (newer SHAP multiclass): ``(1, n_features, n_classes)``
     """
     x_2d = x_row.reshape(1, -1)
-    values = explainer.shap_values(x_2d)
+    # KernelExplainer samples coalitions with NumPy's global generator: seed it
+    # per sample, so the values do not depend on the order of explanation.
+    with _seeded_global_numpy(KERNEL_EXPLAINER_SEED):
+        values = explainer.shap_values(x_2d)
 
     # Track whether the per-class slice has already been chosen, so the 2-D
     # branch below doesn't re-apply class handling to an already-selected array.

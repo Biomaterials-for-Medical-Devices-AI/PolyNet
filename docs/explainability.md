@@ -171,7 +171,13 @@ Attributions are computed once and reused:
   entries. The cache records the version of the masking computation; a cache written
   by an older version is discarded (with a warning) and recomputed.
 - **TML** — SHAP values are written to `explanations/shap_{descriptor}.csv` (one file
-  per descriptor) and reused on subsequent runs.
+  per descriptor) and reused on subsequent runs. A cache written by an older version is
+  discarded (with a warning) and recomputed.
+
+Models without a tree or linear explainer (e.g. SVMs) use SHAP's `KernelExplainer`, which
+samples randomly. PolyNet seeds its background sample and each sample's computation, so
+their SHAP values are reproducible: they do not depend on the run or on which other
+samples are explained.
 
 Delete the cache files to force recomputation — for example after retraining or
 changing the target class. Normalisation is **never** written to the cache, so changing
