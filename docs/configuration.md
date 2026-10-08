@@ -135,6 +135,12 @@ splitting:
     radius: 3                      # morgan only
 ```
 
+**Terminology.** Throughout PolyNet (configs, GUI, outputs such as the
+`bootstrap_iteration` column), the repeated train/validation/test splits are called
+*bootstraps* (`n_bootstrap_iterations`, `bootstraps` in the explainability settings). They
+are repeated random (or sampler-based) splits drawn without replacement, not bootstrap
+resamples drawn with replacement.
+
 **Split type.** Only `train_val_test` is implemented: for each of the
 `n_bootstrap_iterations` repeated random splits (seed `random_seed + i`), the full
 dataset is split into training, validation and test sets in one step with
@@ -254,7 +260,7 @@ gnn_training:
   hpo_n_folds: 5                          # folds used by cross_validation
   hpo_val_fraction: 0.2                   # val fraction used by holdout / repeated_holdout
   hpo_n_repeats: 3                        # number of random splits for repeated_holdout
-  hpo_num_samples: 150                    # configurations sampled per HPO run
+  hpo_num_samples: 50                     # configurations sampled per HPO run
   hpo_search_grid: {}                     # optional custom candidates, see below
 
   # Optimiser, scheduler and loss (optional — all fields below show their defaults)
@@ -323,7 +329,7 @@ Train Models page); HPO trials train for the same number of epochs.
 ## Automatic HPO configuration
 
 HPO is triggered automatically for any architecture whose parameter block is left
-empty (`{}`). Ray Tune samples `hpo_num_samples` (default 150) random configurations
+empty (`{}`). Ray Tune samples `hpo_num_samples` (default 50) random configurations
 from the search grid and evaluates them using one of three **split strategies** that
 control how the train+val data is partitioned inside each trial. The search grid is the
 default grid of `polynet/config/search_grid.py`, optionally customised with
@@ -406,8 +412,9 @@ gnn_training:
 > **Note:** HPO results are cached to
 > `{output_dir}/gnn_hyp_opt/iteration_{n}/{arch}_{hash}/{arch}.csv`, next to a
 > `search_space.json` that records the searched grid and settings. The `{hash}` is
-> computed from everything that defines the search — the merged grid (including the
-> seed), `hpo_num_samples`, the HPO split settings, the `optimisation` settings and the
+> computed from everything that defines the search — the grid actually searched (the
+> default candidates, with any parameter set in `hpo_search_grid` replacing its defaults,
+> plus the seed), `hpo_num_samples`, the HPO split settings, the `optimisation` settings and the
 > polymer-descriptor scaler. Re-running the same search reloads the cached best
 > configuration; changing any of these starts a new search in a new directory, so
 > stale results are never reused. Delete the directory to force a fresh run. (Caches
@@ -424,7 +431,7 @@ gnn_training:
   gnn_convolutional_layers:
     GCN: {}                              # empty block → HPO
     GAT: {}
-  hpo_num_samples: 50                    # default 150
+  hpo_num_samples: 30                    # default 50
   hpo_search_grid:
     shared:                              # applies to every architecture
       embedding_dim: [64, 128]
@@ -435,7 +442,7 @@ gnn_training:
 tml_models:
   selected_models:
     random_forest: {}                    # empty block → HPO
-  hpo_num_samples: 20                    # default 30 (RandomizedSearchCV n_iter)
+  hpo_num_samples: 20                    # default 50 (RandomizedSearchCV n_iter)
   hpo_search_grid:
     random_forest:
       n_estimators: [200, 500, 1000]
@@ -465,17 +472,28 @@ tml_models:
   e.g. `shared: {AsymmetricLossStrength: [0.5]}` (or `[null]` for no weighting).
   Candidates must be `null` or between 0 and 1. For regression the setting is ignored
   with a warning.
-- **Sample counts.** `hpo_num_samples` must be ≥ 1. For TML it is capped, with a
+- **`hyperparameter_optimisation`.** HPO runs for every architecture / model whose block is
+  empty (`{}`); this flag does not switch it on or off. If you leave it out, it is filled in
+  from the blocks (true when any block is empty) and saved that way with the experiment. If
+  you set it and it contradicts the blocks — `true` with no empty block (no HPO will run),
+  or `false` with an empty block (HPO will run anyway) — a warning says what will happen.
+- **In the GUI.** Ticking *Perform hyperparameter tuning* (GNN or TML section of the Train
+  Models page) shows the number of configurations to sample (default 50) and, for each
+  grid, the default candidates of every tunable parameter: deselect candidates or type
+  extra numeric values. Only the parameters you change are saved as `hpo_search_grid`, so
+  untouched grids give exactly the default search.
+- **Sample counts.** `hpo_num_samples` (default 50 for both GNN and TML) must be ≥ 1. For TML it is capped, with a
   warning, at the number of distinct grid combinations (sampling more would only
   repeat configurations).
 - **Provenance.** The settings, as written by the user, are saved in `config_used.yaml`
   and in `train_gnn_options.json` / `train_tml_options.json`. Before training starts,
-  `hpo_search_spaces.json` records the **merged** search space of every architecture /
-  model that runs HPO (defaults + `hpo_search_grid`, without the per-split seed),
-  with the sample counts (TML `n_iter` after capping) and HPO split settings. The
-  merged GNN grid is also written
-  to `gnn_hyp_opt/iteration_{n}/{arch}_{hash}/search_space.json`; for TML, the merged
-  grid, the number of samples used, the folds and the best parameters of each tuned
+  `hpo_search_spaces.json` records the grid **actually searched** for every
+  architecture / model that runs HPO — the default candidates, with any parameter set in
+  `hpo_search_grid` replacing its defaults (the per-split seed is left out) — with the
+  sample counts (TML `n_iter` after capping) and HPO split settings. The GNN grid
+  actually searched is also written
+  to `gnn_hyp_opt/iteration_{n}/{arch}_{hash}/search_space.json`; for TML, the grid
+  actually searched, the number of samples used, the folds and the best parameters of each tuned
   model are written to `tml_hyp_opt/{model}-{representation}_{iteration}.json`.
 
 ## `tml_models`
@@ -504,7 +522,7 @@ set in TML training* switch.
 `LogisticRegression`, `LinearRegression`
 
 **Automatic HPO:** leave a model's block empty (`{}`) to tune it automatically.
-`RandomizedSearchCV` samples `hpo_num_samples` (default 30) configurations from the model's search grid
+`RandomizedSearchCV` samples `hpo_num_samples` (default 50) configurations from the model's search grid
 (`polynet/config/search_grid.py`) and scores them by `hpo_n_folds`-fold
 cross-validation on the samples the model is trained on (training + validation by default,
 training only with `include_validation_in_training: false`). Folds are always
@@ -514,7 +532,7 @@ target cannot produce biased folds.
 | Parameter | Default | Description |
 |---|---|---|
 | `hpo_n_folds` | `5` | Number of CV folds `k`. See [Choosing the number of folds](#choosing-the-number-of-folds-hpo_n_folds). |
-| `hpo_num_samples` | `30` | Configurations sampled per search (`n_iter`), capped at the number of grid combinations. |
+| `hpo_num_samples` | `50` | Configurations sampled per search (`n_iter`), capped at the number of grid combinations. |
 | `hpo_search_grid` | `{}` | Custom candidates per model. See [Custom search grids](#custom-search-grids-hpo_search_grid). |
 
 In the GUI, the fold count appears under *Perform hyperparameter tuning* on the Train
