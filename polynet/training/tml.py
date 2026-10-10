@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from copy import deepcopy
 import logging
+import time
 
 import numpy as np
 import pandas as pd
@@ -324,7 +325,14 @@ def train_tml_ensemble(
                 axis=1,
             )
 
-            for model_id, model_cls in model_classes.items():
+            for model_number, (model_id, model_cls) in enumerate(model_classes.items(), 1):
+                context = (
+                    f"TML {model_id.value} | representation={df_name} | "
+                    f"split/bootstrap {iteration}/{len(train_ids)} | "
+                    f"model {model_number}/{len(model_classes)}"
+                )
+                started = time.perf_counter()
+                logger.info("Starting %s | seed=%d", context, seed)
                 model_params = tml_models[model_id]
                 is_hpo = not model_params
 
@@ -347,6 +355,7 @@ def train_tml_ensemble(
 
                 model_log_name = f"{model_id.value.replace(' ', '')}-{log_name}"
                 trained_models[model_log_name] = model
+                logger.info("Completed %s in %.1fs", context, time.perf_counter() - started)
 
     return trained_models, training_data, scalers, target_scalers
 
