@@ -213,3 +213,27 @@ from polynet.utils.statistical_analysis import (
 )
 from polynet.config.display_names import prettify_label, prettify_metric
 ```
+
+### GUI support modules (`polynet.app`)
+
+These helpers belong to the optional Streamlit layer, not the core pipeline:
+
+| Module | Public entry points | Responsibility |
+|---|---|---|
+| `services.cache` | `file_version`, `read_csv`, `read_json` | Bounded copy-on-read caches keyed by resolved path, size and nanosecond modification/change timestamps. Missing files raise; rewritten files refresh. CSV keyword arguments participate in the key. |
+| `services.progress` | `run_progress`, `RunLogHandler` | Context manager/decorator for session-thread logging, an 80-message tail, throttled epoch rendering, and handler/level cleanup on success or failure. |
+| `services.workload` | `estimate_workload`, `Workload` | Pure calculation of final fits, tuning-inclusive fit/epoch budgets and advisory warning reasons. No training, timing prediction or device allocation. |
+| `components.forms.representation` | `default_molecular_descriptors`, `basic_representation`, `cached_graph_feature_analysis` | Input-type-aware GUI descriptor defaults, locked representation controls and cached legacy graph analysis. |
+| `components.forms.train_models` | `default_feature_preprocessing` | GUI MinMax/variance/correlation baseline; GNN descriptors receive scaling only. |
+| `components.plots` | `display_model_results(..., external=False)` | On-demand training results; pass `external=True` for external dataset folders, including legacy layouts. |
+
+`services.configurations.load_options` validates freshly copied cached JSON;
+`save_options` still delegates to core configuration I/O. Core training remains
+Streamlit-free. `training.gnn.train_model(log_context=...)` adds optional context
+to epoch messages, and `training.hyperopt.TrainingProgressCallback` forwards Ray
+trial activity through normal logging from the driver.
+
+The focused regression coverage is in `tests/test_gui_feedback.py`: cache
+freshness/copy isolation, session log isolation/cleanup, workload boundaries,
+locked/unlocked defaults, external result layouts, parity legend styling and
+GUI training reproducibility.

@@ -621,6 +621,13 @@ TML models require a [`feature_preprocessing`](#feature_preprocessing) section.
 A **pipeline-wide** option: the scaler applies to every tabular feature the pipeline
 uses, regardless of which model families are trained.
 
+The **GUI default** is MinMax scaling (`min_max_scaler`), followed by variance
+filtering (`threshold: 0.0`, removing constants) and correlation filtering
+(`threshold: 0.95`) for TML. Filters run in that order after scaling; GNN polymer
+descriptors use MinMax scaling without feature selection. Unlock advanced
+training options to change these settings. This GUI baseline does not alter
+existing saved configurations or the schema defaults used by explicit CLI runs.
+
 ```yaml
 feature_preprocessing:
   scaler: "standard_scaler"   # no_transformation | standard_scaler | min_max_scaler | robust_scaler

@@ -92,16 +92,22 @@ stay in the app.)
 
 Representation and Train Models start with advanced options locked. Unlock the
 page's advanced-options toggle to change scientific settings. Locking again
-restores the existing GUI defaults for the next build/run; it does not edit a
+restores the GUI defaults for the next build/run; it does not edit a
 saved experiment until its action button is pressed. These defaults are a
 starting point, not an assertion of optimal settings for every dataset:
 
-- Representation: five RDKit descriptors, five atom properties, three bond
-  properties, observed allowable graph values and no wildcard placeholders.
+- Representation: **SMILES** uses every RDKit descriptor and Morgan count
+  fingerprints (2,048 bins, radius 3). **PSMILES** uses polyBERT and all PolyMetriX
+  repeat-unit, side-chain and backbone descriptors, with mean side-chain
+  aggregation. Polymer-only descriptors are disabled and cleared for SMILES.
+  Graphs retain five atom properties, three bond properties, observed allowable
+  graph values and no wildcard placeholders.
   Multiple monomers use weighted-average descriptors and weighted graphs; the
   user still supplies their weight columns. Either representation can be disabled.
 - Training: existing model/architecture parameters, 250 GNN epochs, no tuning,
-  no feature/target scaling or feature selection, and one 60/20/20 split.
+  MinMax feature scaling, followed by variance (threshold 0.0) and correlation
+  (threshold 0.95) filtering for TML. GNN polymer descriptors use the same scaler
+  without selection. Target scaling remains off, with one 60/20/20 split.
   Classification uses stratified assignment; regression uses random assignment.
   Both use the random sampler, without class balancing. TML includes validation
   samples in fitting, as before. Model selection remains available.
@@ -172,7 +178,7 @@ unchanged in this logging/display update.
 6. **Automated checks.** In the `polynet` conda environment, run
    `python -m pytest tests -q`, `python -m black --check polynet`, and
    `python -m isort --check-only polynet`. The full suite was verified with
-   `HF_HUB_OFFLINE=1` using the already-cached PolyBERT model: 424 tests passed,
+   `HF_HUB_OFFLINE=1` using the already-cached PolyBERT model: 433 tests passed,
    including all four numerical pipeline regression tests. Offline mode requires
    that model to be cached; otherwise allow its normal download.
 
@@ -181,3 +187,17 @@ keys; an out-of-range initial value for the Random Forest depth slider; and
 TML-only training requiring a graph CSV even when only descriptors were built.
 The latter now uses the saved source dataset when no graph CSV exists. The
 existing-results notice also covers TML-only experiments.
+
+### External results and parity plots
+
+External dataset toggles read `predictions.csv` and `metrics.json` directly from
+`unseen_predictions/<dataset>/`; older `ml_results/` layouts are also supported.
+An empty run shows an explicit message. The detailed metric table includes
+ensemble rows; mean/std summaries use individual splits only. The parity
+reference line is grey and its legend has normal-weight text on an opaque white
+background, so inherited plot styling cannot expose points/grid underneath it.
+Previously exported images are unchanged; newly rendered plots use this style.
+
+These GUI defaults apply to newly built representations and new training runs.
+Existing saved experiments and explicit CLI configurations are not migrated.
+Changing descriptor families or preprocessing intentionally changes new results.

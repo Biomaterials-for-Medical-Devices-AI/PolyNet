@@ -27,6 +27,7 @@ python -m pytest tests/ --co -q
 
 | Module | What it covers |
 |---|---|
+| `test_gui_feedback.py` | GUI defaults by string type, preprocessing defaults, cache freshness, session log isolation, workload warnings, external results layouts, parity legend styling and repeat-training predictions |
 | `test_merging.py` | Descriptor merging strategies (`merge_weighted`, `_merge_concatenate`, `_single_smiles`, `_merge` dispatch) |
 | `test_compute_rdkit.py` | RDKit descriptor computation across all merging strategies |
 | `test_descriptors_regression.py` | Numerical regression against reference CSVs in `tests/fixtures/` |
