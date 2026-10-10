@@ -6,23 +6,17 @@ descriptors and to GNN polymer descriptors, and it is only meaningful when
 there are tabular features to scale.
 """
 
-import importlib.util
 import logging
-from pathlib import Path
 
 import pytest
 
 from polynet.config.enums import FeatureSelection, TransformDescriptor
-
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_pipeline.py"
+from polynet.pipeline import runner
 
 
 @pytest.fixture(scope="module")
 def run_pipeline():
-    spec = importlib.util.spec_from_file_location("run_pipeline", _SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
+    return runner
 
 
 _CFG = {
