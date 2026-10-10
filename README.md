@@ -129,8 +129,10 @@ Datasets written as plain SMILES do not need it.
 ### Verifying the installation
 
 ```bash
-python scripts/integration_test.py
+polynet check
 ```
+
+This runs the whole pipeline on a small synthetic dataset (about a minute) and prints a PASS / FAIL table.
 
 ### Common Poetry commands
 
@@ -178,7 +180,7 @@ data:
 polynet run --config configs/experiment.yaml
 ```
 
-All outputs are written to the directory specified by `experiment.output_dir` in the config. `polynet run --help` lists the flags (e.g. `--epochs`, `--no-gnn`, `--predict-data`); `python scripts/run_pipeline.py` accepts the same flags.
+All outputs are written to the directory specified by `experiment.output_dir` in the config. `polynet run --help` lists the flags (e.g. `--epochs`, `--no-gnn`, `--predict-data`).
 
 ### Streamlit GUI
 

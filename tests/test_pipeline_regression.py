@@ -62,7 +62,7 @@ _ON_MACOS = sys.platform == "darwin"
 GNN_REL_TOL = 1e-2 if _ON_MACOS else 0.20
 TML_REL_TOL = 1e-2
 
-# Same 10 SMILES used in scripts/integration_test.py
+# Same 10 SMILES as polynet/pipeline/self_check.py (``polynet check``)
 _MONOMER_SMILES = [
     "c1ccccc1",  # benzene
     "C=C",  # ethylene
@@ -86,8 +86,8 @@ _WEIGHT_PAIRS = [0.3, 0.5, 0.7]
 def _make_synthetic_df(task: str, n_samples: int = N_SAMPLES, seed: int = SEED) -> pd.DataFrame:
     """Build a minimal two-monomer polymer DataFrame.
 
-    Mirrors ``make_synthetic_dataframe`` in ``scripts/integration_test.py``
-    so both use the same data for manual cross-checks.
+    Uses the same monomers as ``synthetic_copolymers`` in
+    ``polynet/pipeline/self_check.py`` (``polynet check``).
     """
     rng = np.random.default_rng(seed)
     rows = []

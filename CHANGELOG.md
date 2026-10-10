@@ -60,8 +60,10 @@ Compared with unreleased development versions before October 2026
 
 ### Packaging
 
-- `polynet run` installs the YAML pipeline as a command;
-  `python scripts/run_pipeline.py` still works with the same flags.
+- `polynet run` installs the YAML pipeline as a command (replaces
+  `python scripts/run_pipeline.py`).
+- `polynet check` runs the full pipeline on synthetic data and reports what
+  works.
 - `polynet --version` and `polynet.__version__`.
 - `black`, `isort` and `ipykernel` moved to the development dependencies;
   unused `gbigsmiles` removed.
