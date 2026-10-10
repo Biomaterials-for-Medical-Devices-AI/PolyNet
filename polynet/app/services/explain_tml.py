@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from polynet.app.services.progress import run_progress
 from polynet.config.enums import (
     ExplanationAggregation,
     ImportanceNormalisationMethod,
@@ -28,6 +29,7 @@ from polynet.explainability.shap_explain import (
 )
 
 
+@run_progress("Computing global explanations")
 def explain_tml_global(
     models: dict,
     descriptor_dfs: dict[str, pd.DataFrame],
@@ -80,6 +82,7 @@ def explain_tml_global(
             st.pyplot(result.figure, use_container_width=True)
 
 
+@run_progress("Computing local explanations")
 def explain_tml_local(
     models: dict,
     descriptor_dfs: dict[str, pd.DataFrame],

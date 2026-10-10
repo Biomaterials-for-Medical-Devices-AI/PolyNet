@@ -20,6 +20,7 @@ from polynet.app.options.file_paths import (
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
+from polynet.app.services.cache import read_csv
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.explain_source import (
@@ -148,7 +149,7 @@ if experiment_name:
         )
 
     # Predictions for the resolved source (index = sample id).
-    preds = pd.read_csv(source.preds_csv, index_col=0)
+    preds = read_csv(source.preds_csv, index_col=0)
 
     iterator_col = get_iterator_name(split_options.split_type)
 

@@ -10,6 +10,7 @@ import torch
 from torch.nn import Module
 from torch_geometric.loader import DataLoader
 
+from polynet.app.services.progress import run_progress
 from polynet.config.enums import (
     AttributionPlotType,
     DimensionalityReduction,
@@ -100,6 +101,7 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+@run_progress("Computing global explanations")
 def explain_model_global(
     models: dict,
     experiment_path: Path,
@@ -158,6 +160,7 @@ def explain_model_global(
 # ---------------------------------------------------------------------------
 
 
+@run_progress("Computing local explanations")
 def explain_model_local(
     models: dict,
     experiment_path: Path,
