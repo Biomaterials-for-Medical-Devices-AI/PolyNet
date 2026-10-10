@@ -1,6 +1,6 @@
 # PolyNet
 
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
@@ -160,10 +160,10 @@ data:
 **2. Run the pipeline:**
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml
+polynet run --config configs/experiment.yaml
 ```
 
-All outputs are written to the directory specified by `experiment.output_dir` in the config.
+All outputs are written to the directory specified by `experiment.output_dir` in the config. `polynet run --help` lists the flags (e.g. `--epochs`, `--no-gnn`, `--predict-data`); `python scripts/run_pipeline.py` accepts the same flags.
 
 ### Streamlit GUI
 
@@ -171,7 +171,7 @@ All outputs are written to the directory specified by `experiment.output_dir` in
 polynet
 ```
 
-This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
+This works from any directory once the package is installed (`polynet gui` is the same). Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py
@@ -241,13 +241,16 @@ Full documentation lives in [`docs/`](docs/README.md):
 
 ## Citing PolyNet
 
-Coming soon :)
+If you use PolyNet, please cite the software (GitHub's "Cite this repository" button reads [`CITATION.cff`](CITATION.cff)):
 
-<!-- ```bibtex
+```bibtex
 @software{polynet,
-  author  = {},
-  title   = {PolyNet: Graph Neural Networks for Polymer Property Prediction},
-  year    = {},
-  url     = {}
+  author  = {Aguilar-Bejarano, Eduardo and Alexander, Morgan and Winkler, David and Figueredo, Grazziela},
+  title   = {PolyNet: A Python Package for Polymer Informatics},
+  version = {1.0.0},
+  year    = {2026},
+  url     = {https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}
 }
-``` -->
+```
+
+Changes between versions are listed in [`CHANGELOG.md`](CHANGELOG.md).
