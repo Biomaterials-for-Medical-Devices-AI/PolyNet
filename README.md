@@ -111,6 +111,21 @@ poetry install
 
 Poetry reads `pyproject.toml` and `poetry.lock` and installs all dependencies into the active environment.
 
+### PSMILES support
+
+PolyNet canonicalises PSMILES (polymer SMILES with `*` attachment points) with
+[canonicalize-psmiles](https://github.com/kuennethgroup/canonicalize_psmiles) from the
+Kuenneth group. It is distributed by Georgia Tech Research Corporation under its own
+licence, which allows **non-commercial use only**, and is not on PyPI, so it is installed
+separately from PolyNet's MIT-licensed code:
+
+- `poetry install` (above) installs it.
+- In the GUI, loading PSMILES data offers an **Install canonicalize-psmiles** button
+  after you accept its licence.
+- From a terminal: `polynet install-psmiles`.
+
+Datasets written as plain SMILES do not need it.
+
 ### Verifying the installation
 
 ```bash
