@@ -1,5 +1,4 @@
 from collections import defaultdict
-import json
 from pathlib import Path
 import re
 
@@ -12,6 +11,7 @@ from polynet.app.options.file_paths import (
     plots_directory,
     unseen_predictions_parent_path,
 )
+from polynet.app.services.cache import read_csv, read_json
 
 
 def display_predictions(predictions_df: pd.DataFrame):
@@ -149,19 +149,26 @@ def display_model_results(
     experiment_path: Path, expanded: bool, expander_str: str = "Model Results"
 ):
 
-    with st.expander(expander_str, expanded=expanded):
+    # Collapsed expanders still execute their bodies in Streamlit. An explicit
+    # toggle avoids reading and rendering all previous runs on each page visit.
+    if not st.toggle(
+        f"Show {expander_str}",
+        value=expanded,
+        key=f"results:{experiment_path.resolve()}:{expander_str}:{expanded}",
+    ):
+        return
+
+    with st.expander(expander_str, expanded=True):
 
         predictions_path = ml_results_file_path(experiment_path=experiment_path)
 
         if predictions_path.exists():
-            predictions = pd.read_csv(predictions_path, index_col=0)
+            predictions = read_csv(predictions_path, index_col=0)
             display_predictions(predictions)
 
         metrics_path = model_metrics_file_path(experiment_path=experiment_path)
         if metrics_path.exists():
-            with open(metrics_path, "rb") as f:
-                # Load the metrics dictionary from the file
-                metrics_dict = json.load(f)
+            metrics_dict = read_json(metrics_path)
             display_model_metrics(metrics_dict)
             display_mean_std_model_metrics(metrics_dict)
 

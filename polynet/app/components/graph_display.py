@@ -35,6 +35,7 @@ import pandas as pd
 import streamlit as st
 import torch
 
+from polynet.app.services.cache import read_csv
 from polynet.app.services.graph_viz import build_graph_figure
 from polynet.config.paths import gnn_data_path, gnn_raw_data_path
 from polynet.config.schemas.data import DataConfig
@@ -100,7 +101,7 @@ def show_graph_visualization(
         st.warning("Raw GNN CSV not found — cannot list molecules.")
         return
 
-    raw_df = pd.read_csv(raw_csv)
+    raw_df = read_csv(raw_csv)
     id_col = data_opts.id_col
 
     if id_col and id_col in raw_df.columns:

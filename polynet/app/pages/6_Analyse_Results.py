@@ -1,5 +1,3 @@
-import json
-
 import pandas as pd
 import streamlit as st
 
@@ -22,6 +20,7 @@ from polynet.app.options.file_paths import (
     train_gnn_model_options_path,
     train_tml_model_options_path,
 )
+from polynet.app.services.cache import read_csv, read_json
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.config.enums import ProblemType
@@ -104,11 +103,10 @@ if experiment_name:
 
     display_model_results(experiment_path=experiment_path, expanded=False)
 
-    predictions_path = predictions_path = ml_results_file_path(experiment_path=experiment_path)
-    predictions = pd.read_csv(predictions_path, index_col=0)
+    predictions_path = ml_results_file_path(experiment_path=experiment_path)
+    predictions = read_csv(predictions_path, index_col=0)
     metrics_path = model_metrics_file_path(experiment_path=experiment_path)
-    with open(metrics_path, "rb") as f:
-        metrics = json.load(f)
+    metrics = read_json(metrics_path)
 
     if st.checkbox("Show predictions data"):
         st.dataframe(predictions)
@@ -157,8 +155,7 @@ if experiment_name:
     splits_file = split_indices_path(experiment_path=experiment_path)
     split_sizes = None
     if splits_file.exists():
-        with open(splits_file) as f:
-            split_sizes = mean_split_sizes(json.load(f))
+        split_sizes = mean_split_sizes(read_json(splits_file))
 
     compare_metrics_plot = compare_metrics_form(
         metrics=metrics, data_options=data_options, split_sizes=split_sizes
