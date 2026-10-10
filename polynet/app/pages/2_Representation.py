@@ -6,6 +6,7 @@ import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.representation import (
+    basic_representation,
     graph_representation,
     molecular_descriptor_representation,
     select_polymer_descriptors,
@@ -21,8 +22,10 @@ from polynet.app.options.file_paths import (
     representation_parent_directory,
 )
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
+from polynet.app.services.cache import read_csv
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
+from polynet.app.services.progress import run_progress
 from polynet.config.enums import DescriptorMergingMethod, MolecularDescriptor
 from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
@@ -30,6 +33,7 @@ from polynet.pipeline import build_graph_dataset, compute_descriptors
 from polynet.utils.graph_analysis import load_graph_feature_analysis
 
 
+@run_progress("Building representations")
 def parse_representation_options(
     experiment_name: str,
     node_feats: Dict,
@@ -124,7 +128,7 @@ if experiment_name:
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
-    data = pd.read_csv(data_opts.data_path, index_col=0)
+    data = read_csv(data_opts.data_path, index_col=0)
 
     st.write(data.describe())
 
@@ -135,18 +139,26 @@ if experiment_name:
         graph_feature_analysis_path(experiment_path=experiment_path)
     )
 
-    molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
-    descriptors_weighted = (
-        st.session_state.get(
-            DescriptorCalculationStateKeys.MergeDescriptorsApproach,
-            DescriptorMergingMethod.NoMerging,
+    advanced = st.toggle(
+        "Unlock advanced representation options",
+        value=False,
+        key=f"advanced_representation:{experiment_name}",
+        help="Unlock descriptor selection, fingerprints, graph features and merging. "
+        "Locking again restores the existing GUI defaults for the next build.",
+    )
+    if advanced:
+        molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)
+        atomic_properties, bond_properties = graph_representation(
+            data_opts=data_opts, df=data, feature_analysis=feature_analysis
         )
-        == DescriptorMergingMethod.WeightedAverage
-    )
+    else:
+        molecular_descriptors, atomic_properties, bond_properties = basic_representation(
+            data_opts, data, feature_analysis
+        )
+    descriptors_weighted = st.session_state.get(
+        DescriptorCalculationStateKeys.MergeDescriptorsApproach, DescriptorMergingMethod.NoMerging
+    ) == DescriptorMergingMethod.WeightedAverage and bool(molecular_descriptors)
 
-    atomic_properties, bond_properties = graph_representation(
-        data_opts=data_opts, df=data, feature_analysis=feature_analysis
-    )
     graphs_weighted = st.session_state.get(
         DescriptorCalculationStateKeys.GraphWeightingFactor, False
     )
@@ -167,7 +179,7 @@ if experiment_name:
             "To create the representation you require, we need the input of weighting columns for your molecules."
         )
     else:
-        disabled = False
+        disabled = not (atomic_properties or molecular_descriptors)
 
     if st.button("Apply Representation Settings", disabled=disabled):
         parse_representation_options(

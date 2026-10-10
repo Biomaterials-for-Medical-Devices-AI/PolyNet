@@ -1,4 +1,5 @@
 import json
+import logging
 from shutil import rmtree
 
 import pandas as pd
@@ -39,9 +40,12 @@ from polynet.app.options.state_keys import (
     TrainGNNStateKeys,
     TrainTMLStateKeys,
 )
+from polynet.app.services.cache import read_csv
 from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes
+from polynet.app.services.progress import run_progress
+from polynet.app.services.workload import estimate_workload
 from polynet.app.utils import save_data
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
@@ -72,6 +76,7 @@ from polynet.pipeline import (
 from polynet.utils.validation import validate_hpo_folds
 
 
+@run_progress("Training")
 def train_models(
     experiment_name: str,
     tml_models: dict,
@@ -83,6 +88,8 @@ def train_models(
     gnn_optimisation_cfg: GNNOptimisationConfig | None = None,
 ):
 
+    logger = logging.getLogger("polynet.app.training")
+    logger.info("Preparing experiment %s and data splits", experiment_name)
     if target_cfg is None:
         target_cfg = TargetTransformConfig()
 
@@ -132,10 +139,8 @@ def train_models(
         save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
 
     # read the data
-    data = pd.read_csv(
-        gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path),
-        index_col=0,
-    )
+    raw_path = gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path)
+    data = read_csv(raw_path if raw_path.exists() else data_options.data_path, index_col=0)
 
     # Compute data splits using the shared pipeline stage. Some samplers cannot
     # split some datasets (e.g. clusters larger than the validation set); show
@@ -250,6 +255,7 @@ def train_models(
             target_cfg=target_cfg,
         )
 
+        logger.info("TML training complete; generating predictions, metrics and plots")
         # generate predictions DataFrame (inverse-transform via target_scalers)
         tml_predictions_df = run_tml_inference(
             trained=tml_trained,
@@ -280,6 +286,7 @@ def train_models(
     if gnn_conv_params:
         save_options(path=gnn_training_opts_path, options=gnn_cfg)
 
+        logger.info("Loading graph dataset for GNN training")
         dataset = CustomPolymerGraph(
             filename=data_options.data_name,
             root=gnn_raw_data_path(experiment_path).parent,
@@ -305,6 +312,7 @@ def train_models(
             preprocessing_cfg=preprocessing_cfg,
         )
 
+        logger.info("GNN training complete; generating predictions, metrics and plots")
         gnn_predictions_df = run_gnn_inference(
             trained_models=gnn_trained,
             loaders=gnn_loaders,
@@ -357,6 +365,7 @@ def train_models(
         predictions = tml_predictions_df.copy()
         metrics = metrics_tml
 
+    logger.info("Saving predictions and metrics")
     save_data(data=predictions, data_path=ml_results_file_path(experiment_path=experiment_path))
 
     with open(metrics_path, "w") as f:
@@ -394,18 +403,32 @@ if experiment_name:
 
     train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
 
-    if train_gnn_options.exists():
-        st.error(
-            "GNN model options already exist for this experiment. "
+    if train_gnn_options.exists() or train_tml_model_options_path(experiment_path).exists():
+        st.warning(
+            "Trained model options already exist for this experiment. "
             "You can modify the settings below, but be aware that this will overwrite the existing results."
         )
         display_model_results(experiment_path=experiment_path, expanded=False)
+
+    advanced = st.toggle(
+        "Unlock advanced training options",
+        value=False,
+        key=f"advanced_training:{experiment_name}",
+        help="Unlock hyperparameters, tuning grids, splitting, preprocessing and optimisation. "
+        "Locking again restores the existing GUI defaults for the next run.",
+    )
+    if not advanced:
+        st.info(
+            "Advanced options are locked. Existing GUI defaults are used; "
+            "unlock above to customise them. These defaults are a starting point, "
+            "not a guarantee of the best model for every dataset."
+        )
 
     st.markdown("## Train Machine Learning Models (TMLs)")
 
     if representation_file_path(experiment_path=experiment_path).exists():
 
-        tml_models = train_TML_models(problem_type=data_opts.problem_type)
+        tml_models = train_TML_models(problem_type=data_opts.problem_type, advanced=advanced)
 
     else:
         st.error("No descriptors representation found, TML models cannot be trained.")
@@ -416,10 +439,16 @@ if experiment_name:
     if gnn_raw_data_path(experiment_path=experiment_path).exists():
 
         gnn_conv_params = train_GNN_models_form(
-            representation_opts=representation_opts, problem_type=data_opts.problem_type
+            representation_opts=representation_opts,
+            problem_type=data_opts.problem_type,
+            advanced=advanced,
         )
         gnn_optimisation_cfg = (
-            gnn_optimisation_widgets(problem_type=data_opts.problem_type)
+            (
+                gnn_optimisation_widgets(problem_type=data_opts.problem_type)
+                if advanced
+                else GNNOptimisationConfig()
+            )
             if gnn_conv_params
             else None
         )
@@ -441,12 +470,18 @@ if experiment_name:
     preprocessing_cfg = None
     if tml_models or gnn_polymer_descriptors:
         st.markdown("## Feature Preprocessing")
-        preprocessing_cfg = feature_transformer_widgets(
-            train_tml=bool(tml_models), gnn_polymer_descriptors=gnn_polymer_descriptors
+        preprocessing_cfg = (
+            feature_transformer_widgets(
+                train_tml=bool(tml_models), gnn_polymer_descriptors=gnn_polymer_descriptors
+            )
+            if advanced
+            else FeatureTransformConfig()
         )
+        if not advanced:
+            st.caption("No feature scaling or feature selection (existing GUI default).")
 
     st.markdown("## Data Splitting Options")
-    valid_split = split_data_form(problem_type=data_opts.problem_type)
+    valid_split = split_data_form(problem_type=data_opts.problem_type, advanced=advanced)
 
     # ------------------------------------------------------------------
     # Target variable scaling (regression only)
@@ -454,12 +489,53 @@ if experiment_name:
     target_cfg = TargetTransformConfig()
     if data_opts.problem_type.lower() == "regression":
         st.markdown("## Target Variable Scaling")
-        target_cfg = target_transform_widget()
+        if advanced:
+            target_cfg = target_transform_widget()
+        else:
+            st.caption("No target scaling (existing GUI default).")
 
     if (gnn_conv_params or tml_models) and valid_split:
         disabled = False
     else:
         disabled = True
+
+    if tml_models or gnn_conv_params:
+        raw_path = gnn_raw_data_file(file_name=data_opts.data_name, experiment_path=experiment_path)
+        source_data = read_csv(raw_path if raw_path.exists() else data_opts.data_path, index_col=0)
+        workload = estimate_workload(
+            rows=len(source_data),
+            representations=len(representation_opts.molecular_descriptors),
+            tml_models=len(tml_models),
+            gnn_models=len(gnn_conv_params),
+            repetitions=st.session_state.get(GeneralConfigStateKeys.BootstrapIterations, 1),
+            tml_samples=(
+                st.session_state.get(TrainTMLStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+                if st.session_state.get(TrainTMLStateKeys.PerformHyperparameterTuning)
+                else 0
+            ),
+            gnn_samples=(
+                st.session_state.get(TrainGNNStateKeys.HPONumSamples, DEFAULT_HPO_NUM_SAMPLES)
+                if st.session_state.get(TrainGNNStateKeys.HypTunning)
+                else 0
+            ),
+            tml_folds=st.session_state.get(TrainTMLStateKeys.HPONumFolds, 5),
+            epochs=st.session_state.get(TrainGNNStateKeys.Epochs, 250),
+        )
+        st.caption(
+            f"Workload: {len(source_data):,} rows; {workload.final_fits:,} final model fits; "
+            f"up to {workload.fit_budget:,} fits including tuning/folds; "
+            f"up to {workload.gnn_epochs:,} GNN epochs. "
+            "A workload budget, not a runtime estimate; grid limits, cached searches "
+            "and early stopping can reduce it."
+        )
+        if workload.reasons:
+            st.warning(
+                "This run may take a long time: "
+                + "; ".join(workload.reasons)
+                + ". Consider fewer models, splits or tuning trials, or run the calculation "
+                "on an HPC system. Use a CUDA-enabled GPU for GNN training; "
+                "traditional ML training here primarily uses CPUs. Training remains available."
+            )
 
     if st.button("Run Training", disabled=disabled):
         st.write("Training models...")
