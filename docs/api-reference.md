@@ -48,7 +48,7 @@ polynet/
 │
 ├── inference/       # Prediction assembly, unseen-data prediction (predict_unseen_*), split ensembles (ensemble.py)
 ├── applicability/   # Applicability domain of new polymers: kNN domain (Ruzicka or Euclidean), expected error from test errors
-├── pipeline/        # Shared pipeline stage functions (stages.py)
+├── pipeline/        # Shared pipeline stage functions (stages.py) and the YAML runner behind `polynet run` (runner.py)
 ├── explainability/  # Attribution
 │   ├── masking.py          # GNN chemistry-masking attribution
 │   ├── explain.py          # compute_global_attribution(), compute_local_attribution() (GNN)
@@ -70,7 +70,7 @@ polynet/
     └── options/              # Re-exports + Streamlit session-state keys
 
 scripts/
-├── run_pipeline.py        # CLI entry point
+├── run_pipeline.py        # Wrapper around `polynet run` (polynet/pipeline/runner.py)
 └── integration_test.py    # Staged integration test for debugging
 
 configs/experiment.yaml    # Template experiment configuration
