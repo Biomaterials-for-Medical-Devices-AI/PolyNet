@@ -11,7 +11,7 @@
 ## CLI flags
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml
+polynet run --config configs/experiment.yaml
 ```
 
 | Flag | Description |
@@ -25,23 +25,25 @@ python scripts/run_pipeline.py --config configs/experiment.yaml
 | `--predict-data PATH` | Path to a CSV of unseen samples to predict after training |
 | `--root PATH` | Project root for resolving relative paths (default: current directory) |
 
+`python scripts/run_pipeline.py` accepts the same flags and is kept for existing workflows.
+
 ### Examples
 
 ```bash
 # Quick smoke test
-python scripts/run_pipeline.py --config configs/experiment.yaml --epochs 5
+polynet run --config configs/experiment.yaml --epochs 5
 
 # GNN only, no TML, no explainability
-python scripts/run_pipeline.py --config configs/experiment.yaml --no-tml --no-explain
+polynet run --config configs/experiment.yaml --no-tml --no-explain
 
 # Classification task
-python scripts/run_pipeline.py --config configs/experiment.yaml --task classification
+polynet run --config configs/experiment.yaml --task classification
 
 # Train and predict on external data in one command
-python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/test_set.csv
+polynet run --config configs/experiment.yaml --predict-data data/test_set.csv
 
 # Predict only on an already-trained experiment
-python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/test_set.csv
+polynet run --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/test_set.csv
 ```
 
 ## Predicting on external data
@@ -53,7 +55,7 @@ column is optional — if present, per-model metrics are computed automatically.
 **Via CLI:**
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/new_polymers.csv
+polynet run --config configs/experiment.yaml --predict-data data/new_polymers.csv
 ```
 
 **Via YAML config:**
