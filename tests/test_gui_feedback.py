@@ -140,7 +140,7 @@ def test_training_defaults_match_unlocked_and_relock_resets(problem):
     assert app.session_state["HypTunning"] is False
 
 
-def representation_form_app():
+def representation_form_app(string_representation="smiles"):
     import pandas as pd
     import streamlit as st
 
@@ -153,7 +153,12 @@ def representation_form_app():
     from polynet.config.schemas import DataConfig
 
     advanced = st.toggle("Advanced")
-    df = pd.DataFrame({"smiles": ["CC", "CCO"], "target": [1, 2]})
+    df = pd.DataFrame(
+        {
+            "smiles": (["*CC*", "*CCO*"] if string_representation == "psmiles" else ["CC", "CCO"]),
+            "target": [1, 2],
+        }
+    )
     cfg = DataConfig(
         data_name="data.csv",
         data_path="data.csv",
@@ -162,7 +167,7 @@ def representation_form_app():
         target_variable_col="target",
         target_variable_name="Target",
         problem_type="regression",
-        string_representation="smiles",
+        string_representation=string_representation,
         num_classes=1,
     )
     analysis = cached_graph_feature_analysis(df, cfg.smiles_cols)
@@ -174,8 +179,13 @@ def representation_form_app():
     st.session_state["config"] = (descriptors, nodes, edges)
 
 
-def test_representation_defaults_match_unlocked():
-    app = AppTest.from_function(representation_form_app, default_timeout=30).run()
+@pytest.mark.parametrize("string_representation", ["smiles", "psmiles"])
+def test_representation_defaults_match_unlocked(string_representation):
+    app = AppTest.from_function(
+        representation_form_app,
+        kwargs={"string_representation": string_representation},
+        default_timeout=30,
+    ).run()
     assert not app.exception
     config = app.session_state["config"]
     app.toggle[0].set_value(True).run()
@@ -282,3 +292,156 @@ def test_training_page_tml_only_end_to_end(tmp_path, monkeypatch):
     app.button[0].click().run()
     assert not app.exception
     pd.testing.assert_frame_equal(read_csv(paths.ml_results_file_path(exp)), predictions)
+
+
+@pytest.mark.parametrize("train_tml", [True, False])
+def test_preprocessing_gui_defaults(train_tml):
+    from polynet.app.components.forms.train_models import default_feature_preprocessing
+    from polynet.config.enums import FeatureSelection, TransformDescriptor
+
+    def app_script(train_tml):
+        import streamlit as st
+
+        from polynet.app.components.forms.train_models import feature_transformer_widgets
+
+        st.session_state["config"] = feature_transformer_widgets(train_tml, True)
+
+    app = AppTest.from_function(app_script, kwargs={"train_tml": train_tml}).run()
+    assert not app.exception
+    expected = default_feature_preprocessing(train_tml)
+    assert app.session_state["config"] == expected
+    assert expected.scaler == TransformDescriptor.MinMaxScaler
+    assert list(expected.selectors) == (
+        [FeatureSelection.Variance, FeatureSelection.Correlation] if train_tml else []
+    )
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_external_results_layout(tmp_path, legacy):
+    import json
+
+    root = tmp_path / "unseen_predictions" / "SNR_data_all"
+    destination = root / "ml_results" if legacy else root
+    destination.mkdir(parents=True)
+    pd.DataFrame({"prediction": [1.2, 2.3]}).to_csv(destination / "predictions.csv")
+    metrics = {
+        "1": {"GCN": {"SNR_data_all": {"rmse": 0.1}}},
+        "ensemble": {"GNN": {"SNR_data_all": {"rmse": 0.2}}},
+    }
+    (destination / "metrics.json").write_text(json.dumps(metrics))
+
+    def app_script(path):
+        from pathlib import Path
+
+        from polynet.app.components.plots import display_unseen_predictions
+
+        display_unseen_predictions(Path(path))
+
+    app = AppTest.from_function(app_script, args=(str(tmp_path),)).run()
+    assert not app.dataframe
+    app.toggle[0].set_value(True).run()
+    assert not app.exception
+    assert len(app.dataframe) == 3
+    assert len(app.dataframe[0].value) == 2
+    assert set(app.dataframe[1].value["Iteration"]) == {"1", "ensemble"}
+
+
+def test_empty_results_panel_explains_missing_files(tmp_path):
+    def app_script(path):
+        from pathlib import Path
+
+        from polynet.app.components.plots import display_model_results
+
+        display_model_results(Path(path), expanded=True, external=True)
+
+    app = AppTest.from_function(app_script, args=(str(tmp_path),)).run()
+    assert not app.exception
+    assert "No saved predictions" in app.info[0].value
+
+
+def test_parity_legend_has_readable_background():
+    from matplotlib.colors import to_rgba
+    import matplotlib.pyplot as plt
+
+    from polynet.visualization.plots import plot_parity
+
+    with plt.rc_context(
+        {
+            "axes.facecolor": (0, 0, 0, 0),
+            "legend.facecolor": "black",
+            "legend.framealpha": 0.2,
+            "font.weight": "bold",
+        }
+    ):
+        fig = plot_parity([1, 2, 3], [1.1, 1.9, 3.1])
+    ax = fig.axes[0]
+    legend = ax.get_legend()
+    assert legend.get_frame().get_facecolor() == to_rgba("white")
+    assert legend.get_texts()[0].get_fontweight() == "normal"
+    assert ax.lines[0].get_color() == "#777777"
+    assert list(ax.lines[0].get_ydata()) == list(ax.lines[0].get_xdata())
+    plt.close(fig)
+
+
+def test_descriptor_defaults_follow_string_type():
+    from rdkit.Chem import Descriptors
+
+    from polynet.app.components.forms.representation import default_molecular_descriptors
+    from polynet.config.enums import MolecularDescriptor, PMXAggMethod
+    from polynet.config.schemas import RepresentationConfig
+    from polynet.featurizer.pmx import (
+        BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY,
+        CHEMICAL_FEATURIZER_REGISTRY,
+        SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY,
+    )
+
+    smiles = default_molecular_descriptors("smiles")
+    psmiles = default_molecular_descriptors("psmiles")
+    assert set(smiles) == {MolecularDescriptor.RDKit, MolecularDescriptor.Morgan}
+    assert set(smiles[MolecularDescriptor.RDKit]) == {n for n, _ in Descriptors.descList}
+    assert set(psmiles) == {MolecularDescriptor.PolyBERT, MolecularDescriptor.PolyMetriX}
+    pmx = psmiles[MolecularDescriptor.PolyMetriX]
+    assert set(pmx["polymer"]) == set(CHEMICAL_FEATURIZER_REGISTRY)
+    assert set(pmx["side_chain"]) == set(CHEMICAL_FEATURIZER_REGISTRY) | set(
+        SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY
+    )
+    assert set(pmx["backbone"]) == set(CHEMICAL_FEATURIZER_REGISTRY) | set(
+        BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY
+    )
+    assert pmx["agg"] == [PMXAggMethod.Mean]
+    for config in (smiles, psmiles):
+        RepresentationConfig(smiles_merge_approach="no_merging", molecular_descriptors=config)
+
+
+def test_switching_to_smiles_clears_polymer_only_selections():
+    def app_script():
+        import pandas as pd
+        import streamlit as st
+
+        from polynet.app.components.forms.representation import molecular_descriptor_representation
+        from polynet.config.schemas import DataConfig
+
+        kind = st.selectbox("String type", ["psmiles", "smiles"])
+        cfg = DataConfig(
+            data_name="data.csv",
+            data_path="data.csv",
+            id_col="id",
+            smiles_cols=["smiles"],
+            target_variable_col="target",
+            target_variable_name="target",
+            problem_type="regression",
+            num_classes=1,
+            string_representation=kind,
+        )
+        st.session_state["descriptors"] = molecular_descriptor_representation(
+            pd.DataFrame({"smiles": ["*CC*" if kind == "psmiles" else "CC"], "target": [1]}), cfg
+        )
+
+    app = AppTest.from_function(app_script, default_timeout=30).run()
+    assert not app.exception
+    assert set(app.session_state["descriptors"]) == {"polybert", "polymetrix"}
+    app.selectbox[0].set_value("smiles").run()
+    assert not app.exception
+    assert set(app.session_state["descriptors"]) == {"rdkit", "morgan"}
+    assert not app.checkbox(key="polyBERTfp").value
+    assert app.checkbox(key="polyBERTfp").disabled
