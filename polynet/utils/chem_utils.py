@@ -2,13 +2,13 @@ from collections import defaultdict
 import logging
 from typing import Optional
 
-from canonicalize_psmiles.canonicalize import canonicalize
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import BRICS
 from rdkit.Chem.Scaffolds import MurckoScaffold
 
 from polynet.config.enums import AtomFeature, BondFeature, FragmentationMethod, StringRepresentation
+from polynet.utils.optional_dependencies import import_psmiles_canonicaliser
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +63,7 @@ def determine_string_representation(df, smiles_cols):
 
 
 def canonicalise_psmiles(psmiles: str) -> Optional[str]:
+    canonicalize = import_psmiles_canonicaliser()
     try:
         psmiles = canonicalize(psmiles)
         return psmiles
