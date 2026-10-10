@@ -1,7 +1,7 @@
 """
 polynet.pipeline.stages
 ========================
-Shared pipeline stage functions used by both ``scripts/run_pipeline.py``
+Shared pipeline stage functions used by both ``polynet.pipeline.runner``
 and the Streamlit app (``polynet/app/``).
 
 Every function accepts **Pydantic config objects** — never raw dicts — so
