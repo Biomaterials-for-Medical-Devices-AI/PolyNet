@@ -2,7 +2,7 @@
 polynet.pipeline
 ================
 Shared pipeline stage functions used by both the script runner
-(``scripts/run_pipeline.py``) and the Streamlit app.
+(``polynet.pipeline.runner``, i.e. ``polynet run``) and the Streamlit app.
 
 Import from this package for convenience::
 
