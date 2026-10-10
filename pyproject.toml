@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "polynet"
-version = "0.1.0"
+version = "1.0.0"
 description = "Polymer Property Predictions and Biomaterials Design"
 authors = ["Eduardo Aguilar-Bejarano <eduardo.aguilar-bejarano@nottingham.ac.uk>"]
 license = "MIT"
