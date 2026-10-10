@@ -39,21 +39,46 @@ def cached_graph_feature_analysis(df, smiles_cols):
     return compute_graph_feature_analysis(df, smiles_cols)
 
 
+def default_molecular_descriptors(string_representation: StringRepresentation) -> dict:
+    """GUI descriptor defaults, selected by the validated molecular string type.
+
+    SMILES: every registered RDKit descriptor and a Morgan count fingerprint.
+    PSMILES: polyBERT and every PMX repeat-unit, side-chain and backbone feature,
+    with mean aggregation for side chains. This does not alter CLI defaults.
+    """
+    if StringRepresentation(string_representation) == StringRepresentation.PSMILES:
+        return {
+            MolecularDescriptor.PolyBERT: [],
+            MolecularDescriptor.PolyMetriX: {
+                "polymer": list(CHEMICAL_FEATURIZER_REGISTRY),
+                "side_chain": list(CHEMICAL_FEATURIZER_REGISTRY)
+                + list(SIDECHAIN_TOPOLOGICAL_FEATURIZER_REGISTRY),
+                "backbone": list(CHEMICAL_FEATURIZER_REGISTRY)
+                + list(BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY),
+                "agg": [PMXAggMethod.Mean],
+            },
+        }
+    return {
+        MolecularDescriptor.RDKit: sorted(name for name, _ in Descriptors.descList),
+        MolecularDescriptor.Morgan: MorganFingerprintConfig().model_dump(),
+    }
+
+
 def basic_representation(data_options, df, feature_analysis):
-    """Existing GUI defaults with scientific configuration hidden until unlocked."""
+    """Render type-appropriate descriptor defaults and the default graph features."""
     descriptors = {}
     if st.toggle("Use molecular descriptors", value=True, key="basic_descriptors"):
-        descriptors[MolecularDescriptor.RDKit] = [
-            "MolWt",
-            "TPSA",
-            "NumHAcceptors",
-            "NumHDonors",
-            "MolLogP",
-        ]
-        st.caption(
-            "Five default RDKit descriptors: molecular weight, TPSA, hydrogen-bond "
-            "acceptors/donors and MolLogP. Unlock to select descriptors and fingerprints."
-        )
+        descriptors = default_molecular_descriptors(data_options.string_representation)
+        if data_options.string_representation == StringRepresentation.PSMILES:
+            st.caption(
+                "polyBERT and all PolyMetriX repeat-unit, side-chain and backbone "
+                "descriptors; mean side-chain aggregation. Unlock to customise."
+            )
+        else:
+            st.caption(
+                "All RDKit descriptors and Morgan count fingerprints "
+                "(2,048 bins, radius 3). Unlock to customise."
+            )
     nodes, edges = {}, {}
     if st.toggle("Use graph representation", value=True, key="basic_graphs"):
         if feature_analysis is None:
@@ -204,6 +229,33 @@ def molecular_descriptor_representation(
 ) -> Dict[MolecularDescriptor, List[str]]:
 
     descriptors_dict = {}
+    previous_type = st.session_state.get("descriptor_string_type")
+    if previous_type is not None and previous_type != data_options.string_representation:
+        # Defaults must follow the new input type, not widgets from the previous
+        # experiment (especially polymer-only descriptors on ordinary SMILES).
+        for key in (
+            DescriptorCalculationStateKeys.SelectAllRDKitDescriptors,
+            DescriptorCalculationStateKeys.DescriptorsRDKit,
+            DescriptorCalculationStateKeys.polyBERTfp,
+            DescriptorCalculationStateKeys.Morganfp,
+            DescriptorCalculationStateKeys.RDKitfp,
+            DescriptorCalculationStateKeys.PMXDescriptors,
+            DescriptorCalculationStateKeys.SelectAllPMXRepeatUnit,
+            DescriptorCalculationStateKeys.SelectAllPMXSideChainDescriptors,
+            DescriptorCalculationStateKeys.SelectAllPMXBackboneDescriptors,
+            DescriptorCalculationStateKeys.PMXRepeatUnit,
+            DescriptorCalculationStateKeys.PMXSideChainDescriptors,
+            DescriptorCalculationStateKeys.PMXBackboneDescriptors,
+            DescriptorCalculationStateKeys.PMXAggMethod,
+        ):
+            st.session_state.pop(key, None)
+    st.session_state["descriptor_string_type"] = data_options.string_representation
+    defaults = default_molecular_descriptors(data_options.string_representation)
+    is_psmiles = data_options.string_representation == StringRepresentation.PSMILES
+    if not is_psmiles:
+        # Disabled widgets can still retain True after switching experiments.
+        st.session_state[DescriptorCalculationStateKeys.polyBERTfp] = False
+        st.session_state[DescriptorCalculationStateKeys.PMXDescriptors] = False
 
     st.markdown("### Configure Molecular Descriptor Representation")
     with st.expander("Molecular Descriptors", expanded=False):
@@ -227,7 +279,7 @@ def molecular_descriptor_representation(
 
         select_all = st.checkbox(
             "Select all descriptors",
-            value=False,
+            value=not is_psmiles,
             key=DescriptorCalculationStateKeys.SelectAllRDKitDescriptors,
             help="If checked, all RDKit molecular descriptors will be selected by default. Uncheck to select specific descriptors.",
         )
@@ -235,13 +287,7 @@ def molecular_descriptor_representation(
         if select_all:
             default_descriptors = all_descriptors
         else:
-            default_descriptors = [
-                "MolWt",  # Molecular Weight
-                "TPSA",  # Topological Polar Surface Area
-                "NumHAcceptors",  # Number of Hydrogen Bond Acceptors
-                "NumHDonors",  # Number of Hydrogen Bond Donors
-                "MolLogP",  # Octanol-Water Partition Coefficient
-            ]
+            default_descriptors = defaults.get(MolecularDescriptor.RDKit, [])
 
         selected_descriptors = st.multiselect(
             "Select descriptors to calculate:",
@@ -265,7 +311,7 @@ def molecular_descriptor_representation(
 
         polybert_fps = st.checkbox(
             "Calculate polyBERT fingerprint",
-            value=False,
+            value=is_psmiles,
             key=DescriptorCalculationStateKeys.polyBERTfp,
             disabled=disabled,
             help=message,
@@ -273,7 +319,7 @@ def molecular_descriptor_representation(
 
         if st.checkbox(
             "Calculate Morgan fingerprint",
-            value=False,
+            value=not is_psmiles,
             key=DescriptorCalculationStateKeys.Morganfp,
             disabled=False,
         ):
@@ -317,7 +363,7 @@ def molecular_descriptor_representation(
 
         pmx_descriptors = st.checkbox(
             "Calculate PolyMetrix descriptors",
-            value=False,
+            value=is_psmiles,
             key=DescriptorCalculationStateKeys.PMXDescriptors,
             disabled=disabled,
             help="PMX is a library for calculation of descriptors of polymers. For it to work properly, it must operate on PMILES.",
@@ -336,7 +382,7 @@ def molecular_descriptor_representation(
 
             select_all_repeat_unit = st.checkbox(
                 "Select all repeat-unit descriptors",
-                value=False,
+                value=True,
                 key=DescriptorCalculationStateKeys.SelectAllPMXRepeatUnit,
                 help="If checked, every repeat-unit descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
@@ -349,7 +395,7 @@ def molecular_descriptor_representation(
 
             select_all_side_chain = st.checkbox(
                 "Select all side-chain descriptors",
-                value=False,
+                value=True,
                 key=DescriptorCalculationStateKeys.SelectAllPMXSideChainDescriptors,
                 help="If checked, every side-chain descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
@@ -362,7 +408,7 @@ def molecular_descriptor_representation(
 
             select_all_backbone = st.checkbox(
                 "Select all backbone descriptors",
-                value=False,
+                value=True,
                 key=DescriptorCalculationStateKeys.SelectAllPMXBackboneDescriptors,
                 help="If checked, every backbone descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
@@ -376,6 +422,7 @@ def molecular_descriptor_representation(
             agg_method = st.multiselect(
                 "Select an aggregation method for polymers with multiple side chains",
                 options=[PMXAggMethod.Sum, PMXAggMethod.Mean, PMXAggMethod.Max, PMXAggMethod.Min],
+                default=[PMXAggMethod.Mean],
                 key=DescriptorCalculationStateKeys.PMXAggMethod,
             )
 
@@ -424,7 +471,7 @@ def molecular_descriptor_representation(
         if polybert_fps:
             descriptors_dict[MolecularDescriptor.PolyBERT] = []
 
-        if len(smiles_cols) > 1 and (selected_descriptors or descriptors_df):
+        if len(smiles_cols) > 1 and descriptors_dict:
 
             st.markdown("### Merging Method for Multiple SMILES Columns")
 
