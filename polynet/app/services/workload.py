@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Workload:
+    """Final fit count, tuning-inclusive fit/epoch budgets and warning reasons."""
+
     final_fits: int
     fit_budget: int
     gnn_epochs: int
@@ -24,6 +26,15 @@ def estimate_workload(
     gnn_folds=5,
     epochs=250,
 ):
+    """Estimate work from selected GUI settings without running any models.
+
+    Each TML model is fitted once per descriptor representation and outer split;
+    each GNN is fitted once per outer split. Tuning adds samples × internal folds
+    per final fit. Set samples to zero when tuning is disabled. Budgets exclude
+    data preparation and assume full trials, so cache reuse, finite grids and
+    early stopping can reduce actual work. Reasons are advisory thresholds,
+    never a wall-clock estimate or permission gate. No CUDA detection is needed.
+    """
     tml_fits = representations * tml_models * repetitions
     gnn_fits = gnn_models * repetitions
     final_fits = tml_fits + gnn_fits

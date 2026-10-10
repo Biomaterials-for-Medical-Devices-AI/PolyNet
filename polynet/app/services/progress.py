@@ -42,6 +42,15 @@ class RunLogHandler(logging.Handler):
 
 @contextmanager
 def run_progress(label):
+    """Display an operation's core logs in this Streamlit session.
+
+    Use as a context manager or decorator around a synchronous GUI action.
+    Only records from the calling thread are shown; Ray trial callbacks report
+    from its driver. Nested/concurrent runs share logger-level bookkeeping and
+    remove their own handlers in finally. Exceptions propagate to the caller
+    after marking the status unsuccessful. The panel retains 80 records and
+    throttles epoch rendering, without changing the underlying CLI log stream.
+    """
     global _active, _previous_level
     logger = logging.getLogger("polynet")
     with st.status(label, expanded=True) as status:
