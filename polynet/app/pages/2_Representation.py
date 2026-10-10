@@ -144,7 +144,7 @@ if experiment_name:
         value=False,
         key=f"advanced_representation:{experiment_name}",
         help="Unlock descriptor selection, fingerprints, graph features and merging. "
-        "Locking again restores the existing GUI defaults for the next build.",
+        "Locking again restores the GUI defaults for the next build.",
     )
     if advanced:
         molecular_descriptors = molecular_descriptor_representation(df=data, data_options=data_opts)

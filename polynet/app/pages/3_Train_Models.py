@@ -7,6 +7,7 @@ import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.train_models import (
+    default_feature_preprocessing,
     feature_transformer_widgets,
     gnn_optimisation_widgets,
     sampling_fingerprint_from_state,
@@ -415,11 +416,11 @@ if experiment_name:
         value=False,
         key=f"advanced_training:{experiment_name}",
         help="Unlock hyperparameters, tuning grids, splitting, preprocessing and optimisation. "
-        "Locking again restores the existing GUI defaults for the next run.",
+        "Locking again restores the GUI defaults for the next run.",
     )
     if not advanced:
         st.info(
-            "Advanced options are locked. Existing GUI defaults are used; "
+            "Advanced options are locked. GUI defaults are used; "
             "unlock above to customise them. These defaults are a starting point, "
             "not a guarantee of the best model for every dataset."
         )
@@ -475,10 +476,17 @@ if experiment_name:
                 train_tml=bool(tml_models), gnn_polymer_descriptors=gnn_polymer_descriptors
             )
             if advanced
-            else FeatureTransformConfig()
+            else default_feature_preprocessing(train_tml=bool(tml_models))
         )
         if not advanced:
-            st.caption("No feature scaling or feature selection (existing GUI default).")
+            st.caption(
+                "MinMax scaling; "
+                + (
+                    "variance filter (threshold 0.0), then correlation filter (threshold 0.95)."
+                    if tml_models
+                    else "no feature selection for GNN polymer descriptors."
+                )
+            )
 
     st.markdown("## Data Splitting Options")
     valid_split = split_data_form(problem_type=data_opts.problem_type, advanced=advanced)
