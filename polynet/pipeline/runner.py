@@ -1,22 +1,23 @@
 """
-PolyNet Pipeline Runner
-========================
+polynet.pipeline.runner
+=======================
 Executes the full polymer property prediction pipeline from a YAML config.
+Installed as the ``polynet run`` command.
 
 Usage
 -----
-    python scripts/run_pipeline.py --config configs/experiment.yaml
+    polynet run --config configs/experiment.yaml
 
     # Override specific settings from the command line
-    python scripts/run_pipeline.py --config configs/experiment.yaml --epochs 100
-    python scripts/run_pipeline.py --config configs/experiment.yaml --task classification
-    python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-explain
+    polynet run --config configs/experiment.yaml --epochs 100
+    polynet run --config configs/experiment.yaml --task classification
+    polynet run --config configs/experiment.yaml --no-gnn --no-explain
 
     # Predict on an external dataset after training
-    python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/unseen.csv
+    polynet run --config configs/experiment.yaml --predict-data data/unseen.csv
 
     # Predict only (skip training, models must already exist)
-    python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/unseen.csv
+    polynet run --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/unseen.csv
 
 Stages
 ------
@@ -64,16 +65,6 @@ from polynet.config.schemas import (
     TrainTMLConfig,
 )
 
-# ---------------------------------------------------------------------------
-# Logging setup — runs before any polynet imports so the root logger is
-# configured before any module-level loggers are created.
-# ---------------------------------------------------------------------------
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
-    datefmt="%H:%M:%S",
-)
 logger = logging.getLogger("polynet.pipeline")
 
 
@@ -343,8 +334,9 @@ def save_metrics(metrics: dict, path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def parse_args() -> argparse.Namespace:
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
+        prog="polynet run",
         description="Run the full PolyNet pipeline from a YAML config.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
@@ -376,7 +368,7 @@ def parse_args() -> argparse.Namespace:
         help="Project root directory. Relative paths in config are resolved from here. "
         "Defaults to the current working directory.",
     )
-    return p.parse_args()
+    return p.parse_args(argv)
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +376,14 @@ def parse_args() -> argparse.Namespace:
 # ---------------------------------------------------------------------------
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
+    """
+    Run the full pipeline from a YAML config.
+
+    Args:
+        argv (list[str] | None): Command-line arguments, without the program
+            name. Defaults to ``sys.argv[1:]``.
+    """
     from polynet.config.paths import hpo_search_spaces_path
     from polynet.config.search_grid import effective_search_spaces
     from polynet.data.structures import prepare_structures
@@ -404,7 +403,13 @@ def main() -> None:
     )
     from polynet.utils.validation import validate_hpo_folds
 
-    args = parse_args()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    args = parse_args(argv)
     root = Path(args.root).resolve()
     cfg = load_config(args.config)
     cfg = apply_overrides(cfg, args)

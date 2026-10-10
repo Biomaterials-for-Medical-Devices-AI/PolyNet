@@ -1,6 +1,6 @@
 # PolyNet
 
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
@@ -111,11 +111,28 @@ poetry install
 
 Poetry reads `pyproject.toml` and `poetry.lock` and installs all dependencies into the active environment.
 
+### PSMILES support
+
+PolyNet canonicalises PSMILES (polymer SMILES with `*` attachment points) with
+[canonicalize-psmiles](https://github.com/kuennethgroup/canonicalize_psmiles) from the
+Kuenneth group. It is distributed by Georgia Tech Research Corporation under its own
+licence, which allows **non-commercial use only**, and is not on PyPI, so it is installed
+separately from PolyNet's MIT-licensed code:
+
+- `poetry install` (above) installs it.
+- In the GUI, loading PSMILES data offers an **Install canonicalize-psmiles** button
+  after you accept its licence.
+- From a terminal: `polynet install-psmiles`.
+
+Datasets written as plain SMILES do not need it.
+
 ### Verifying the installation
 
 ```bash
-python scripts/integration_test.py
+polynet check
 ```
+
+This runs the whole pipeline on a small synthetic dataset (about a minute) and prints a PASS / FAIL table.
 
 ### Common Poetry commands
 
@@ -160,10 +177,10 @@ data:
 **2. Run the pipeline:**
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml
+polynet run --config configs/experiment.yaml
 ```
 
-All outputs are written to the directory specified by `experiment.output_dir` in the config.
+All outputs are written to the directory specified by `experiment.output_dir` in the config. `polynet run --help` lists the flags (e.g. `--epochs`, `--no-gnn`, `--predict-data`).
 
 ### Streamlit GUI
 
@@ -171,7 +188,7 @@ All outputs are written to the directory specified by `experiment.output_dir` in
 polynet
 ```
 
-This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
+This works from any directory once the package is installed (`polynet gui` is the same). Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py
@@ -241,13 +258,16 @@ Full documentation lives in [`docs/`](docs/README.md):
 
 ## Citing PolyNet
 
-Coming soon :)
+If you use PolyNet, please cite the software (GitHub's "Cite this repository" button reads [`CITATION.cff`](CITATION.cff)):
 
-<!-- ```bibtex
+```bibtex
 @software{polynet,
-  author  = {},
-  title   = {PolyNet: Graph Neural Networks for Polymer Property Prediction},
-  year    = {},
-  url     = {}
+  author  = {Aguilar-Bejarano, Eduardo and Alexander, Morgan and Winkler, David and Figueredo, Grazziela},
+  title   = {PolyNet: A Python Package for Polymer Informatics},
+  version = {1.0.0},
+  year    = {2026},
+  url     = {https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}
 }
-``` -->
+```
+
+Changes between versions are listed in [`CHANGELOG.md`](CHANGELOG.md).

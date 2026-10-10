@@ -325,3 +325,8 @@ class PlotCustomiserStateKeys(StrEnum):
     PlotLabelFontSize = "PlotLabelFontSize"
     LabelNames = "LabelNames"
     AbbreviateLabels = "AbbreviateLabels"
+
+
+class OptionalDependencyStateKeys(StrEnum):
+    AcceptPSMILESLicence = "AcceptPSMILESLicence"
+    InstallPSMILES = "InstallPSMILES"

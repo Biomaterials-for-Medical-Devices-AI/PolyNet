@@ -1,56 +1,73 @@
-[tool.poetry]
+[project]
 name = "polynet"
-version = "0.1.0"
-description = "Polymer Property Predictions and Biomaterials Design"
-authors = ["Eduardo Aguilar-Bejarano <eduardo.aguilar-bejarano@nottingham.ac.uk>"]
+version = "1.0.0"
+description = "A Python package for polymer informatics: property prediction with graph neural networks and traditional machine learning"
+authors = [
+  { name = "Eduardo Aguilar-Bejarano", email = "eduardo.aguilar-bejarano@nottingham.ac.uk" },
+]
 license = "MIT"
+license-files = ["LICENSE"]
 readme = "README.md"
+requires-python = ">=3.11,<3.12"
+keywords = ["polymer informatics", "graph neural networks", "machine learning", "explainability"]
+classifiers = [
+  "Programming Language :: Python :: 3.11",
+  "Intended Audience :: Science/Research",
+  "Topic :: Scientific/Engineering :: Chemistry",
+]
+dependencies = [
+  "pandas>=2.2.3,<3.0.0",
+  "rdkit>=2025.3.2,<2026.0.0",
+  "torch==2.2.0 ; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+  "torch>=2.5.1,<3.0.0 ; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+  "torch-geometric==2.7",
+  "scikit-learn>=1.6.1,<2.0.0",
+  "matplotlib>=3.10.3,<4.0.0",
+  "seaborn>=0.13.2,<0.14.0",
+  "numpy>=2.4.4,<3.0.0",
+  "scipy>=1.15.3,<2.0.0",
+  "streamlit>=1.45.1,<2.0.0",
+  "plotly>=6.1.1,<7.0.0",
+  "imbalanced-learn>=0.14.0,<0.15.0",
+  "xgboost>=3.0.2,<4.0.0",
+  "statsmodels>=0.14.5,<0.15.0",
+  "ray>=2.51.0,<3.0.0",
+  "pydantic>=2.12.3,<3.0.0",
+  "sentence-transformers>=5.2.3,<6.0.0",
+  "polymetrix>=0.2.0,<0.3.0",
+  "shap>=0.51.0,<0.52.0",
+  "openpyxl>=3.1.5,<4.0.0",
+  "astartes>=1.3.3,<2.0.0",
+]
+
+[project.urls]
+Repository = "https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet"
+Documentation = "https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/tree/main/docs"
+Changelog = "https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/CHANGELOG.md"
+
+[project.scripts]
+polynet = "polynet.cli:main"
+
+[tool.poetry]
 include = [
   { path = "polynet/app/static/*.png", format = ["sdist", "wheel"] },
   { path = "polynet/data/benchmarks/*.csv", format = ["sdist", "wheel"] },
 ]
 
-[tool.poetry.scripts]
-polynet = "polynet.cli:main"
-
-[tool.poetry.dependencies]
-python = "~3.11"
-pandas = "^2.2.3"
-rdkit = "^2025.3.2"
-torch = [
-  { version = "2.2.0", markers = "sys_platform == 'darwin' and platform_machine == 'x86_64'" },
-  { version = ">=2.5.1,<3.0.0", markers = "sys_platform != 'darwin' or platform_machine != 'x86_64'" }
-]
-torch-geometric = "2.7"
-scikit-learn = "^1.6.1"
-matplotlib = "^3.10.3"
-seaborn = "^0.13.2"
-numpy = "^2.4.4"
-scipy = "^1.15.3"
-ipykernel = "^6.24.0"
-streamlit = "^1.45.1"
-plotly = "^6.1.1"
-black = "^25.1.0"
-imbalanced-learn = ">=0.14.0,<0.15.0"
-xgboost = "^3.0.2"
-isort = "^6.0.1"
-statsmodels = "^0.14.5"
-ray = "^2.51.0"
-pydantic = "^2.12.3"
-canonicalize-psmiles = {git = "https://github.com/kuennethgroup/canonicalize_psmiles.git"}
-sentence-transformers = "^5.2.3"
-polymetrix = "^0.2.0"
-shap = "^0.51.0"
-openpyxl = "^3.1.5"
-gbigsmiles = "^0.3.3"
-astartes = "^1.3.3"
-
+# canonicalize-psmiles is not on PyPI, so it cannot be a dependency of the published
+# package; `poetry install` still installs it. pip users run `polynet install-psmiles`
+# or use the GUI button (polynet/utils/optional_dependencies.py, same commit).
+[tool.poetry.group.psmiles.dependencies]
+canonicalize-psmiles = { git = "https://github.com/kuennethgroup/canonicalize_psmiles.git", rev = "42aebcf3e780198ba8bb50b50d4fa84dc8fb66fa" }
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.0"
+black = "^25.1.0"
+isort = "^6.0.1"
+ipykernel = "^6.24.0"
 
 [build-system]
-requires = ["poetry-core"]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.black]
@@ -63,6 +80,7 @@ required-version = "25"
 profile = "black"
 line_length = 100
 force_sort_within_sections = true
+split_on_trailing_comma = false
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

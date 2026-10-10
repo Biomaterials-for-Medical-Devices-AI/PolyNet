@@ -525,8 +525,11 @@ def get_polybert_fingerprints(
     - Output keys remain the original strings from `psmiles_list` so you can
       join back to your dataset without needing to canonicalize your dataframe.
     """
-    from canonicalize_psmiles.canonicalize import canonicalize
     from sentence_transformers import SentenceTransformer
+
+    from polynet.utils.optional_dependencies import import_psmiles_canonicaliser
+
+    canonicalize = import_psmiles_canonicaliser()
 
     model = SentenceTransformer(POLYBERT_MODEL)
 

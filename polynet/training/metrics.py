@@ -25,7 +25,6 @@ from imblearn.metrics import geometric_mean_score as gmean
 from imblearn.metrics import specificity_score
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
@@ -34,6 +33,7 @@ from sklearn.metrics import (
     recall_score,
     roc_auc_score,
 )
+from sklearn.metrics import accuracy_score, f1_score
 from sklearn.metrics import matthews_corrcoef as mcc
 import torch
 

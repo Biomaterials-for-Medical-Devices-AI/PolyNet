@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use PolyNet, please cite it using the metadata below."
+title: "PolyNet: A Python Package for Polymer Informatics"
+type: software
+version: 1.0.0
+license: MIT
+repository-code: "https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet"
+authors:
+  - given-names: Eduardo
+    family-names: Aguilar-Bejarano
+    affiliation: University of Nottingham
+  - given-names: Morgan
+    family-names: Alexander
+    affiliation: University of Nottingham
+  - given-names: David
+    family-names: Winkler
+    affiliation: "University of Nottingham; La Trobe University; Monash University"
+  - given-names: Grazziela
+    family-names: Figueredo
+    affiliation: University of Nottingham
+keywords:
+  - polymer informatics
+  - graph neural networks
+  - machine learning
+  - explainability

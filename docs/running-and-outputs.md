@@ -11,7 +11,7 @@
 ## CLI flags
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml
+polynet run --config configs/experiment.yaml
 ```
 
 | Flag | Description |
@@ -25,23 +25,24 @@ python scripts/run_pipeline.py --config configs/experiment.yaml
 | `--predict-data PATH` | Path to a CSV of unseen samples to predict after training |
 | `--root PATH` | Project root for resolving relative paths (default: current directory) |
 
+
 ### Examples
 
 ```bash
 # Quick smoke test
-python scripts/run_pipeline.py --config configs/experiment.yaml --epochs 5
+polynet run --config configs/experiment.yaml --epochs 5
 
 # GNN only, no TML, no explainability
-python scripts/run_pipeline.py --config configs/experiment.yaml --no-tml --no-explain
+polynet run --config configs/experiment.yaml --no-tml --no-explain
 
 # Classification task
-python scripts/run_pipeline.py --config configs/experiment.yaml --task classification
+polynet run --config configs/experiment.yaml --task classification
 
 # Train and predict on external data in one command
-python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/test_set.csv
+polynet run --config configs/experiment.yaml --predict-data data/test_set.csv
 
 # Predict only on an already-trained experiment
-python scripts/run_pipeline.py --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/test_set.csv
+polynet run --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/test_set.csv
 ```
 
 ## Predicting on external data
@@ -53,7 +54,7 @@ column is optional — if present, per-model metrics are computed automatically.
 **Via CLI:**
 
 ```bash
-python scripts/run_pipeline.py --config configs/experiment.yaml --predict-data data/new_polymers.csv
+polynet run --config configs/experiment.yaml --predict-data data/new_polymers.csv
 ```
 
 **Via YAML config:**
@@ -340,46 +341,38 @@ training, validation and test loss after every epoch.
   the set. (Earlier versions averaged the loss of single samples, so with RMSE the
   validation/test curves — and the best-epoch choice — were in fact the MAE.)
 
-## Debugging
+## Checking an installation
 
-An integration test runs each pipeline stage independently using synthetic polymer
-data. All stages run regardless of prior failures, giving a complete picture in one
-pass:
+`polynet check` runs the full pipeline (`polynet run`) on a small synthetic copolymer
+dataset, once for regression and once for classification, in a temporary folder. The
+regression run also explains the models (GNN masking, SHAP) and predicts on new data
+with the applicability domain. It takes about a minute and prints a table that can be
+pasted into a bug report:
 
 ```bash
-# Full pipeline smoke test
-python scripts/integration_test.py
-
-# Classification task
-python scripts/integration_test.py --task classification
-
-# TML stages only (much faster — no graph building)
-python scripts/integration_test.py --tml-only
-
-# More samples, longer training
-python scripts/integration_test.py --samples 80 --epochs 20
+polynet check                 # default: 40 polymers, 5 GNN epochs
+polynet check --epochs 20     # longer GNN training
+polynet check --keep          # keep the outputs (their folder is printed)
+polynet check --verbose       # show the full pipeline log
 ```
 
 Example output:
 
 ```
-============================================================
-  INTEGRATION TEST SUMMARY
-============================================================
-  ✓ PASS    1. Synthetic data               (0.0s)
-  ✓ PASS    2. Enum imports                 (0.1s)
-  ✓ PASS    3. Graph dataset (featurizer)   (4.2s)
-  ✓ PASS    4. Data split indices           (0.0s)
-  ✓ PASS    5. Network factory              (0.2s)
-  ✓ PASS    6. Optimizer & scheduler        (0.0s)
-  ✓ PASS    7. Loss factory                 (0.0s)
-  ✓ PASS    8. GNN training                 (12.1s)
-  ✓ PASS    9. GNN inference                (1.3s)
-  ✓ PASS   10. GNN metrics                  (0.1s)
-  ✓ PASS   11. GNN result plots             (2.0s)
-  ✓ PASS   12. TML training                 (0.8s)
-  ✓ PASS   13. TML inference                (0.1s)
-  ✓ PASS   14. TML metrics                  (0.0s)
+======================================================================
+  POLYNET CHECK
+======================================================================
+  PASS  Python packages
+        └─ Python 3.11.0, polynet 1.0.0
+  INFO  Compute device
+        └─ torch 2.10.0, CPU (no CUDA GPU found; GNN training runs on the CPU)
+  PASS  PSMILES canonicaliser
+        └─ installed and working
+  PASS  Regression: GNN + TML, explanations, new data  (6s)
+  PASS  Classification: GNN + TML                      (2s)
 
-  Total: 14 passed, 0 failed, 0 skipped
+  PolyNet is working.
+======================================================================
 ```
+
+When a part fails, its row shows the error and the outputs are kept for inspection.

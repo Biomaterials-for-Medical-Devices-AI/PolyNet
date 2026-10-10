@@ -5,6 +5,7 @@ import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
 from polynet.app.components.forms.applicability_domain import applicability_domain_form
+from polynet.app.components.optional_dependencies import require_psmiles_canonicaliser
 from polynet.app.components.plots import (
     display_mean_std_model_metrics,
     display_model_results,
@@ -24,7 +25,7 @@ from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
 from polynet.applicability import summarise_domain
-from polynet.config.enums import ProblemType, TransformDescriptor
+from polynet.config.enums import ProblemType, StringRepresentation, TransformDescriptor
 from polynet.config.schemas import (
     DataConfig,
     GeneralConfig,
@@ -157,6 +158,9 @@ if experiment_name:
         str_representation = determine_string_representation(df=df, smiles_cols=smiles_cols)
         st.write(f"The `{str_representation}` representation has been identified.")
         st.success(f"`{str_representation}` columns checked successfully.")
+
+        if str_representation == StringRepresentation.PSMILES:
+            require_psmiles_canonicaliser()
 
         if str_representation != data_options.string_representation:
             st.warning(

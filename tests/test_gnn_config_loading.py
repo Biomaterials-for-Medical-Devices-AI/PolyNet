@@ -7,23 +7,17 @@ instead of being ignored (silently falling back to the defaults).
 """
 
 import copy
-import importlib.util
-from pathlib import Path
 
 from pydantic import ValidationError
 import pytest
 
 from polynet.config.enums import Network, TrainingParam
-
-_SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "run_pipeline.py"
+from polynet.pipeline import runner
 
 
 @pytest.fixture(scope="module")
 def build_gnn_config():
-    spec = importlib.util.spec_from_file_location("run_pipeline", _SCRIPT)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module._build_gnn_config
+    return runner._build_gnn_config
 
 
 _CFG = {
