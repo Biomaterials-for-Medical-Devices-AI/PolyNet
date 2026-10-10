@@ -1,0 +1,771 @@
+"""
+polynet.pipeline.runner
+=======================
+Executes the full polymer property prediction pipeline from a YAML config.
+Installed as the ``polynet run`` command.
+
+Usage
+-----
+    polynet run --config configs/experiment.yaml
+
+    # Override specific settings from the command line
+    polynet run --config configs/experiment.yaml --epochs 100
+    polynet run --config configs/experiment.yaml --task classification
+    polynet run --config configs/experiment.yaml --no-gnn --no-explain
+
+    # Predict on an external dataset after training
+    polynet run --config configs/experiment.yaml --predict-data data/unseen.csv
+
+    # Predict only (skip training, models must already exist)
+    polynet run --config configs/experiment.yaml --no-gnn --no-tml --predict-data data/unseen.csv
+
+Stages
+------
+    1.  Load & validate data
+    1b. Graph feature analysis       (atom/bond property frequencies per SMILES column)
+    2.  Build graph dataset          (if gnn enabled)
+    3.  Compute descriptors          (if descriptors enabled)
+    4.  Compute data splits
+    5.  Train GNN ensemble           (if gnn enabled)
+    6.  Run GNN inference
+    7.  Train TML ensemble           (if tml enabled)
+    8.  Run TML inference
+    9.  Compute metrics
+    10. Plot results
+    11. Run explainability           (if enabled)
+    12. Predict on external dataset  (if --predict-data or prediction.data_path set),
+        with the applicability domain of the new polymers (prediction.applicability_domain)
+
+All outputs are written under the directory specified by
+``experiment.output_dir`` in the config file.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+from pathlib import Path
+import time
+
+import pandas as pd
+import yaml
+
+from polynet.config.io import save_options
+from polynet.config.schemas import (
+    ApplicabilityDomainConfig,
+    DataConfig,
+    ExplainabilityConfig,
+    FeatureTransformConfig,
+    GeneralConfig,
+    RepresentationConfig,
+    SplitConfig,
+    TargetTransformConfig,
+    TrainGNNConfig,
+    TrainTMLConfig,
+)
+
+logger = logging.getLogger("polynet.pipeline")
+
+
+# ---------------------------------------------------------------------------
+# Config helpers
+# ---------------------------------------------------------------------------
+
+
+def load_config(path: str | Path) -> dict:
+    with open(path) as f:
+        return yaml.safe_load(f)
+
+
+def apply_overrides(cfg: dict, args: argparse.Namespace) -> dict:
+    """Apply CLI flags over the loaded YAML config."""
+    if args.epochs is not None:
+        cfg.setdefault("training", {})["epochs"] = args.epochs
+    if args.task is not None:
+        cfg.setdefault("data", {})["problem_type"] = args.task
+    if args.no_gnn:
+        cfg.setdefault("gnn_training", {})["train_gnn"] = False
+    if args.no_tml:
+        cfg.setdefault("tml_models", {})["train_tml"] = False
+    if args.no_explain:
+        cfg.setdefault("explainability", {})["enabled"] = False
+    if args.predict_data is not None:
+        cfg.setdefault("prediction", {})["data_path"] = args.predict_data
+        cfg.setdefault("prediction", {}).setdefault("enabled", True)
+    return cfg
+
+
+def resolve_path(path: str, root: Path) -> Path:
+    p = Path(path)
+    return p if p.is_absolute() else root / p
+
+
+# ---------------------------------------------------------------------------
+# Stage helpers
+# ---------------------------------------------------------------------------
+
+
+def announce(stage: str) -> float:
+    bar = "=" * 60
+    logger.info(f"\n{bar}\n  {stage}\n{bar}")
+    return time.perf_counter()
+
+
+def done(t0: float) -> None:
+    logger.info(f"  Done ({time.perf_counter() - t0:.1f}s)")
+
+
+# ---------------------------------------------------------------------------
+# YAML → Pydantic config builders
+# ---------------------------------------------------------------------------
+
+
+def _build_data_config(cfg: dict) -> DataConfig:
+    """Build DataConfig from the 'data' section of the YAML config."""
+    return DataConfig.model_validate(cfg["data"])
+
+
+def _build_repr_config(
+    cfg: dict, node_feats: dict | None = None, edge_feats: dict | None = None
+) -> RepresentationConfig:
+    """Build RepresentationConfig from the 'representations' section.
+
+    ``node_feats`` and ``edge_feats`` override the YAML values when provided
+    (used after the graph dataset is built to store the actual feature sets).
+    """
+    repr_dict = dict(cfg["representations"])
+    if node_feats is not None:
+        repr_dict["node_features"] = node_feats
+    if edge_feats is not None:
+        repr_dict["edge_features"] = edge_feats
+    return RepresentationConfig.model_validate(repr_dict)
+
+
+def _build_split_config(cfg: dict) -> SplitConfig:
+    """Build SplitConfig from the 'splitting' section of the YAML config."""
+    return SplitConfig.model_validate(cfg["splitting"])
+
+
+def _build_gnn_config(cfg: dict) -> TrainGNNConfig:
+    """Build TrainGNNConfig from the 'gnn_training' and 'training' sections.
+
+    YAML string keys ``"LearningRate"``, ``"BatchSize"`` and
+    ``"AsymmetricLossStrength"`` are remapped to ``TrainingParam`` enum members, and architecture names to ``Network`` enum
+    members, before constructing the Pydantic model. The whole section is
+    validated, so unknown keys (e.g. typos) raise an error instead of being
+    ignored.
+    """
+    from polynet.config.enums import Network, TrainingParam
+
+    gnn_dict = dict(cfg["gnn_training"])
+    _KEY_MAP = {
+        "LearningRate": TrainingParam.LearningRate,
+        "BatchSize": TrainingParam.BatchSize,
+        "AsymmetricLossStrength": TrainingParam.AsymmetricLossStrength,
+    }
+    layers = {}
+    for arch_name, arch_params in (gnn_dict.get("gnn_convolutional_layers") or {}).items():
+        net = Network(arch_name)
+        params = dict(arch_params) if arch_params else {}
+        layers[net] = {_KEY_MAP.get(k, k): v for k, v in params.items()}
+    gnn_dict["gnn_convolutional_layers"] = layers
+
+    # Same key spelling as the architecture blocks (LearningRate / BatchSize / ...).
+    if "hpo_search_grid" in gnn_dict:
+        gnn_dict["hpo_search_grid"] = {
+            key: {_KEY_MAP.get(p, p): v for p, v in (params or {}).items()}
+            for key, params in (gnn_dict["hpo_search_grid"] or {}).items()
+        }
+    if gnn_dict.get("optimisation") is None:
+        gnn_dict.pop("optimisation", None)
+
+    # Epochs live in the 'training' section (also set by --epochs).
+    training = cfg.get("training") or {}
+    unknown = sorted(set(training) - {"epochs"})
+    if unknown:
+        raise ValueError(f"training: unknown key(s) {unknown}. Allowed: ['epochs'].")
+    if "epochs" in gnn_dict:
+        raise ValueError("Set the number of epochs in 'training.epochs', not in 'gnn_training'.")
+    if "epochs" in training:
+        gnn_dict["epochs"] = training["epochs"]
+
+    return TrainGNNConfig.model_validate(gnn_dict)
+
+
+def _build_tml_config(cfg: dict) -> TrainTMLConfig:
+    """Build TrainTMLConfig from the 'tml_models' section."""
+    return TrainTMLConfig.model_validate(cfg["tml_models"])
+
+
+def _build_preprocessing_config(cfg: dict) -> FeatureTransformConfig:
+    """Build FeatureTransformConfig from the 'feature_preprocessing' section."""
+    return FeatureTransformConfig.model_validate(cfg["feature_preprocessing"])
+
+
+def _resolve_preprocessing_config(
+    cfg: dict, train_tml: bool, gnn_polymer_descriptors: bool
+) -> FeatureTransformConfig | None:
+    """
+    Build the pipeline-wide feature preprocessing config, if one is given.
+
+    ``feature_preprocessing.scaler`` applies to every tabular feature the
+    pipeline uses: the molecular descriptors of TML models and the
+    ``representations.polymer_descriptors`` concatenated to the GNN graph
+    embedding. ``selectors`` apply to TML models only.
+
+    Parameters
+    ----------
+    cfg:
+        Raw experiment config dict.
+    train_tml:
+        Whether TML models will be trained.
+    gnn_polymer_descriptors:
+        Whether GNNs will be trained with user-supplied polymer descriptors.
+
+    Returns
+    -------
+    FeatureTransformConfig | None
+        The validated config, or ``None`` when the section is absent.
+    """
+    if not cfg.get("feature_preprocessing"):
+        return None
+
+    preprocessing_cfg = _build_preprocessing_config(cfg)
+    if not train_tml and not gnn_polymer_descriptors:
+        logger.warning(
+            "feature_preprocessing has no effect: no TML models are trained and no "
+            "representations.polymer_descriptors are given for the GNNs."
+        )
+    elif not train_tml and preprocessing_cfg.selectors:
+        logger.warning(
+            "feature_preprocessing.selectors apply to TML models only and are ignored for "
+            "the GNN polymer descriptors (only the scaler is applied)."
+        )
+    return preprocessing_cfg
+
+
+def _build_target_config(cfg: dict) -> TargetTransformConfig:
+    """Build TargetTransformConfig from the optional 'target_transform' section.
+
+    Falls back to the default (no transformation) when the section is absent,
+    so existing YAML configs remain fully compatible.
+    """
+    return TargetTransformConfig.model_validate(cfg.get("target_transform", {}))
+
+
+def _build_explainability_config(cfg: dict) -> ExplainabilityConfig:
+    """Build ExplainabilityConfig from the 'explainability' section.
+
+    Falls back to a disabled config when the section is absent so that
+    legacy YAML files without an explainability block stay compatible.
+    """
+    return ExplainabilityConfig.model_validate(cfg.get("explainability", {}))
+
+
+def _build_tml_explainability_config(cfg: dict):
+    """Build TMLExplainabilityConfig from the 'tml_explainability' section."""
+    from polynet.config.schemas import TMLExplainabilityConfig
+
+    return TMLExplainabilityConfig.model_validate(cfg.get("tml_explainability", {}))
+
+
+def _build_applicability_domain_config(cfg: dict) -> ApplicabilityDomainConfig:
+    """Build ApplicabilityDomainConfig from 'prediction.applicability_domain'.
+
+    Falls back to the defaults (assessed) when the section is absent.
+    """
+    return ApplicabilityDomainConfig.model_validate(
+        (cfg.get("prediction") or {}).get("applicability_domain") or {}
+    )
+
+
+# ---------------------------------------------------------------------------
+# Data loading (script-specific)
+# ---------------------------------------------------------------------------
+
+
+def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
+    """Load and validate the dataset (a CSV file or a built-in benchmark). Script-specific stage."""
+    from polynet.data.loader import load_benchmark_dataset, load_dataset
+
+    data_cfg = cfg["data"]
+    columns = dict(
+        smiles_cols=data_cfg["smiles_cols"],
+        target_col=data_cfg["target_variable_col"],
+        id_col=data_cfg.get("id_col"),
+        problem_type=data_cfg["problem_type"],
+    )
+    if data_cfg.get("benchmark_dataset"):
+        source = f"benchmark dataset '{data_cfg['benchmark_dataset']}'"
+        df = load_benchmark_dataset(data_cfg["benchmark_dataset"], **columns)
+    else:
+        source = resolve_path(data_cfg["data_path"], root)
+        df = load_dataset(path=source, **columns)
+    logger.info(f"  Loaded {len(df)} samples from {source}")
+    logger.info(f"  Columns: {list(df.columns)}")
+    save_options(path=out_dir / "data_options.json", options=data_cfg)
+    return df
+
+
+# ---------------------------------------------------------------------------
+# Metrics serialisation
+# ---------------------------------------------------------------------------
+
+
+def save_metrics(metrics: dict, path: Path) -> None:
+    """Serialise a metrics dict to JSON, converting enum keys to strings."""
+
+    def _jsonify(obj):
+        if isinstance(obj, dict):
+            return {
+                (k.value if hasattr(k, "value") else str(k)): _jsonify(v) for k, v in obj.items()
+            }
+        return obj
+
+    out = path / "metrics.json"
+    with open(out, "w") as f:
+        json.dump(_jsonify(metrics), f, indent=2)
+    logger.info(f"  Metrics saved to {out}")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        prog="polynet run",
+        description="Run the full PolyNet pipeline from a YAML config.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
+    )
+    p.add_argument("--config", required=True, help="Path to the YAML experiment config file.")
+    p.add_argument(
+        "--epochs", type=int, default=None, help="Override training epochs from the config."
+    )
+    p.add_argument(
+        "--task",
+        choices=["regression", "classification"],
+        default=None,
+        help="Override problem_type from the config.",
+    )
+    p.add_argument("--no-gnn", action="store_true", help="Skip all GNN stages.")
+    p.add_argument("--no-tml", action="store_true", help="Skip all TML stages.")
+    p.add_argument("--no-explain", action="store_true", help="Skip the explainability stage.")
+    p.add_argument(
+        "--predict-data",
+        default=None,
+        metavar="PATH",
+        help="Path to a CSV file of unseen samples to predict after training. "
+        "Overrides prediction.data_path in the config. "
+        "Predictions are saved to {output_dir}/unseen_predictions/{filename}/.",
+    )
+    p.add_argument(
+        "--root",
+        default=".",
+        help="Project root directory. Relative paths in config are resolved from here. "
+        "Defaults to the current working directory.",
+    )
+    return p.parse_args(argv)
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
+def main(argv: list[str] | None = None) -> None:
+    """
+    Run the full pipeline from a YAML config.
+
+    Args:
+        argv (list[str] | None): Command-line arguments, without the program
+            name. Defaults to ``sys.argv[1:]``.
+    """
+    from polynet.config.paths import hpo_search_spaces_path
+    from polynet.config.search_grid import effective_search_spaces
+    from polynet.data.structures import prepare_structures
+    from polynet.pipeline import (
+        build_graph_dataset,
+        compute_data_splits,
+        compute_descriptors,
+        compute_metrics,
+        plot_results_stage,
+        predict_external,
+        run_explainability,
+        run_gnn_inference,
+        run_tml_explainability,
+        run_tml_inference,
+        train_gnn,
+        train_tml,
+    )
+    from polynet.utils.validation import validate_hpo_folds
+
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s  %(levelname)-8s  %(name)s  %(message)s",
+        datefmt="%H:%M:%S",
+    )
+
+    args = parse_args(argv)
+    root = Path(args.root).resolve()
+    cfg = load_config(args.config)
+    cfg = apply_overrides(cfg, args)
+
+    exp_cfg = cfg["experiment"]
+    exp_name = exp_cfg["name"]
+    out_dir = resolve_path(exp_cfg["output_dir"], root)
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    logger.info(f"Experiment : {exp_name}")
+    logger.info(f"Output dir : {out_dir}")
+    logger.info(f"Task       : {cfg['data']['problem_type']}")
+
+    save_options(out_dir / "general_options.json", options=exp_cfg)
+
+    # Persist resolved config alongside outputs for reproducibility
+    with open(out_dir / "config_used.yaml", "w") as f:
+        yaml.dump(cfg, f, default_flow_style=False)
+
+    gnn_enabled = cfg["gnn_training"].get("train_gnn", True)
+    tml_enabled = cfg["tml_models"].get("train_tml", False)
+    explain_enabled = cfg["explainability"].get("enabled", False)
+    tml_explain_enabled = cfg.get("tml_explainability", {}).get("enabled", False)
+    desc_enabled = bool(cfg["representations"].get("molecular_descriptors", False))
+
+    random_seed = cfg["experiment"]["random_seed"]
+
+    # Build Pydantic config objects shared across stages
+    data_cfg = _build_data_config(cfg)
+    split_cfg = _build_split_config(cfg)
+    # Validated now so a typo stops the run before training, not after.
+    ad_cfg = _build_applicability_domain_config(cfg)
+
+    t_total = time.perf_counter()
+
+    # ------------------------------------------------------------------
+    # Stage 1 — Load data
+    # ------------------------------------------------------------------
+    t0 = announce("1. Load & validate data")
+    df = _load_data(cfg, root, out_dir)
+    # Same structure preparation as the GUI: detect → validate → canonicalise.
+    # Invalid or missing structures stop the run.
+    df, _ = prepare_structures(
+        df,
+        smiles_cols=data_cfg.smiles_cols,
+        representation=data_cfg.string_representation,
+        canonicalise=data_cfg.canonicalise_smiles,
+    )
+    df.to_csv(out_dir / cfg["data"]["data_name"])
+    done(t0)
+
+    # ------------------------------------------------------------------
+    # Stage 1b — Graph feature analysis
+    # Pre-compute atom/bond property frequencies for every SMILES column so
+    # the Representation page in the Streamlit app can populate allowable-value
+    # defaults without re-scanning the dataset on each widget interaction.
+    # The output is graph_feature_analysis.json in the experiment output dir.
+    # ------------------------------------------------------------------
+    t0 = announce("1b. Graph feature analysis")
+    try:
+        from polynet.config.paths import graph_feature_analysis_path
+        from polynet.utils.graph_analysis import (
+            compute_graph_feature_analysis,
+            save_graph_feature_analysis,
+        )
+
+        analysis = compute_graph_feature_analysis(df=df, smiles_cols=data_cfg.smiles_cols)
+        analysis_path = graph_feature_analysis_path(experiment_path=out_dir)
+        save_graph_feature_analysis(analysis=analysis, path=analysis_path)
+        logger.info(f"  Saved graph feature analysis to {analysis_path}")
+        done(t0)
+    except Exception as e:
+        logger.warning(f"  Graph feature analysis failed ({e}). Continuing without it.")
+
+    # ------------------------------------------------------------------
+    # Stage 2 — Graph dataset
+    # ------------------------------------------------------------------
+    dataset = None
+    repr_cfg = _build_repr_config(cfg)
+    # TODO compare user selected graph representation with the analysis
+    if gnn_enabled:
+        t0 = announce("2. Build graph dataset")
+        try:
+            dataset = build_graph_dataset(df, data_cfg, repr_cfg, out_dir)
+            # Rebuild repr_cfg with the actual node/edge features from the dataset
+            repr_cfg = _build_repr_config(cfg, dataset.node_feats, dataset.edge_feats)
+            done(t0)
+        except Exception as e:
+            logger.error(f"Graph dataset failed: {e}. GNN stages will be skipped.")
+            gnn_enabled = False
+
+    # ------------------------------------------------------------------
+    # Stage 3 — Descriptors
+    # ------------------------------------------------------------------
+    desc_dfs = None
+    if desc_enabled and tml_enabled:
+        t0 = announce("3. Compute molecular descriptors")
+        try:
+            desc_dfs = compute_descriptors(df, data_cfg, repr_cfg, out_dir)
+            done(t0)
+        except Exception as e:
+            logger.error(f"Descriptor computation failed: {e}. TML stages will be skipped.")
+            tml_enabled = False
+
+    save_options(out_dir / "representation_options.json", repr_cfg)
+
+    # ------------------------------------------------------------------
+    # Stage 4 — Data splits
+    # ------------------------------------------------------------------
+    t0 = announce("4. Compute data splits")
+    train_idxs, val_idxs, test_idxs = compute_data_splits(
+        data=df,
+        data_cfg=data_cfg,
+        split_cfg=split_cfg,
+        random_seed=random_seed,
+        out_dir=out_dir,
+        weights_col=repr_cfg.weights_col,
+    )
+    split_indexes = (train_idxs, val_idxs, test_idxs)
+    save_options(out_dir / "split_options.json", split_cfg)
+    done(t0)
+
+    # Pipeline-wide feature preprocessing: TML descriptors and GNN polymer descriptors.
+    preprocessing_cfg = _resolve_preprocessing_config(
+        cfg,
+        train_tml=tml_enabled and desc_dfs is not None,
+        gnn_polymer_descriptors=(
+            gnn_enabled and dataset is not None and bool(repr_cfg.polymer_descriptors)
+        ),
+    )
+    if preprocessing_cfg is not None:
+        save_options(out_dir / "preprocessing_tml_options.json", preprocessing_cfg)
+
+    # Config errors must stop the run before any (possibly long) training starts.
+    hpo_tml_cfg = _build_tml_config(cfg) if tml_enabled and desc_dfs is not None else None
+    hpo_gnn_cfg = _build_gnn_config(cfg) if gnn_enabled and dataset is not None else None
+    validate_hpo_folds(
+        data=df,
+        data_cfg=data_cfg,
+        split_indexes=split_indexes,
+        tml_cfg=hpo_tml_cfg,
+        gnn_cfg=hpo_gnn_cfg,
+    )
+    # Provenance: the HPO grids actually searched (default candidates, with any
+    # parameter set in hpo_search_grid replacing its defaults).
+    search_spaces = effective_search_spaces(
+        data_cfg.problem_type, gnn_cfg=hpo_gnn_cfg, tml_cfg=hpo_tml_cfg
+    )
+    spaces_file = hpo_search_spaces_path(out_dir)
+    if search_spaces:
+        save_options(spaces_file, search_spaces)
+    elif spaces_file.exists():
+        spaces_file.unlink()  # stale from an earlier run in the same directory
+
+    all_predictions = []
+    all_trained_models = {}
+
+    # ------------------------------------------------------------------
+    # Stages 5–6 — GNN training + inference
+    # ------------------------------------------------------------------
+    gnn_predictions = None
+    gnn_trained: dict = {}
+    if gnn_enabled and dataset is not None:
+        t0 = announce("5. Train GNN ensemble")
+        gnn_cfg = _build_gnn_config(cfg)
+        target_cfg = _build_target_config(cfg)
+        save_options(out_dir / "train_gnn_options.json", gnn_cfg)
+        try:
+            gnn_trained, gnn_loaders, gnn_target_scalers = train_gnn(
+                dataset,
+                split_indexes,
+                data_cfg,
+                gnn_cfg,
+                random_seed,
+                out_dir,
+                target_cfg,
+                preprocessing_cfg=preprocessing_cfg,
+            )
+            done(t0)
+
+            t0 = announce("6. GNN inference")
+            gnn_predictions = run_gnn_inference(
+                gnn_trained, gnn_loaders, data_cfg, split_cfg, gnn_target_scalers
+            )
+            all_predictions.append(gnn_predictions)
+            all_trained_models.update(gnn_trained)
+            done(t0)
+        except Exception as e:
+            logger.error(f"GNN pipeline failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stages 7–8 — TML training + inference
+    # ------------------------------------------------------------------
+    tml_predictions = None
+    tml_trained: dict = {}
+    if tml_enabled and desc_dfs is not None:
+        t0 = announce("7. Train TML ensemble")
+        tml_cfg = _build_tml_config(cfg)
+        if preprocessing_cfg is None:
+            preprocessing_cfg = _build_preprocessing_config(cfg)  # required for TML
+        target_cfg = _build_target_config(cfg)
+        save_options(out_dir / "train_tml_options.json", tml_cfg)
+        try:
+            tml_trained, tml_training_data, _, tml_target_scalers = train_tml(
+                desc_dfs,
+                split_indexes,
+                data_cfg,
+                tml_cfg,
+                preprocessing_cfg,
+                random_seed,
+                out_dir,
+                target_cfg,
+            )
+            done(t0)
+
+            t0 = announce("8. TML inference")
+            tml_predictions = run_tml_inference(
+                tml_trained, tml_training_data, data_cfg, split_cfg, tml_target_scalers
+            )
+            all_predictions.append(tml_predictions)
+            all_trained_models.update(tml_trained)
+            done(t0)
+        except Exception as e:
+            logger.error(f"TML pipeline failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stages 9 and 10 — Metrics and Plots
+    # ------------------------------------------------------------------
+    sources = []
+    if gnn_predictions is not None and gnn_trained:
+        sources.append((gnn_predictions, gnn_trained, "GNN"))
+    if tml_predictions is not None and tml_trained:
+        sources.append((tml_predictions, tml_trained, "TML"))
+
+    if sources:
+        metrics = {}
+        plots_dir = out_dir / "ml_results" / "plots"
+
+        for preds, trained, name in sources:
+            t0 = announce(f"9. Metrics ({name})")
+            source_metrics = compute_metrics(preds, trained, data_cfg, split_cfg)
+            for iteration, models in source_metrics.items():
+                for model, sets in models.items():
+                    for set_name, m in sets.items():
+                        vals = {
+                            (k.value if hasattr(k, "value") else k): round(v, 4)
+                            for k, v in m.items()
+                            if v is not None
+                        }
+                        logger.info(f"  [{iteration}] {model} | {set_name}: {vals}")
+            for iteration, iter_metrics in source_metrics.items():
+                metrics.setdefault(iteration, {}).update(iter_metrics)
+            done(t0)
+
+            t0 = announce(f"10. Result plots ({name})")
+            plot_results_stage(preds, trained, data_cfg, split_cfg, plots_dir)
+            done(t0)
+
+        if len(sources) == 2:
+            from polynet.config.column_names import get_iterator_name, get_true_label_column_name
+            from polynet.config.constants import ResultColumn
+
+            iterator = get_iterator_name(split_cfg.split_type)
+            label_col_name = get_true_label_column_name(
+                target_variable_name=cfg["data"]["target_variable_name"]
+            )
+            gnn_predictions = gnn_predictions.drop(columns=[label_col_name])
+            tml_predictions = tml_predictions.drop(columns=[ResultColumn.SET])
+            predictions = pd.merge(
+                left=gnn_predictions, right=tml_predictions, on=[ResultColumn.INDEX, iterator]
+            )
+        else:
+            predictions = sources[0][0]
+
+        save_metrics(metrics, out_dir / "ml_results")
+        predictions.to_csv(out_dir / "ml_results" / "predictions.csv", index=False)
+
+    # ------------------------------------------------------------------
+    # Stage 11 — GNN Explainability
+    # ------------------------------------------------------------------
+    if explain_enabled and dataset is not None and gnn_trained:
+        t0 = announce("11. GNN Explainability")
+        try:
+            explain_cfg = _build_explainability_config(cfg)
+            run_explainability(gnn_trained, dataset, split_indexes, data_cfg, explain_cfg, out_dir)
+            done(t0)
+        except Exception as e:
+            logger.error(f"GNN explainability failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stage 11b — TML SHAP Explainability
+    # ------------------------------------------------------------------
+    if tml_explain_enabled and tml_trained and desc_dfs is not None:
+        t0 = announce("11b. TML SHAP Explainability")
+        try:
+            tml_explain_cfg = _build_tml_explainability_config(cfg)
+            run_tml_explainability(
+                tml_trained,
+                desc_dfs,
+                split_indexes,
+                data_cfg,
+                tml_explain_cfg,
+                out_dir,
+                validation_in_training=_build_tml_config(cfg).include_validation_in_training,
+            )
+            done(t0)
+        except Exception as e:
+            logger.error(f"TML explainability failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Stage 12 — Predict on external dataset
+    # ------------------------------------------------------------------
+    pred_cfg = cfg.get("prediction", {})
+    predict_enabled = pred_cfg.get("enabled", False)
+    predict_data_path_str = pred_cfg.get("data_path")
+
+    if predict_enabled and predict_data_path_str:
+        t0 = announce("12. Predict on external dataset")
+        try:
+            from polynet.data.loader import load_dataset
+
+            predict_data_path = resolve_path(predict_data_path_str, root)
+            predict_df = load_dataset(
+                path=predict_data_path,
+                smiles_cols=data_cfg.smiles_cols,
+                target_col=data_cfg.target_variable_col,
+                id_col=data_cfg.id_col,
+                problem_type=data_cfg.problem_type,
+            )
+            logger.info(f"  Loaded {len(predict_df)} unseen samples from {predict_data_path}")
+
+            dataset_name = predict_data_path.name
+            predict_out_dir = out_dir / "unseen_predictions" / predict_data_path.stem
+
+            predictions, metrics = predict_external(
+                data=predict_df,
+                data_cfg=data_cfg,
+                repr_cfg=repr_cfg,
+                experiment_path=out_dir,
+                out_dir=predict_out_dir,
+                dataset_name=dataset_name,
+                ad_cfg=ad_cfg,
+            )
+            logger.info(f"  Saved predictions ({len(predictions)} rows) to {predict_out_dir}")
+            if metrics is not None:
+                logger.info("  Metrics computed (target column was present in unseen data)")
+            done(t0)
+        except Exception as e:
+            logger.error(f"External prediction failed: {e}", exc_info=True)
+
+    # ------------------------------------------------------------------
+    # Done
+    # ------------------------------------------------------------------
+    total = time.perf_counter() - t_total
+    logger.info(f"\nPipeline complete in {total:.1f}s. Results in {out_dir}")
+
+
+if __name__ == "__main__":
+    main()
