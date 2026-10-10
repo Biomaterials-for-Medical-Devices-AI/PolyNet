@@ -1,10 +1,11 @@
 import pandas as pd
 import streamlit as st
 
+from polynet.app.components.optional_dependencies import require_psmiles_canonicaliser
 from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
-from polynet.config.enums import DatasetName, ProblemType
+from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
 from polynet.data.creator import DatasetCreator
 from polynet.data.structures import (
     canonicalise_structures,
@@ -140,6 +141,9 @@ def select_data_form():
             st.write(f"The `{str_representation}` representation has been identified.")
             st.success(f"`{str_representation}` columns checked successfully.")
             st.session_state[CreateExperimentStateKeys.StringRepresentation] = str_representation
+
+            if str_representation == StringRepresentation.PSMILES:
+                require_psmiles_canonicaliser()
 
         if st.checkbox(
             f"Canonicalise `{str_representation}`",
