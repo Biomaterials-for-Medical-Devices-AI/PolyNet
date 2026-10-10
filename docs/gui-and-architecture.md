@@ -87,3 +87,97 @@ unchanged. Any code that previously imported from `polynet.app.services.configur
 still works; the implementation now lives in `polynet.config.io`. (The explanation
 rendering services — `explain_model.py`, `explain_tml.py` — are Streamlit-coupled and
 stay in the app.)
+
+## Default mode, progress and page loading
+
+Representation and Train Models start with advanced options locked. Unlock the
+page's advanced-options toggle to change scientific settings. Locking again
+restores the existing GUI defaults for the next build/run; it does not edit a
+saved experiment until its action button is pressed. These defaults are a
+starting point, not an assertion of optimal settings for every dataset:
+
+- Representation: five RDKit descriptors, five atom properties, three bond
+  properties, observed allowable graph values and no wildcard placeholders.
+  Multiple monomers use weighted-average descriptors and weighted graphs; the
+  user still supplies their weight columns. Either representation can be disabled.
+- Training: existing model/architecture parameters, 250 GNN epochs, no tuning,
+  no feature/target scaling or feature selection, and one 60/20/20 split.
+  Classification uses stratified assignment; regression uses random assignment.
+  Both use the random sampler, without class balancing. TML includes validation
+  samples in fitting, as before. Model selection remains available.
+
+Training, representation building, prediction and explanation actions show a
+live activity panel with the latest 80 log messages. Training messages identify
+the model, descriptor representation where applicable, and split/bootstrap
+repetition. GNN epoch messages repeat that context and show current/total epochs.
+Ray tuning reports trial starts, results, completions and failures from its
+controller. The same core messages appear in CLI logs. A single estimator fit
+or cross-validation trial may have no intermediate messages; the activity panel
+remains running until the operation finishes or fails.
+
+The training page shows a workload budget before execution. Advisory warnings
+appear when **any** of these conservative thresholds is reached:
+
+| Trigger | Threshold |
+|---|---:|
+| Final fits: models × descriptor representations (TML) × repetitions | 10 |
+| Fits including tuning candidates × internal folds plus final refits | 50 |
+| Dataset rows, with multiple fits or any GNN | 5,000 |
+| GNN epochs summed across final fits and tuning/folds | 2,500 |
+
+These are transparent workload heuristics, not time predictions or memory
+limits. Actual tuning may use fewer fits because of grid size, cached searches
+or early stopping. The warning suggests reducing the workload or using HPC;
+CUDA is recommended for GNN training, while the current traditional ML path
+primarily uses CPUs. The warning does not block training.
+
+GUI CSV/JSON reads use bounded data caches keyed by resolved path, file size,
+and nanosecond modification/change timestamps. Rewriting or replacing files
+(including through the CLI) refreshes the next read. Cached objects are copied,
+so edits in one session do not alter another's view. Legacy graph feature
+analysis is also cached by input data. Training, inference and fitted models
+are not cached. Saved results load only when **Show Model Results** (or the
+corresponding external dataset toggle) is enabled, avoiding eager rendering of
+all historical plots on each page visit. This improves repeat visits and widget
+reruns; first imports and first-time computations still take time.
+
+### Review checklist for these changes
+
+Use a new or copied experiment: the existing training workflow deletes old
+results before validating splits/HPO folds. That pre-existing behaviour remains
+unchanged in this logging/display update.
+
+1. **Page loading and freshness.** Open Representation, Train Models, Explain
+   Models and Analyse Results. Revisit them and change selectors. Previous
+   results should remain unloaded until their Show toggle is enabled. After a
+   run replaces results, the displayed predictions and metrics should refresh.
+2. **Locked defaults.** Check Representation and Train Models with advanced
+   options locked. Unlock, inspect/customise options, then lock again. The next
+   operation should use the stated defaults. Check classification as well as
+   regression; classification retains stratified splitting.
+3. **GUI progress.** On a small dataset, unlock training, select two models and
+   two bootstrap repetitions, and reduce GNN epochs for a quick check. Confirm
+   model/representation/repetition labels, GNN epochs, completion messages and
+   saved outputs. Try a small tuning search to see trial activity. Also check
+   representation building, prediction and explanation activity panels.
+4. **Workload warning.** Without starting an expensive run, select two models
+   and five repetitions to reach ten final fits, or enable tuning to exceed
+   fifty budgeted fits. Confirm the reason, HPC/CUDA guidance and enabled Run
+   Training button. Return to one untuned TML model and one repetition on a small
+   dataset; the warning should disappear.
+5. **CLI logs and results.** Run a small existing config with multiple models
+   and repetitions (`polynet run --config <config.yaml>`), using a fresh output
+   directory. Check model and split/bootstrap labels alongside epochs, then
+   compare predictions/metrics with the same seed and configuration.
+6. **Automated checks.** In the `polynet` conda environment, run
+   `python -m pytest tests -q`, `python -m black --check polynet`, and
+   `python -m isort --check-only polynet`. The full suite was verified with
+   `HF_HUB_OFFLINE=1` using the already-cached PolyBERT model: 424 tests passed,
+   including all four numerical pipeline regression tests. Offline mode requires
+   that model to be cached; otherwise allow its normal download.
+
+Adjacent GUI bugs fixed while checking these flows: duplicate shared GNN widget
+keys; an out-of-range initial value for the Random Forest depth slider; and
+TML-only training requiring a graph CSV even when only descriptors were built.
+The latter now uses the saved source dataset when no graph CSV exists. The
+existing-results notice also covers TML-only experiments.
