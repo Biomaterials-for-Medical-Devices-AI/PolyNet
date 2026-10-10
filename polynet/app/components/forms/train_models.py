@@ -362,6 +362,26 @@ def train_TML_models(problem_type: ProblemType, advanced: bool = True) -> dict:
     return models
 
 
+def default_feature_preprocessing(train_tml: bool) -> FeatureTransformConfig:
+    """GUI baseline: MinMax scaling, then TML variance and correlation filters.
+
+    Variance <= 0 is removed before correlations above 0.95 are filtered.
+    GNN polymer descriptors share the scaler but never feature selection.
+    Explicit saved/CLI configurations retain their existing semantics.
+    """
+    return FeatureTransformConfig(
+        scaler=TransformDescriptor.MinMaxScaler,
+        selectors=(
+            {
+                FeatureSelection.Variance: {"threshold": 0.0},
+                FeatureSelection.Correlation: {"threshold": 0.95},
+            }
+            if train_tml
+            else {}
+        ),
+    )
+
+
 def feature_transformer_widgets(
     train_tml: bool, gnn_polymer_descriptors: bool
 ) -> FeatureTransformConfig:
@@ -408,7 +428,7 @@ def feature_transformer_widgets(
             TransformDescriptor.QuantileTransformer,
             TransformDescriptor.Normalizer,
         ],
-        index=0,
+        index=2,
         key=getattr(TrainTMLStateKeys, "FeatureScaler", "FeatureScaler"),
         help="Applied to X (independent variables). Fit on training set, reused for val/test.",
     )
@@ -416,7 +436,7 @@ def feature_transformer_widgets(
     # Feature selection applies to TML models only.
     enable_fs = train_tml and st.toggle(
         "Enable feature selection (TML models only)",
-        value=False,
+        value=True,
         key=getattr(TrainTMLStateKeys, "EnableFeatureSelection", "EnableFeatureSelection"),
         help="Applies selection after scaling. Steps are applied sequentially in the order chosen.",
     )
@@ -431,7 +451,7 @@ def feature_transformer_widgets(
             chosen_steps = st.multiselect(
                 "Select feature selection steps (order matters)",
                 options=available_steps,
-                default=[FeatureSelection.Variance],
+                default=[FeatureSelection.Variance, FeatureSelection.Correlation],
                 key=getattr(TrainTMLStateKeys, "FeatureSelectionSteps", "FeatureSelectionSteps"),
                 help="Steps are applied in the order selected below.",
             )
