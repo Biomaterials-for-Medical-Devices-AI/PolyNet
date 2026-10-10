@@ -111,6 +111,10 @@ columns with the same function (`polynet.data.structures.prepare_structures`):
 3. **Canonicalise** the structures when `canonicalise_smiles` is `true` (RDKit for
    SMILES, `psmiles` for PSMILES), so the same molecule is always written the same way.
    New data passed to `predict_external` is canonicalised with the training settings.
+   PSMILES canonicalisation uses the separately installed
+   [canonicalize-psmiles](https://github.com/kuennethgroup/canonicalize_psmiles) package
+   (see the README's *PSMILES support* section); without it, PSMILES data stops with
+   install instructions. SMILES data does not need it.
 
 Missing structures (empty cells) are treated as invalid everywhere: the run stops and
 the error shows them as `<missing>`. For a homopolymer in a multi-monomer dataset, repeat
