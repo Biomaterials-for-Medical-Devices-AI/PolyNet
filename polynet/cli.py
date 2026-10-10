@@ -10,6 +10,7 @@ the YAML pipeline can be run from any working directory:
     polynet --server.port 8502       # any `streamlit run` option is forwarded
     polynet gui --server.port 8502   # same, explicit
     polynet run --config experiment.yaml   # run the pipeline from a YAML config
+    polynet check                    # check that the installation works
     polynet install-psmiles          # install the PSMILES canonicaliser (once)
     polynet --version
 """
@@ -103,6 +104,11 @@ def main() -> int:
 
         run_pipeline(args[1:])
         return 0
+
+    if args[:1] == ["check"]:
+        from polynet.pipeline.self_check import main as self_check
+
+        return self_check(args[1:])
 
     if args[:1] == ["install-psmiles"]:
         return install_psmiles(args[1:])
