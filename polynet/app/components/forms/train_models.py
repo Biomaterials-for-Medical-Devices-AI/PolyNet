@@ -45,9 +45,33 @@ from polynet.config.search_grid import (
 )
 
 
-def train_TML_models(problem_type: ProblemType) -> dict:
+def train_TML_models(problem_type: ProblemType, advanced: bool = True) -> dict:
 
     models = {}
+    defaults = {
+        TraditionalMLModel.LinearRegression: {"fit_intercept": True},
+        TraditionalMLModel.LogisticRegression: {
+            "penalty": "l1",
+            "C": 1,
+            "fit_intercept": True,
+            "solver": "liblinear",
+        },
+        TraditionalMLModel.RandomForest: {
+            "n_estimators": 100,
+            "min_samples_split": 2,
+            "min_samples_leaf": 1,
+            "max_depth": None,
+        },
+        TraditionalMLModel.SupportVectorMachine: {"kernel": "rbf", "degree": 3, "C": 1.0},
+        TraditionalMLModel.XGBoost: {
+            "n_estimators": 100,
+            "learning_rate": 0.01,
+            "subsample": 0.8,
+            "max_depth": 0,
+        },
+    }
+    if problem_type == ProblemType.Classification:
+        defaults[TraditionalMLModel.SupportVectorMachine]["probability"] = True
 
     st.write(
         "Molecular descriptors are numerical representations of molecular structures. These will be used to train traditional machine learning models for the predictive task."
@@ -55,42 +79,50 @@ def train_TML_models(problem_type: ProblemType) -> dict:
 
     if st.toggle("Train TML models", key=TrainTMLStateKeys.TrainTML):
 
-        st.toggle(
-            "Include the validation set in TML training",
-            value=True,
-            key=TrainTMLStateKeys.IncludeValidation,
-            help="On (default): TML models, their feature scaling and their hyperparameter "
-            "search use the training and validation samples of each split. Off: they use "
-            "the training samples only — the same data the GNNs train on — and the "
-            "validation samples are scored as a held-out validation set.",
-        )
-
-        hyperparameter_tunning = st.checkbox(
-            "Perform hyperparameter tuning",
-            key=TrainTMLStateKeys.PerformHyperparameterTuning,
-            help="If enabled, the hyperparameters of the models will be tuned with a "
-            "randomised search (configurations sampled from a search grid, scored by k-fold "
-            "shuffled cross-validation; the grids can be customised below). This may take a "
-            "long time depending on the number of models selected.",
-        )
-
-        if hyperparameter_tunning:
-            st.number_input(
-                "Number of cross-validation folds (k)",
-                min_value=2,
-                value=5,
-                step=1,
-                key=TrainTMLStateKeys.HPONumFolds,
-                help="Folds used to score each configuration (shuffled; stratified for "
-                "classification). k must not exceed the number of training samples or, for "
-                "classification, the size of the smallest class — this is checked before "
-                "training starts.",
+        if advanced:
+            st.toggle(
+                "Include the validation set in TML training",
+                value=True,
+                key=TrainTMLStateKeys.IncludeValidation,
+                help="On (default): TML models, their feature scaling and their hyperparameter "
+                "search use the training and validation samples of each split. Off: they use "
+                "the training samples only — the same data the GNNs train on — and the "
+                "validation samples are scored as a held-out validation set.",
             )
-            num_samples_widget(
-                key=TrainTMLStateKeys.HPONumSamples,
-                help_text="Configurations RandomizedSearchCV samples per model and split "
-                "(capped at the number of distinct configurations in the grid).",
+
+            hyperparameter_tunning = st.checkbox(
+                "Perform hyperparameter tuning",
+                key=TrainTMLStateKeys.PerformHyperparameterTuning,
+                help="If enabled, the hyperparameters of the models will be tuned with a "
+                "randomised search (configurations sampled from a search grid, scored by k-fold "
+                "shuffled cross-validation; the grids can be customised below). This may take a "
+                "long time depending on the number of models selected.",
             )
+
+            if hyperparameter_tunning:
+                st.number_input(
+                    "Number of cross-validation folds (k)",
+                    min_value=2,
+                    value=5,
+                    step=1,
+                    key=TrainTMLStateKeys.HPONumFolds,
+                    help="Folds used to score each configuration (shuffled; stratified for "
+                    "classification). k must not exceed the number of training samples or, for "
+                    "classification, the size of the smallest class — this is checked before "
+                    "training starts.",
+                )
+                num_samples_widget(
+                    key=TrainTMLStateKeys.HPONumSamples,
+                    help_text="Configurations RandomizedSearchCV samples per model and split "
+                    "(capped at the number of distinct configurations in the grid).",
+                )
+
+        else:
+            st.session_state[TrainTMLStateKeys.IncludeValidation] = True
+            st.session_state[TrainTMLStateKeys.PerformHyperparameterTuning] = False
+            st.session_state[TrainTMLStateKeys.HPONumFolds] = 5
+            hyperparameter_tunning = False
+            st.caption("Default model parameters; tuning off; validation included in TML training.")
 
         st.markdown(
             """
@@ -104,9 +136,13 @@ def train_TML_models(problem_type: ProblemType) -> dict:
                 "Linear Regression", value=False, key=TrainTMLStateKeys.TrainLinearRegression
             ):
 
-                models[TraditionalMLModel.LinearRegression] = {}
+                models[TraditionalMLModel.LinearRegression] = (
+                    {}
+                    if hyperparameter_tunning
+                    else defaults[TraditionalMLModel.LinearRegression].copy()
+                )
 
-                if not hyperparameter_tunning:
+                if advanced and not hyperparameter_tunning:
                     intercept = st.checkbox(
                         "Fit intercept",
                         value=True,
@@ -122,9 +158,13 @@ def train_TML_models(problem_type: ProblemType) -> dict:
                 "Logistic Regression", value=False, key=TrainTMLStateKeys.TrainLogisticRegression
             ):
 
-                models[TraditionalMLModel.LogisticRegression] = {}
+                models[TraditionalMLModel.LogisticRegression] = (
+                    {}
+                    if hyperparameter_tunning
+                    else defaults[TraditionalMLModel.LogisticRegression].copy()
+                )
 
-                if not hyperparameter_tunning:
+                if advanced and not hyperparameter_tunning:
 
                     penalty = st.selectbox(
                         "Select the norm of the penalty",
@@ -164,9 +204,11 @@ def train_TML_models(problem_type: ProblemType) -> dict:
         st.divider()
 
         if st.toggle("Random Forest", value=False, key=TrainTMLStateKeys.TrainRandomForest):
-            models[TraditionalMLModel.RandomForest] = {}
+            models[TraditionalMLModel.RandomForest] = (
+                {} if hyperparameter_tunning else defaults[TraditionalMLModel.RandomForest].copy()
+            )
 
-            if not hyperparameter_tunning:
+            if advanced and not hyperparameter_tunning:
 
                 n_estimators = st.slider(
                     "Select the number of trees in the forest",
@@ -203,7 +245,7 @@ def train_TML_models(problem_type: ProblemType) -> dict:
                         "Select the maximum depth of the tree",
                         min_value=1,
                         max_value=20,
-                        value=0,
+                        value=1,
                         step=1,
                         key=TrainTMLStateKeys.RFMaxDepth,
                     )
@@ -216,9 +258,13 @@ def train_TML_models(problem_type: ProblemType) -> dict:
         if st.toggle(
             "Support Vector Machine", value=False, key=TrainTMLStateKeys.TrainSupportVectorMachine
         ):
-            models[TraditionalMLModel.SupportVectorMachine] = {}
+            models[TraditionalMLModel.SupportVectorMachine] = (
+                {}
+                if hyperparameter_tunning
+                else defaults[TraditionalMLModel.SupportVectorMachine].copy()
+            )
 
-            if not hyperparameter_tunning:
+            if advanced and not hyperparameter_tunning:
 
                 kernel = st.selectbox(
                     "Select the kernel type",
@@ -254,9 +300,11 @@ def train_TML_models(problem_type: ProblemType) -> dict:
         st.divider()
 
         if st.toggle("XGBoost", value=False, key=TrainTMLStateKeys.TrainXGBoost):
-            models[TraditionalMLModel.XGBoost] = {}
+            models[TraditionalMLModel.XGBoost] = (
+                {} if hyperparameter_tunning else defaults[TraditionalMLModel.XGBoost].copy()
+            )
 
-            if not hyperparameter_tunning:
+            if advanced and not hyperparameter_tunning:
 
                 num_estimators = st.slider(
                     "Select the number of trees in the forest",
@@ -473,7 +521,9 @@ def target_transform_widget() -> TargetTransformConfig:
     return TargetTransformConfig(strategy=strategy)
 
 
-def train_GNN_models_form(representation_opts: RepresentationConfig, problem_type: ProblemType):
+def train_GNN_models_form(
+    representation_opts: RepresentationConfig, problem_type: ProblemType, advanced: bool = True
+):
 
     st.write(
         "Graph Neural Networks (GNNs) are a type of neural network that operates on graph-structured data. They are particularly well-suited for tasks involving molecular structures, such as predicting properties of polymers based on their chemical structure."
@@ -484,23 +534,31 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
     if not st.toggle("Train GNN models", key=TrainGNNStateKeys.TrainGNN):
         return gnn_conv_params
 
-    hyperparameter_tunning = st.checkbox(
-        "Perform hyperparameter tuning",
-        key=TrainGNNStateKeys.HypTunning,
-        help="If enabled, hyperparameters will be tuned with Ray Tune by sampling "
-        "configurations from a search grid (defaults can be customised below; can be slow).",
-    )
+    if advanced:
+        hyperparameter_tunning = st.checkbox(
+            "Perform hyperparameter tuning",
+            key=TrainGNNStateKeys.HypTunning,
+            help="If enabled, hyperparameters will be tuned with Ray Tune by sampling "
+            "configurations from a search grid (defaults can be customised below; can be slow).",
+        )
 
-    st.number_input(
-        "Number of training epochs",
-        min_value=1,
-        value=TrainGNNConfig.model_fields["epochs"].default,
-        step=10,
-        key=TrainGNNStateKeys.Epochs,
-        help="Epochs each GNN is trained for (the weights of the epoch with the lowest "
-        "validation loss are kept). Hyperparameter-tuning trials train for the same number "
-        "of epochs.",
-    )
+        st.number_input(
+            "Number of training epochs",
+            min_value=1,
+            value=TrainGNNConfig.model_fields["epochs"].default,
+            step=10,
+            key=TrainGNNStateKeys.Epochs,
+            help="Epochs each GNN is trained for (the weights of the epoch with the lowest "
+            "validation loss are kept). Hyperparameter-tuning trials train for the same number "
+            "of epochs.",
+        )
+
+    else:
+        hyperparameter_tunning = False
+        st.session_state[TrainGNNStateKeys.HypTunning] = False
+        st.session_state[TrainGNNStateKeys.Epochs] = TrainGNNConfig.model_fields["epochs"].default
+        st.session_state[TrainGNNStateKeys.SharedGNNParams] = True
+        st.caption("Default architecture parameters; 250 epochs; tuning off.")
 
     st.markdown("### Select the GNN convolutional layers you want to train")
 
@@ -523,6 +581,33 @@ def train_GNN_models_form(representation_opts: RepresentationConfig, problem_typ
         st.stop()
 
     st.session_state[TrainGNNStateKeys.SearchGrid] = {}
+    if not advanced:
+        shared = {
+            ArchitectureParam.NumConvolutions: 2,
+            ArchitectureParam.EmbeddingDim: 128,
+            ArchitectureParam.PoolingMethod: Pooling.GlobalMaxPool,
+            ArchitectureParam.ReadoutLayers: 2,
+            ArchitectureParam.Dropout: 0.01,
+            TrainingParam.LearningRate: 0.01,
+            TrainingParam.BatchSize: 32,
+            ArchitectureParam.ApplyWeightingGraph: (
+                ApplyWeightingToGraph.PerMonomerPooling
+                if representation_opts.weights_col
+                else ApplyWeightingToGraph.NoWeighting
+            ),
+        }
+        if problem_type == ProblemType.Classification:
+            shared[TrainingParam.AsymmetricLossStrength] = None
+        specific = {
+            Network.GCN: {ArchitectureParam.Improved: True},
+            Network.GraphSAGE: {ArchitectureParam.Bias: True},
+            Network.TransformerGNN: {ArchitectureParam.NumHeads: 4},
+            Network.GAT: {ArchitectureParam.NumHeads: 4},
+        }
+        if any(net in (Network.GCN, Network.GraphSAGE) for net in conv_layers):
+            st.info("GCN and GraphSAGE do not use edge features.")
+        return {net: {**shared, **specific.get(net, {})} for net in conv_layers}
+
     if hyperparameter_tunning:
         num_samples_widget(
             key=TrainGNNStateKeys.HPONumSamples,
@@ -747,20 +832,20 @@ def GNN_shared_params_form(
             "Select the number of convolutional GNN layers",
             options=list(range(1, 6)),
             value=2,
-            key=TrainGNNStateKeys.GNNNumberOfLayers + network.value if network else "",
+            key=TrainGNNStateKeys.GNNNumberOfLayers + (network.value if network else "shared"),
         )
 
         emb_dim = st.select_slider(
             "Select the embedding dimension",
             options=list(range(16, 257, 16)),
             value=128,
-            key=TrainGNNStateKeys.GNNEmbeddingDimension + network.value if network else "",
+            key=TrainGNNStateKeys.GNNEmbeddingDimension + (network.value if network else "shared"),
         )
 
         pooling = st.selectbox(
             "Select the pooling method",
             options=[Pooling.GlobalAddPool, Pooling.GlobalMeanPool, Pooling.GlobalMaxPool],
-            key=TrainGNNStateKeys.GNNPoolingMethod + network.value if network else "",
+            key=TrainGNNStateKeys.GNNPoolingMethod + (network.value if network else "shared"),
             index=2,
         )
 
@@ -769,7 +854,7 @@ def GNN_shared_params_form(
             min_value=1,
             max_value=5,
             value=2,
-            key=TrainGNNStateKeys.GNNReadoutLayers + network.value if network else "",
+            key=TrainGNNStateKeys.GNNReadoutLayers + (network.value if network else "shared"),
         )
 
         dropout = st.slider(
@@ -778,7 +863,7 @@ def GNN_shared_params_form(
             max_value=0.5,
             value=0.01,
             step=0.01,
-            key=TrainGNNStateKeys.GNNDropoutRate + network.value if network else "",
+            key=TrainGNNStateKeys.GNNDropoutRate + (network.value if network else "shared"),
         )
 
         learning_rate = st.slider(
@@ -787,7 +872,7 @@ def GNN_shared_params_form(
             max_value=0.1,
             value=0.01,
             step=0.001,
-            key=TrainGNNStateKeys.GNNLearningRate + network.value if network else "",
+            key=TrainGNNStateKeys.GNNLearningRate + (network.value if network else "shared"),
         )
 
         batch_size = st.slider(
@@ -796,7 +881,7 @@ def GNN_shared_params_form(
             max_value=128,
             value=32,
             step=16,
-            key=TrainGNNStateKeys.GNNBatchSize + network.value if network else "",
+            key=TrainGNNStateKeys.GNNBatchSize + (network.value if network else "shared"),
         )
 
         if representation_opts.weights_col:
@@ -808,7 +893,8 @@ def GNN_shared_params_form(
                     ApplyWeightingToGraph.PerMonomerPooling,
                 ],
                 index=2,
-                key=TrainGNNStateKeys.GNNMonomerWeighting + network.value if network else "",
+                key=TrainGNNStateKeys.GNNMonomerWeighting
+                + (network.value if network else "shared"),
             )
         else:
             apply_weighting = st.session_state[TrainGNNStateKeys.GNNMonomerWeighting] = (
@@ -819,7 +905,7 @@ def GNN_shared_params_form(
             if st.checkbox(
                 "Apply asymmetric loss function",
                 value=False,
-                key=TrainGNNStateKeys.AsymmetricLoss + network.value if network else "",
+                key=TrainGNNStateKeys.AsymmetricLoss + (network.value if network else "shared"),
             ):
                 assym_loss_strength = st.slider(
                     "Set the imbalance strength",
@@ -827,7 +913,8 @@ def GNN_shared_params_form(
                     max_value=1.0,
                     value=0.5,
                     step=0.1,
-                    key=TrainGNNStateKeys.ImbalanceStrength + network.value if network else "",
+                    key=TrainGNNStateKeys.ImbalanceStrength
+                    + (network.value if network else "shared"),
                     help="Controls how much strength to apply to the asymmetric loss function. A value of 1 means that weighting will be given by the inverse of the total count of each label, while a value of 0 means that each class will be weighted equally.",
                 )
             else:
@@ -952,7 +1039,7 @@ def sampling_fingerprint_from_state() -> dict | None:
     return settings
 
 
-def split_data_form(problem_type: ProblemType) -> bool:
+def split_data_form(problem_type: ProblemType, advanced: bool = True) -> bool:
     """
     Data splitting widgets.
 
@@ -961,6 +1048,29 @@ def split_data_form(problem_type: ProblemType) -> bool:
     bool
         Whether the chosen ratios leave data for training.
     """
+
+    if not advanced:
+        method = (
+            SplitMethod.Stratified
+            if problem_type == ProblemType.Classification
+            else SplitMethod.Random
+        )
+        for key, value in {
+            GeneralConfigStateKeys.SplitType: SplitType.TrainValTest,
+            GeneralConfigStateKeys.SplitMethod: method,
+            GeneralConfigStateKeys.Sampler: SplitSampler.Random,
+            GeneralConfigStateKeys.BootstrapIterations: 1,
+            GeneralConfigStateKeys.TestSize: 0.2,
+            GeneralConfigStateKeys.ValidationSize: 0.2,
+            GeneralConfigStateKeys.BalanceClasses: False,
+        }.items():
+            st.session_state[key] = value
+        st.session_state.pop(GeneralConfigStateKeys.DesiredProportion, None)
+        st.caption(
+            f"One {method.value} split: 60% training / 20% validation / 20% test; "
+            "random sampler, no class balancing."
+        )
+        return True
 
     split_type = st.selectbox(
         "Select the split method",

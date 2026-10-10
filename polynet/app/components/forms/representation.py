@@ -26,10 +26,88 @@ from polynet.featurizer.pmx import (
 )
 from polynet.utils.chem_utils import count_atom_property_frequency, count_bond_property_frequency
 from polynet.utils.graph_analysis import (
+    compute_graph_feature_analysis,
     get_atom_prop_defaults,
     get_bar_data,
     get_bond_prop_defaults,
 )
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def cached_graph_feature_analysis(df, smiles_cols):
+    """Legacy experiments need this analysis once, not on every widget rerun."""
+    return compute_graph_feature_analysis(df, smiles_cols)
+
+
+def basic_representation(data_options, df, feature_analysis):
+    """Existing GUI defaults with scientific configuration hidden until unlocked."""
+    descriptors = {}
+    if st.toggle("Use molecular descriptors", value=True, key="basic_descriptors"):
+        descriptors[MolecularDescriptor.RDKit] = [
+            "MolWt",
+            "TPSA",
+            "NumHAcceptors",
+            "NumHDonors",
+            "MolLogP",
+        ]
+        st.caption(
+            "Five default RDKit descriptors: molecular weight, TPSA, hydrogen-bond "
+            "acceptors/donors and MolLogP. Unlock to select descriptors and fingerprints."
+        )
+    nodes, edges = {}, {}
+    if st.toggle("Use graph representation", value=True, key="basic_graphs"):
+        if feature_analysis is None:
+            feature_analysis = cached_graph_feature_analysis(df, data_options.smiles_cols)
+        properties = [
+            (
+                nodes,
+                atom_properties,
+                get_atom_prop_defaults,
+                [
+                    AtomFeature.GetAtomicNum,
+                    AtomFeature.GetTotalNumHs,
+                    AtomFeature.GetTotalDegree,
+                    AtomFeature.GetImplicitValence,
+                    AtomFeature.GetIsAromatic,
+                ],
+            ),
+            (
+                edges,
+                bond_features,
+                get_bond_prop_defaults,
+                [BondFeature.GetBondTypeAsDouble, BondFeature.GetIsAromatic, BondFeature.GetStereo],
+            ),
+        ]
+        for output, definitions, get_defaults, selected in properties:
+            for prop in selected:
+                output[prop] = {}
+                if definitions[prop]:
+                    observed = set()
+                    for smiles_col in data_options.smiles_cols:
+                        observed.update(get_defaults(feature_analysis, prop, smiles_col))
+                    output[prop] = {
+                        AtomBondDescriptorDictKey.AllowableVals: [
+                            value
+                            for value in observed
+                            if value in definitions[prop][AtomBondDescriptorDictKey.Options]
+                        ],
+                        AtomBondDescriptorDictKey.Wildcard: False,
+                    }
+        st.caption(
+            "Default five atom and three bond properties; allowable values observed "
+            "in this dataset, wildcard placeholders off."
+        )
+    multiple = len(data_options.smiles_cols) > 1
+    st.session_state[DescriptorCalculationStateKeys.MergeDescriptorsApproach] = (
+        DescriptorMergingMethod.WeightedAverage if multiple else DescriptorMergingMethod.NoMerging
+    )
+    st.session_state[DescriptorCalculationStateKeys.GraphWeightingFactor] = bool(nodes) and multiple
+    if multiple:
+        st.caption(
+            "Default: weighted-average descriptors and weighted graphs. "
+            "Select the monomer weight columns below."
+        )
+    return descriptors, nodes, edges
 
 
 def select_weight_factor(
@@ -390,6 +468,9 @@ def molecular_descriptor_representation(
 def graph_representation(
     data_opts: DataConfig, df: pd.DataFrame, feature_analysis: Optional[Dict] = None
 ) -> tuple[Dict[AtomFeature, List[str]], Dict[BondFeature, List[str]]]:
+
+    if feature_analysis is None:
+        feature_analysis = cached_graph_feature_analysis(df, data_opts.smiles_cols)
 
     atomic_properties = sorted(atom_properties.keys())
     bond_properties = sorted(bond_features.keys())
