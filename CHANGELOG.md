@@ -65,5 +65,10 @@ Compared with unreleased development versions before October 2026
 - `polynet --version` and `polynet.__version__`.
 - `black`, `isort` and `ipykernel` moved to the development dependencies;
   unused `gbigsmiles` removed.
+- canonicalize-psmiles is no longer a dependency of the package (it is not on
+  PyPI and has a non-commercial licence). `poetry install` still installs it;
+  otherwise the GUI offers a one-click install when PSMILES data is loaded, or
+  run `polynet install-psmiles`. SMILES data does not need it.
+- Package metadata moved to the standard `[project]` table.
 
 [1.0.0]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.0
