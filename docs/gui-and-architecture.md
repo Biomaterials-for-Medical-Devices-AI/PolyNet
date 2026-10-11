@@ -40,15 +40,18 @@ Choose models, bootstrap repetitions, representations, target class, fragmentati
 save a completed-analysis snapshot, and show default previews. Defaults are PerModel
 normalisation, cyan/red colours, ridge/top-and-bottom 10 for GNN global,
 beeswarm/top 10 for TML global, averaged local explanations, and waterfall/top 15
-for TML local. Plot customisation belongs to page 6.
+for TML local. Calculations run only when their button is pressed; the automatic-running
+toggles have been removed. Plot customisation belongs to page 6.
 
 ### Analyse Results (page 6)
 
 Works for TML-only, GNN-only, and hybrid experiments. Alongside parity plots,
 confusion matrices and statistical comparisons, **Feature importance plots** detects
 completed explanations for the experiment and external datasets. Enable
-**Customise feature importance plots**, select a completed analysis, and click
-**Load selected analysis**.
+**Customise feature importance plots** and select a completed analysis, which loads
+automatically. A single available analysis requires no extra selector. Analysis labels
+show selections and models, without dates. Choose **Population** or **Individual
+molecules** to view the same saved data.
 
 All existing presentation controls are available here: Local/PerModel/Global/no
 normalisation; positive/negative colours; GNN ridge/bar/strip and top/bottom N;
@@ -57,12 +60,18 @@ waterfall/force/bar and feature limit; and custom GNN monomer names. Predictions
 per-bootstrap set membership and attribution tables remain in the local panels.
 Changing a control redraws saved scores without loading models or running inference.
 
-New snapshots retain the exact selected samples and each model's own split population.
-The **Load an older GUI / CLI attribution cache** option also opens compatible raw
-caches. Older caches do not record the original analysis selection: this view explicitly
-uses all cached models/samples for the selected target class and fragmentation. The
-Global/Local choice changes only how existing scores are plotted. Run page 5 again
-if the cache is outdated or if additional scores are required.
+Snapshots retain the exact selected samples and each model's own split population.
+For individual molecules, choose which cached model/bootstrap combinations to show and
+whether to average them as an ensemble or show them separately. Each molecule clearly
+lists the available combinations used in its plot; missing pairs are excluded. PerModel
+uses the model's maximum absolute score across the whole saved analysis, before averaging.
+The older GUI/CLI raw-cache checkbox has been removed. Run page 5 again if saved SHAP
+results predate baseline storage or if additional scores are required.
+
+Parity legends explicitly use an opaque white frame, normal text, a grey parity line,
+and no shadow, including PNGs saved automatically during training. Previously saved PNGs
+retain their old appearance; regenerate plots from saved predictions without retraining.
+Page 6 preserves the rendered parity figure so saving it does not produce a blank image.
 
 See [Explainability](explainability.md) for attribution and normalisation behaviour,
 and [Statistical model comparison](explainability.md#statistical-model-comparison-analyse-results)

@@ -173,7 +173,8 @@ Attributions are computed once and reused:
   by an older version is discarded (with a warning) and recomputed.
 - **TML** — SHAP values are written to `explanations/shap_{descriptor}.csv` (one file
   per descriptor) and reused on subsequent runs. A cache written by an older version is
-  discarded (with a warning) and recomputed.
+  discarded (with a warning) and recomputed. Version 3 also stores each explainer
+  baseline for additive waterfall and force plots; run page 5 again for older SHAP caches.
 
 Models without a tree or linear explainer (e.g. SVMs) use SHAP's `KernelExplainer`, which
 samples randomly. PolyNet seeds its background sample and each sample's computation, so
@@ -186,21 +187,22 @@ the normalisation strategy does not require recomputation.
 
 ### Completed GUI analysis snapshots
 
-Page 5 also saves `explanations/analyses/{family}_{scope}_{selection_hash}.json`
+Page 5 also saves `explanations/analyses/{family}_{selection_hash}.json`
 under the selected data source (experiment or external dataset). A versioned snapshot
 contains raw selected scores, model/sample/class/fragmentation selection, per-model
-sample restrictions, descriptor feature values or molecule SMILES, and local prediction
+sample restrictions, descriptor feature values or molecule SMILES, and prediction
 breakdowns. It contains no fitted model objects and uses atomic JSON writes. Re-running
 the same selection replaces its snapshot; different selections have separate entries.
 Normalisation, colours and plot styles remain presentation settings.
 
-On page 6, load a snapshot to redraw its figures using any of the existing plot options.
-Rendering calls the core `render_cached_*_attribution` APIs and never calculates missing
-scores or writes attribution caches. Existing CLI/older GUI caches can also be loaded;
-because they do not store the original selected sets, their view uses all cached
-samples/models for the selected class and fragmentation. Old GNN caches reconstruct
-monomer lists from cached SMILES; new snapshots retain the original monomer order
-and repeated monomers. Re-run page 5 for an exact saved selection and molecular context.
+Page 6 automatically loads the selected snapshot. Population and individual-molecule
+views use the same raw attributions; there are no separate Global/Local entries or run
+dates in the selector. Individual molecules can be chosen from any completed analysis.
+Select the cached model/bootstrap combinations to show, then choose an ensemble average
+or separate plots. Each molecule lists its available combinations. Missing pairs are
+excluded from averages and never computed on page 6; run page 5 to add them. The older
+GUI/CLI raw-cache import option has been removed: plotting uses completed GUI snapshots.
+Rendering calls the core `render_cached_*_attribution` APIs and never writes raw caches.
 
 Snapshots remain a record of their completed analysis after retraining. To explain newly
 trained models, remove outdated raw caches and run page 5 again; old snapshots can be
@@ -246,12 +248,25 @@ the UI:
 The significance markers (`*`, `**`, `***`) and the displayed p-values reflect the
 corrected values.
 
-## Existing local SHAP display limitations
+## Local normalisation and SHAP baselines
 
-This GUI reorganisation preserves local SHAP's numerical display behaviour.
-In local TML plots, `PerModel` currently leaves scores unscaled, whereas the global
-view scales each trained model before averaging. Local waterfall and force plots
-currently use a zero base value rather than the explainer's expected value; their
-endpoint therefore represents summed contributions, not necessarily the model's
-prediction. Correcting these behaviours requires a separate change to local SHAP
-normalisation and baseline storage.
+`PerModel` divides by each fitted model/bootstrap's largest **absolute** attribution
+across its whole saved analysis, before averaging. Choosing a single molecule does not
+change that reference maximum. This applies to TML and GNN local plots; individual models' raw scores remain
+unchanged. A zero maximum uses a divisor of one. `Global` uses one maximum across all
+selected models in the saved population. `Local` scales the displayed local vector.
+
+SHAP caches retain the expected output for each model/class as `base_value`, outside the
+feature columns. Local plots average baselines across exactly the cached combinations
+used for the contributions. A feature absent from a model's selected inputs contributes
+zero to that model's ensemble average. Baselines and contributions use the same scaling,
+so unnormalised waterfall/force endpoints reconstruct the explained output and normalised
+plots are labelled as scaled model output. Force plots include every contribution even
+when a smaller feature limit is selected; waterfall/bar still honour that limit.
+
+Classification output depends on the explainer: probability explainers (e.g. random
+forests) use class probabilities, while binary linear models and some tree explainers
+use margins/log-odds. For class zero,
+both a single-output linear baseline and its contributions are negated. Separate plots
+help interpret outputs from models with different scales. A snapshot missing a baseline
+cannot render a local SHAP plot; run the analysis again on page 5.
