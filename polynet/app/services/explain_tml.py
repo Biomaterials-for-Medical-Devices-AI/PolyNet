@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
 from polynet.config.enums import (
     ExplanationAggregation,
@@ -68,6 +69,16 @@ def explain_tml_global(
         samples_per_model=samples_per_model,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("TML", "global", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_tml_global(results)
+
+
+def display_tml_global(results, prediction_breakdowns=None) -> None:
+    """Display computed or loaded results using the same panels."""
     for descriptor, result in results.items():
         st.markdown(f"**{descriptor}**")
         st.info(
@@ -130,6 +141,16 @@ def explain_tml_local(
         aggregation=aggregation,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("TML", "local", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_tml_local(results, prediction_breakdowns)
+
+
+def display_tml_local(results, prediction_breakdowns=None) -> None:
+    """Display computed or loaded results using the same panels."""
     for descriptor, instance_results in results.items():
         st.markdown(f"**{descriptor}**")
 
