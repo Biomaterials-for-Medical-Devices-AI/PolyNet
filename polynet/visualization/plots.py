@@ -176,6 +176,8 @@ def plot_parity(
         # from showing the plot through the legend on GUI reruns.
         parity_legend = ax.legend(
             fontsize=legend_fontsize,
+            frameon=True,
+            shadow=False,
             facecolor="white",
             edgecolor="#d0d0d0",
             framealpha=1.0,
