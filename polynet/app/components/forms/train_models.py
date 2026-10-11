@@ -590,7 +590,7 @@ def train_GNN_models_form(
             Network.TransformerGNN,
             Network.GAT,
             Network.MPNN,
-            Network.CGGNN,
+            Network.CGCNN,
         ],
         default=[Network.GCN],
         key=TrainGNNStateKeys.GNNConvolutionalLayers,
@@ -695,9 +695,9 @@ def train_GNN_models_form(
             "MPNN Hyperparameters",
             lambda: empty_ui("Currently, no specific parameters for `MPNN` are available."),
         ),
-        Network.CGGNN: (
-            "CGGNN Hyperparameters",
-            lambda: empty_ui("Currently, no specific parameters for `CGGNN` are available."),
+        Network.CGCNN: (
+            "CGCNN Hyperparameters",
+            lambda: empty_ui("Currently, no specific parameters for `CGCNN` are available."),
         ),
     }
 
@@ -961,7 +961,6 @@ _SAMPLER_HELP = {
     SplitSampler.SPXY: "SPXY: like Kennard–Stone on fingerprints and target values "
     "(deterministic).",
     SplitSampler.KMeans: "k-means clusters of fingerprints; each cluster stays in one set.",
-    SplitSampler.OptiSim: "OptiSim diverse clusters of fingerprints; each cluster stays in one set.",
     SplitSampler.TargetProperty: "Ordered by target value: extreme values go to the test "
     "set (deterministic).",
 }

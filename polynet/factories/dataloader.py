@@ -77,8 +77,10 @@ from torch_geometric.loader import DataLoader
 
 from polynet.config.enums import SplitMethod, SplitSampler, SplitType
 from polynet.config.schemas.split_data import (
+    DISABLED_SAMPLERS,
     SAMPLERS_USING_FINGERPRINTS,
     SAMPLERS_USING_TARGET,
+    disabled_sampler_error,
     stratified_target_sampler_error,
 )
 from polynet.data.preprocessing import class_balancer
@@ -133,8 +135,8 @@ def astartes_split(
 
     - ``random``: a random split (``features`` are not needed). Training and
       validation sizes are ``floor(n × fraction)``; test takes the rest.
-    - Fingerprint samplers (``kennard_stone``, ``spxy``, ``kmeans``,
-      ``optisim``) place samples by their ``features``; ``spxy`` also uses
+    - Fingerprint samplers (``kennard_stone``, ``spxy``, ``kmeans``) place
+      samples by their ``features``; ``spxy`` also uses
       the ``targets``.
     - ``target_property`` orders samples by their ``targets``.
 
@@ -174,6 +176,8 @@ def astartes_split(
         training, validation and test sets.
     """
     sampler = SplitSampler(sampler)
+    if sampler in DISABLED_SAMPLERS:
+        raise ValueError(disabled_sampler_error(sampler))
     if sampler in SAMPLERS_USING_FINGERPRINTS and features is None:
         raise ValueError(f"The '{sampler.value}' sampler needs fingerprint features.")
     if sampler in SAMPLERS_USING_TARGET and targets is None:

@@ -106,7 +106,7 @@ _NETWORK_COMPAT: dict[str, str] = {
     "GAT": "GAT",
     "GraphSAGE": "GraphSAGE",
     "MPNN": "MPNN",
-    "CGGNN": "CGGNN",
+    "CGGNN": "CGCNN",
 }
 
 _STRING_REPR_COMPAT: dict[str, str] = {

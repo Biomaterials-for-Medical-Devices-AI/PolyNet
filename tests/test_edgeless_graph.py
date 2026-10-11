@@ -8,7 +8,7 @@ PSMILES monomer that reduces to one atom after wildcard stripping) can reach a
 convolution with a malformed 1-D empty ``edge_attr`` of shape ``(0,)``. Every
 edge-aware architecture must coerce this to ``(0, n_edge_features)`` before its
 convolution. The architectures that override ``get_graph_embedding`` /
-``get_node_embeddings`` (CGGNN, MPNN) were missing this coercion, which produced
+``get_node_embeddings`` (CGCNN, MPNN) were missing this coercion, which produced
 ``mat1 and mat2 shapes cannot be multiplied`` inside CGConv / NNConv.
 """
 
@@ -17,13 +17,13 @@ import pytest
 torch = pytest.importorskip("torch")
 pytest.importorskip("torch_geometric")
 
-from polynet.models.gnn.cggnn import CGGNNRegressor  # noqa: E402
+from polynet.models.gnn.cgcnn import CGCNNRegressor  # noqa: E402
 from polynet.models.gnn.gat import GATRegressor  # noqa: E402
 from polynet.models.gnn.mpnn import MPNNRegressor  # noqa: E402
 from polynet.models.gnn.transformer import TransformerGNNRegressor  # noqa: E402
 
 _EDGE_AWARE = [
-    (CGGNNRegressor, {}),
+    (CGCNNRegressor, {}),
     (MPNNRegressor, {}),
     (GATRegressor, {"num_heads": 2}),
     (TransformerGNNRegressor, {"num_heads": 2}),

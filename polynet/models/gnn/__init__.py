@@ -8,7 +8,7 @@ All classes inherit from ``polynet.models.base.BaseNetwork`` or
 ``polynet.models.base.BaseNetworkClassifier``.
 
 GraphSAGE, MPNN, and TransformerGNN follow the identical pattern
-established by GCN, GAT, and CGGNN and should be migrated from
+established by GCN, GAT, and CGCNN and should be migrated from
 ``polynet.models.graphsage``, ``polynet.models.MPNN``, and
 ``polynet.models.TransformerGNN`` respectively.
 
@@ -17,7 +17,7 @@ established by GCN, GAT, and CGGNN and should be migrated from
     from polynet.models.gnn import GCNRegressor, GATClassifier
 """
 
-from polynet.models.gnn.cggnn import CGGNNClassifier, CGGNNRegressor
+from polynet.models.gnn.cgcnn import CGCNNClassifier, CGCNNRegressor
 from polynet.models.gnn.gat import GATClassifier, GATRegressor
 from polynet.models.gnn.gcn import GCNClassifier, GCNRegressor
 from polynet.models.gnn.graphsage import GraphSAGEClassifier, GraphSAGERegressor
@@ -29,8 +29,8 @@ __all__ = [
     "GCNRegressor",
     "GATClassifier",
     "GATRegressor",
-    "CGGNNClassifier",
-    "CGGNNRegressor",
+    "CGCNNClassifier",
+    "CGCNNRegressor",
     "GraphSAGEClassifier",
     "GraphSAGERegressor",
     "MPNNClassifier",

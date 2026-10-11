@@ -64,3 +64,27 @@ def test_legacy_cross_att_attribute_is_tolerated(tmp_path):
     x, ei, ea, b = _tiny_inputs()
     out = reloaded.predict(x=x, edge_index=ei, edge_attr=ea, batch_index=b)
     assert out.shape == (1,)
+
+
+def test_model_saved_as_cggnn_loads_as_cgcnn():
+    """CGCNN was called CGGNN before 1.0.0. A model pickled then refers to
+    ``polynet.models.gnn.cggnn.CGGNNRegressor`` and stores ``Network("CGGNN")``."""
+    import pickle
+
+    from polynet.config.enums import Network
+    from polynet.models.gnn.cgcnn import CGCNNRegressor
+
+    model = CGCNNRegressor(n_node_features=8, n_edge_features=3, seed=0)
+    model.eval()
+    x, ei, ea, b = _tiny_inputs()
+    before = model.predict(x=x, edge_index=ei, edge_attr=ea, batch_index=b)
+
+    # Same-length replacements keep the pickle's string length prefixes valid.
+    legacy = pickle.dumps(model).replace(b"cgcnn", b"cggnn").replace(b"CGCNN", b"CGGNN")
+    assert b"CGCNN" not in legacy
+    reloaded = pickle.loads(legacy)
+    reloaded.eval()
+
+    assert reloaded._name is Network.CGCNN
+    after = reloaded.predict(x=x, edge_index=ei, edge_attr=ea, batch_index=b)
+    assert after == pytest.approx(before, rel=1e-6)

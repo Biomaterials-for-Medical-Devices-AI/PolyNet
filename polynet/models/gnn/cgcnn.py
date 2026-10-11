@@ -1,0 +1,248 @@
+"""
+polynet.models.gnn.cgcnn
+========================
+Crystal Graph Convolutional Neural Network (CGCNN) for polymer property
+prediction (Xie & Grossman, Phys. Rev. Lett. 120, 145301, 2018).
+
+Uses ``CGConv`` from PyG, which was originally designed for crystal
+structure property prediction but transfers well to polymer graphs
+due to its explicit edge feature handling.
+"""
+
+from __future__ import annotations
+
+from torch import Tensor
+import torch.nn as nn
+import torch.nn.functional as F
+from torch_geometric.nn import CGConv
+
+from polynet.config.enums import ApplyWeightingToGraph, Network, Pooling, ProblemType
+from polynet.models.base import BaseNetwork, BaseNetworkClassifier
+
+
+class CGCNNBase(BaseNetwork):
+    """
+    CGCNN architecture base — shared by ``CGCNNClassifier`` and ``CGCNNRegressor``.
+
+    Includes a node projection layer that maps raw node features to
+    ``embedding_dim`` before the first convolution, allowing CGConv to
+    operate in a fixed embedding space throughout all layers.
+    """
+
+    def __init__(
+        self,
+        n_node_features: int,
+        n_edge_features: int,
+        pooling: Pooling | str = Pooling.GlobalMeanPool,
+        n_convolutions: int = 2,
+        embedding_dim: int = 64,
+        readout_layers: int = 2,
+        problem_type: ProblemType | str = ProblemType.Regression,
+        n_classes: int = 1,
+        dropout: float = 0.5,
+        apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
+        seed: int = 42,
+    ) -> None:
+        super().__init__(
+            n_node_features=n_node_features,
+            n_edge_features=n_edge_features,
+            pooling=pooling,
+            n_convolutions=n_convolutions,
+            embedding_dim=embedding_dim,
+            readout_layers=readout_layers,
+            problem_type=problem_type,
+            n_classes=n_classes,
+            dropout=dropout,
+            apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
+            seed=seed,
+        )
+
+        self._name = Network.CGCNN
+
+        # Project raw node features → embedding_dim before convolutions
+        self.project_nodes = nn.Linear(self.n_node_features, self.embedding_dim)
+
+        self.conv_layers = nn.ModuleList(
+            [
+                CGConv(
+                    channels=(self.embedding_dim, self.embedding_dim),
+                    dim=self.n_edge_features,
+                    aggr="add",
+                )
+                for _ in range(self.n_convolutions)
+            ]
+        )
+        self.norm_layers = nn.ModuleList(
+            [nn.BatchNorm1d(self.embedding_dim) for _ in range(self.n_convolutions)]
+        )
+
+        self.make_readout_layers()
+
+    def get_graph_embedding(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor | None = None,
+        monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
+    ) -> Tensor:
+        """CGCNN-specific embedding — includes node projection before convolutions."""
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x = x * monomer_weight
+
+        x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
+
+        for conv, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
+            x = x * monomer_weight
+
+        return self._pool(x, batch_index, monomer_weight, monomer_id)
+
+    def get_node_embeddings(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor | None = None,
+        monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
+    ) -> Tensor:
+        """CGCNN-specific pre-pooling node embeddings — includes node projection."""
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforeMPP
+        ):
+            x = x * monomer_weight
+
+        x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
+
+        for conv, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if (
+            monomer_weight is not None
+            and self.apply_weighting_to_graph == ApplyWeightingToGraph.BeforePooling
+        ):
+            x = x * monomer_weight
+
+        return x
+
+    def return_graph_embedding(
+        self,
+        x: Tensor,
+        edge_index: Tensor,
+        batch_index=None,
+        edge_attr: Tensor | None = None,
+        monomer_weight: Tensor | None = None,
+        monomer_id: Tensor | None = None,
+    ) -> Tensor:
+        """
+        Return the graph embedding without the readout MLP.
+
+        Useful for extracting representations for downstream tasks,
+        clustering, or visualisation without prediction.
+
+        Note: unlike ``get_graph_embedding``, monomer weighting here
+        is applied unconditionally (before pooling) if provided.
+        """
+        x = F.leaky_relu(self.project_nodes(x))
+        edge_attr = self._coerce_edge_attr(edge_attr)
+
+        for conv, bn in zip(self.conv_layers, self.norm_layers):
+            x = F.dropout(
+                F.leaky_relu(bn(conv(x=x, edge_index=edge_index, edge_attr=edge_attr))),
+                p=self.dropout,
+                training=self.training,
+            )
+
+        if monomer_weight is not None:
+            x = x * monomer_weight
+
+        return self.pooling_fn(x, batch_index)  # was missing in original
+
+
+class CGCNNClassifier(CGCNNBase, BaseNetworkClassifier):
+    """CGCNN model for polymer property classification."""
+
+    def __init__(
+        self,
+        n_node_features: int,
+        n_edge_features: int,
+        pooling: Pooling | str = Pooling.GlobalMeanPool,
+        n_convolutions: int = 2,
+        embedding_dim: int = 64,
+        readout_layers: int = 2,
+        n_classes: int = 2,
+        dropout: float = 0.5,
+        apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
+        seed: int = 42,
+    ) -> None:
+        super().__init__(
+            n_node_features=n_node_features,
+            n_edge_features=n_edge_features,
+            pooling=pooling,
+            n_convolutions=n_convolutions,
+            embedding_dim=embedding_dim,
+            readout_layers=readout_layers,
+            problem_type=ProblemType.Classification,
+            n_classes=n_classes,
+            dropout=dropout,
+            apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
+            seed=seed,
+        )
+
+
+class CGCNNRegressor(CGCNNBase):
+    """CGCNN model for polymer property regression."""
+
+    def __init__(
+        self,
+        n_node_features: int,
+        n_edge_features: int,
+        pooling: Pooling | str = Pooling.GlobalMeanPool,
+        n_convolutions: int = 2,
+        embedding_dim: int = 64,
+        readout_layers: int = 2,
+        n_classes: int = 1,
+        dropout: float = 0.5,
+        apply_weighting_to_graph: ApplyWeightingToGraph | str = ApplyWeightingToGraph.BeforePooling,
+        n_polymer_descriptors: int = 0,
+        seed: int = 42,
+    ) -> None:
+        super().__init__(
+            n_node_features=n_node_features,
+            n_edge_features=n_edge_features,
+            pooling=pooling,
+            n_convolutions=n_convolutions,
+            embedding_dim=embedding_dim,
+            readout_layers=readout_layers,
+            problem_type=ProblemType.Regression,
+            n_classes=n_classes,
+            dropout=dropout,
+            apply_weighting_to_graph=apply_weighting_to_graph,
+            n_polymer_descriptors=n_polymer_descriptors,
+            seed=seed,
+        )

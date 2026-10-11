@@ -38,7 +38,7 @@ import inspect
 from typing import Any
 
 from polynet.config.enums import Network, ProblemType
-from polynet.models.gnn.cggnn import CGGNNClassifier, CGGNNRegressor
+from polynet.models.gnn.cgcnn import CGCNNClassifier, CGCNNRegressor
 from polynet.models.gnn.gat import GATClassifier, GATRegressor
 from polynet.models.gnn.gcn import GCNClassifier, GCNRegressor
 from polynet.models.gnn.graphsage import GraphSAGEClassifier, GraphSAGERegressor
@@ -62,8 +62,8 @@ _NETWORK_REGISTRY: dict[tuple[Network, ProblemType], type] = {
     (Network.TransformerGNN, ProblemType.Regression): TransformerGNNRegressor,
     (Network.MPNN, ProblemType.Classification): MPNNClassifier,
     (Network.MPNN, ProblemType.Regression): MPNNRegressor,
-    (Network.CGGNN, ProblemType.Classification): CGGNNClassifier,
-    (Network.CGGNN, ProblemType.Regression): CGGNNRegressor,
+    (Network.CGCNN, ProblemType.Classification): CGCNNClassifier,
+    (Network.CGCNN, ProblemType.Regression): CGCNNRegressor,
 }
 
 

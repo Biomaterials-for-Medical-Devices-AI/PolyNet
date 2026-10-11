@@ -19,6 +19,10 @@ SAMPLERS_USING_FINGERPRINTS = frozenset(
 )
 # Samplers that also (or only) use the target values.
 SAMPLERS_USING_TARGET = frozenset({SplitSampler.SPXY, SplitSampler.TargetProperty})
+# Samplers that cannot be used for new splits. astartes 1.3.3 OptiSim assigns
+# samples to clusters by the cluster number instead of the cluster centre's
+# index, so its clusters are random and the split is not extrapolative.
+DISABLED_SAMPLERS = frozenset({SplitSampler.OptiSim})
 # Samplers that ignore the random seed: every repetition gives the same split.
 DETERMINISTIC_SAMPLERS = frozenset(
     {SplitSampler.KennardStone, SplitSampler.SPXY, SplitSampler.TargetProperty}
@@ -36,6 +40,15 @@ def deterministic_sampler_warning(sampler: SplitSampler, n_repetitions: int) -> 
     )
 
 
+def disabled_sampler_error(sampler: SplitSampler) -> str:
+    """Why a disabled sampler cannot be used."""
+    return (
+        f"The '{SplitSampler(sampler).value}' sampler is disabled: astartes assigns "
+        "polymers to its clusters at random, so it does not give an extrapolative split. "
+        "Use 'kmeans' for a cluster-based split."
+    )
+
+
 def available_samplers(
     problem_type: ProblemType | str, split_method: SplitMethod | str
 ) -> list[SplitSampler]:
@@ -46,6 +59,7 @@ def available_samplers(
       ``target_property``): within a class the target is constant.
     - Classification excludes ``target_property``: sorting by class label
       would put a single class in the test set.
+    - ``DISABLED_SAMPLERS`` are never offered.
 
     Parameters
     ----------
@@ -59,7 +73,7 @@ def available_samplers(
     list[SplitSampler]
         The valid samplers, in ``SplitSampler`` order (``random`` first).
     """
-    excluded: set[SplitSampler] = set()
+    excluded: set[SplitSampler] = set(DISABLED_SAMPLERS)
     if SplitMethod(split_method) == SplitMethod.Stratified:
         excluded |= SAMPLERS_USING_TARGET
     if ProblemType(problem_type) == ProblemType.Classification:

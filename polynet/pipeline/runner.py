@@ -64,6 +64,7 @@ from polynet.config.schemas import (
     TrainGNNConfig,
     TrainTMLConfig,
 )
+from polynet.config.schemas.split_data import DISABLED_SAMPLERS, disabled_sampler_error
 
 logger = logging.getLogger("polynet.pipeline")
 
@@ -144,7 +145,12 @@ def _build_repr_config(
 
 def _build_split_config(cfg: dict) -> SplitConfig:
     """Build SplitConfig from the 'splitting' section of the YAML config."""
-    return SplitConfig.model_validate(cfg["splitting"])
+    split_cfg = SplitConfig.model_validate(cfg["splitting"])
+    # Checked here rather than in SplitConfig, so that experiments saved with a
+    # disabled sampler can still be loaded.
+    if split_cfg.sampler in DISABLED_SAMPLERS:
+        raise ValueError(disabled_sampler_error(split_cfg.sampler))
+    return split_cfg
 
 
 def _build_gnn_config(cfg: dict) -> TrainGNNConfig:

@@ -4,7 +4,7 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [1.0.0] — Unreleased
+## [1.0.0] — 2026-10-12
 
 First tagged release. Earlier development versions were labelled `0.1.0` but
 never released; experiments run with them still load, but some results are not
@@ -19,11 +19,11 @@ reproduced exactly (see **Results that change**).
   molar ratios; ratio weighting before message passing, before pooling or per
   monomer.
 - **Representations:** molecular graphs for GNNs (GCN, GAT, GraphSAGE, MPNN,
-  CGGNN, TransformerConv); RDKit descriptors, Morgan / RDKit fingerprints (size and
+  CGCNN, TransformerConv); RDKit descriptors, Morgan / RDKit fingerprints (size and
   radius configurable), polyBERT embeddings and PolyMetriX polymer descriptors
   for traditional ML (random forest, XGBoost, SVM, linear / logistic models).
 - **Splits:** repeated train/validation/test splits drawn with astartes —
-  random (default), Kennard–Stone, SPXY, k-means, OptiSim or target-property,
+  random (default), Kennard–Stone, SPXY, k-means or target-property,
   optionally stratified; `val_ratio` and `test_ratio` are fractions of the full
   dataset.
 - **Hyperparameter optimisation:** GNN (Ray Tune with ASHA) and TML
@@ -57,6 +57,15 @@ Compared with unreleased development versions before October 2026
   monomer weighting);
 - CLI canonicalisation, now applied as configured;
 - SVM SHAP values, now reproducible.
+
+### Renamed and removed
+
+- The `CGGNN` architecture is now called `CGCNN` (crystal graph convolutional
+  neural network, Xie & Grossman 2018), its published name. Configs and
+  experiments that use `CGGNN` still load and are mapped to `CGCNN`.
+- The `optisim` sampler is disabled: astartes 1.3.3 assigns polymers to
+  OptiSim clusters at random, so the split is not extrapolative. Use `kmeans`
+  for a cluster-based split. Experiments saved with `optisim` still load.
 
 ### Packaging
 

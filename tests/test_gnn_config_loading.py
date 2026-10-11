@@ -57,6 +57,14 @@ def test_every_setting_is_read(build_gnn_config):
     assert gnn.hpo_search_grid["GAT"] == {TrainingParam.LearningRate: [0.01]}
 
 
+def test_old_cggnn_name_selects_cgcnn(build_gnn_config):
+    cfg = copy.deepcopy(_CFG)
+    cfg["gnn_training"]["gnn_convolutional_layers"] = {"CGGNN": {"embedding_dim": 16}}
+    cfg["gnn_training"].pop("hpo_search_grid")
+    gnn = build_gnn_config(cfg)
+    assert gnn.gnn_convolutional_layers == {Network.CGCNN: {"embedding_dim": 16}}
+
+
 @pytest.mark.parametrize(
     "cfg",
     [

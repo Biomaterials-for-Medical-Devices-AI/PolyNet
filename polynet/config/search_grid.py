@@ -104,7 +104,7 @@ _GraphSAGE_GRID: dict = {ArchitectureParam.Bias: [True, False]}
 _TransformerGNN_GRID: dict = {ArchitectureParam.NumHeads: [1, 2, 4]}
 _GAT_GRID: dict = {ArchitectureParam.NumHeads: [1, 2, 4]}
 _MPNN_GRID: dict = {}
-_CGGNN_GRID: dict = {}
+_CGCNN_GRID: dict = {}
 
 _GNN_SPECIFIC_GRIDS: dict[Network, dict] = {
     Network.GCN: _GCN_GRID,
@@ -112,7 +112,7 @@ _GNN_SPECIFIC_GRIDS: dict[Network, dict] = {
     Network.TransformerGNN: _TransformerGNN_GRID,
     Network.GAT: _GAT_GRID,
     Network.MPNN: _MPNN_GRID,
-    Network.CGGNN: _CGGNN_GRID,
+    Network.CGCNN: _CGCNN_GRID,
 }
 
 
