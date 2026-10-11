@@ -152,7 +152,9 @@ def calculate_masking_attributions(
             mol_id = mol.idx
 
             # Cache hit: ck exists AND every monomer already has this fk computed
-            cached_ck = cached.get(mol_id, {}).get(_ALGORITHM_KEY, {}).get(ck, {})
+            cached_ck = (
+                cached.get(mol_id, cached.get(str(mol_id), {})).get(_ALGORITHM_KEY, {}).get(ck, {})
+            )
             already_cached = bool(cached_ck) and all(
                 fk in mon_data for mon_data in cached_ck.values()
             )
