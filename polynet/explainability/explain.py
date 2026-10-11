@@ -456,6 +456,36 @@ def compute_global_attribution(
             cache_root=cache_root,
         )
 
+    return render_cached_global_attribution(
+        combined_explanations=combined_explanations,
+        model_names=list(models),
+        explain_mols=explain_mols,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        fragmentation_approach=fragmentation_approach,
+        target_class=target_class,
+        top_n=top_n,
+        plot_type=plot_type,
+        mols_per_model=mols_per_model,
+    )
+
+
+def render_cached_global_attribution(
+    combined_explanations: dict,
+    model_names: list[str],
+    explain_mols: list,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    fragmentation_approach=FragmentationMethod.BRICS,
+    target_class: int | None = None,
+    top_n: int | None = None,
+    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    mols_per_model: dict[str, set[str]] | None = None,
+) -> GlobalAttributionResult:
+    """Render saved raw attributions without models, inference or cache writes."""
+    models = dict.fromkeys(model_names)
     display_data = build_display_data(combined_explanations, models, explain_mols, mols_per_model)
 
     fk = _frag_key(fragmentation_approach)
@@ -698,6 +728,44 @@ def compute_local_attribution(
         cache_root=cache_root,
     )
 
+    return render_cached_local_attribution(
+        combined_explanations=combined_explanations,
+        model_names=list(models),
+        dataset=dataset,
+        explain_mols=explain_mols,
+        problem_type=problem_type,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        fragmentation_approach=fragmentation_approach,
+        target_class=target_class,
+        mol_names=mol_names,
+        predictions=predictions,
+        class_labels=class_labels,
+        aggregation=aggregation,
+    )
+
+
+def render_cached_local_attribution(
+    combined_explanations: dict,
+    model_names: list[str],
+    dataset,
+    explain_mols: list,
+    problem_type: ProblemType,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    fragmentation_approach=FragmentationMethod.BRICS,
+    target_class: int | None = None,
+    mol_names: dict | None = None,
+    predictions: dict | None = None,
+    class_labels: dict | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+) -> list[MolAttributionResult]:
+    """Render saved raw attributions without models, inference or cache writes."""
+    models = dict.fromkeys(model_names)
+    mol_names = mol_names or {}
+    predictions = predictions or {}
     display_data = build_display_data(combined_explanations, models, explain_mols)
 
     fk = _frag_key(fragmentation_approach)
@@ -712,8 +780,16 @@ def compute_local_attribution(
             + (f", class `{target_class}`" if target_class is not None else "")
             + f" | normalisation: `{normalisation_type}`"
         )
-        true_label = str(predictions.get(mol.idx, {}).get(ResultColumn.LABEL, "N/A"))
-        predicted_label = str(predictions.get(mol.idx, {}).get(ResultColumn.PREDICTED, "N/A"))
+        true_label = str(
+            predictions.get(mol.idx, predictions.get(str(mol.idx), {})).get(
+                ResultColumn.LABEL, "N/A"
+            )
+        )
+        predicted_label = str(
+            predictions.get(mol.idx, predictions.get(str(mol.idx), {})).get(
+                ResultColumn.PREDICTED, "N/A"
+            )
+        )
         return info_msg, true_label, predicted_label
 
     # ----- Separate aggregation: one explanation per model × molecule -----
@@ -787,7 +863,9 @@ def compute_local_attribution(
 
     for mol in mols_filtered:
         info_msg, true_label, predicted_label = _mol_info(mol)
-        monomer_dict = merged.get(mol.idx, {}).get(_ALG_KEY, {}).get(ck, {})
+        monomer_dict = (
+            merged.get(mol.idx, merged.get(str(mol.idx), {})).get(_ALG_KEY, {}).get(ck, {})
+        )
         results.append(
             _build_mol_attribution_result(
                 mol=mol,
