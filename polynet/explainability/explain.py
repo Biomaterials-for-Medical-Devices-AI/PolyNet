@@ -41,6 +41,7 @@ Typical notebook usage::
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, field
 import json
 import logging
@@ -566,15 +567,16 @@ def _build_mol_attribution_result(
     predicted_label: str,
     mol_names: dict,
     model_label: str | None = None,
+    normalised_monomer_dict: dict | None = None,
 ) -> MolAttributionResult:
     """
     Build a single molecule's attribution table + atom-heatmap figure.
 
     Shared by the Average and Separate aggregation paths — the only differences
     are which ``monomer_dict`` is passed (merged across models, or one model's)
-    and the ``model_label`` tag. Normalisation is identical to the historical
-    behaviour: ``Local``/``PerModel`` scale by the unit's own max-abs, ``Global``
-    by the supplied ``global_divisor``, ``NoNormalisation`` leaves raw scores.
+    and the ``model_label`` tag. ``Local`` scales this molecule, ``Global`` uses
+    the saved population maximum, and ``PerModel`` receives scores scaled per
+    fitted model before averaging. The attribution table retains raw scores.
     """
     if not monomer_dict:
         return MolAttributionResult(
@@ -595,10 +597,7 @@ def _build_mol_attribution_result(
         for s in scores
     ]
 
-    if normalisation_type in (
-        ImportanceNormalisationMethod.Local,
-        ImportanceNormalisationMethod.PerModel,
-    ):
+    if normalisation_type == ImportanceNormalisationMethod.Local:
         mol_divisor = max((abs(s) for s in mol_raw_scores), default=1.0) or 1.0
     elif normalisation_type == ImportanceNormalisationMethod.Global:
         mol_divisor = global_divisor
@@ -606,13 +605,18 @@ def _build_mol_attribution_result(
         mol_divisor = None
 
     attr_col = "Attribution (Y − Y_masked)"
-    norm_col = "Normalised Attribution" if mol_divisor is not None else attr_col
+    norm_col = "Normalised Attribution"
     rows = [
         {
             "Monomer (SMILES)": monomer_smiles,
             "Fragment (SMILES)": frag_smiles,
             "Occurrence": occ + 1,
             attr_col: score,
+            **(
+                {norm_col: normalised_monomer_dict[monomer_smiles][fk][frag_smiles][occ]}
+                if normalised_monomer_dict is not None
+                else {}
+            ),
         }
         for monomer_smiles, fk_dict in monomer_dict.items()
         for frag_smiles, scores in fk_dict.get(fk, {}).items()
@@ -624,13 +628,17 @@ def _build_mol_attribution_result(
 
     weights_list = fragment_attributions_to_atom_weights(
         mol=mol,
-        monomer_dict=monomer_dict,
+        monomer_dict=(
+            normalised_monomer_dict if normalised_monomer_dict is not None else monomer_dict
+        ),
         frag_key=fk,
         fragmentation_approach=fragmentation_approach,
     )
 
     if mol_divisor is not None:
         weights_list = [[w / mol_divisor for w in wlist] for wlist in weights_list]
+        cmap_min, cmap_max = -1.0, 1.0
+    elif normalised_monomer_dict is not None:
         cmap_min, cmap_max = -1.0, 1.0
     else:
         cmap_min, cmap_max = None, None
@@ -729,7 +737,7 @@ def compute_local_attribution(
     )
 
     return render_cached_local_attribution(
-        combined_explanations=combined_explanations,
+        combined_explanations=build_display_data(combined_explanations, models, explain_mols),
         model_names=list(models),
         dataset=dataset,
         explain_mols=explain_mols,
@@ -792,96 +800,104 @@ def render_cached_local_attribution(
         )
         return info_msg, true_label, predicted_label
 
-    # ----- Separate aggregation: one explanation per model × molecule -----
-    if aggregation == ExplanationAggregation.Separate:
-        if normalisation_type == ImportanceNormalisationMethod.Global:
-            global_divisor = (
-                max(
-                    (
-                        abs(s)
-                        for num_dict in display_data.values()
-                        for mol_dict in num_dict.values()
-                        for mol_entry in mol_dict.values()
-                        for mon_data in mol_entry.get(_ALG_KEY, {}).get(ck, {}).values()
-                        for scores in mon_data.get(fk, {}).values()
-                        for s in scores
-                    ),
-                    default=1.0,
-                )
-                or 1.0
-            )
-        else:
-            global_divisor = None
+    # Reference the whole saved analysis, even when showing just one molecule.
+    reference_ids = {
+        sid
+        for log_name in models
+        for sid in combined_explanations.get(log_name.split("_", 1)[0], {}).get(
+            log_name.split("_", 1)[1], {}
+        )
+    }
+    reference = build_display_data(combined_explanations, models, list(reference_ids))
 
-        for mol in mols_filtered:
-            info_msg, true_label, predicted_label = _mol_info(mol)
-            for log_name in sorted(models.keys()):
-                model_name, number = log_name.split("_", 1)
-                model_label = f"{prettify_label(model_name)} — bootstrap {number}"
-                mol_dict = display_data.get(model_name, {}).get(number, {})
-                mol_entry = mol_dict.get(mol.idx, mol_dict.get(str(mol.idx), {}))
-                monomer_dict = mol_entry.get(_ALG_KEY, {}).get(ck, {})
-                results.append(
-                    _build_mol_attribution_result(
-                        mol=mol,
-                        monomer_dict=monomer_dict,
-                        fk=fk,
-                        fragmentation_approach=fragmentation_approach,
-                        normalisation_type=normalisation_type,
-                        global_divisor=global_divisor,
-                        neg_color=neg_color,
-                        pos_color=pos_color,
-                        info_msg=info_msg,
-                        true_label=true_label,
-                        predicted_label=predicted_label,
-                        mol_names=mol_names,
-                        model_label=model_label,
-                    )
-                )
-        return results
+    def scores(samples):
+        return [
+            s
+            for entry in samples.values()
+            for fragments in entry.get(_ALG_KEY, {}).get(ck, {}).values()
+            for values in fragments.get(fk, {}).values()
+            for s in values
+        ]
 
-    # ----- Average aggregation (default, historical behaviour) -----
-    merged = merge_fragment_attributions(display_data, list(models.keys()))
-
-    # Global divisor derived from the averaged merged data
+    global_divisor = None
     if normalisation_type == ImportanceNormalisationMethod.Global:
         global_divisor = (
             max(
                 (
                     abs(s)
-                    for mol_data in merged.values()
-                    for mon_data in mol_data.get(_ALG_KEY, {}).get(ck, {}).values()
-                    for scores in mon_data.get(fk, {}).values()
-                    for s in scores
+                    for iterations in reference.values()
+                    for samples in iterations.values()
+                    for s in scores(samples)
                 ),
-                default=1.0,
+                default=0.0,
             )
             or 1.0
         )
-    else:
-        global_divisor = None
+    normalised = None
+    if normalisation_type == ImportanceNormalisationMethod.PerModel:
+        normalised = deepcopy(reference)
+        for iterations in normalised.values():
+            for samples in iterations.values():
+                divisor = max((abs(s) for s in scores(samples)), default=0.0) or 1.0
+                for entry in samples.values():
+                    for fragments in entry.get(_ALG_KEY, {}).get(ck, {}).values():
+                        for fragment, values in fragments.get(fk, {}).items():
+                            fragments[fk][fragment] = [s / divisor for s in values]
+        normalised = build_display_data(normalised, models, explain_mols)
 
+    merged = merge_fragment_attributions(display_data, list(models))
+    scaled_merged = (
+        merge_fragment_attributions(normalised, list(models)) if normalised is not None else None
+    )
     for mol in mols_filtered:
         info_msg, true_label, predicted_label = _mol_info(mol)
-        monomer_dict = (
-            merged.get(mol.idx, merged.get(str(mol.idx), {})).get(_ALG_KEY, {}).get(ck, {})
-        )
-        results.append(
-            _build_mol_attribution_result(
-                mol=mol,
-                monomer_dict=monomer_dict,
-                fk=fk,
-                fragmentation_approach=fragmentation_approach,
-                normalisation_type=normalisation_type,
-                global_divisor=global_divisor,
-                neg_color=neg_color,
-                pos_color=pos_color,
-                info_msg=info_msg,
-                true_label=true_label,
-                predicted_label=predicted_label,
-                mol_names=mol_names,
-                model_label=None,
+        groups = []
+        if aggregation == ExplanationAggregation.Separate:
+            for log_name in sorted(models):
+                name, number = log_name.split("_", 1)
+                samples = display_data.get(name, {}).get(number, {})
+                entry = samples.get(mol.idx, samples.get(str(mol.idx), {}))
+                monomers = entry.get(_ALG_KEY, {}).get(ck, {})
+                if not any(fk in fragments for fragments in monomers.values()):
+                    continue
+                scaled = None
+                if normalised is not None:
+                    samples = normalised.get(name, {}).get(number, {})
+                    scaled = (
+                        samples.get(mol.idx, samples.get(str(mol.idx), {}))
+                        .get(_ALG_KEY, {})
+                        .get(ck, {})
+                    )
+                groups.append((monomers, scaled, f"{prettify_label(name)} — bootstrap {number}"))
+        else:
+            monomers = (
+                merged.get(mol.idx, merged.get(str(mol.idx), {})).get(_ALG_KEY, {}).get(ck, {})
             )
-        )
-
+            scaled = (
+                None
+                if scaled_merged is None
+                else scaled_merged.get(mol.idx, scaled_merged.get(str(mol.idx), {}))
+                .get(_ALG_KEY, {})
+                .get(ck, {})
+            )
+            groups.append((monomers, scaled, None))
+        for monomers, scaled, label in groups:
+            results.append(
+                _build_mol_attribution_result(
+                    mol=mol,
+                    monomer_dict=monomers,
+                    fk=fk,
+                    fragmentation_approach=fragmentation_approach,
+                    normalisation_type=normalisation_type,
+                    global_divisor=global_divisor,
+                    neg_color=neg_color,
+                    pos_color=pos_color,
+                    info_msg=info_msg,
+                    true_label=true_label,
+                    predicted_label=predicted_label,
+                    mol_names=mol_names,
+                    model_label=label,
+                    normalised_monomer_dict=scaled,
+                )
+            )
     return results
