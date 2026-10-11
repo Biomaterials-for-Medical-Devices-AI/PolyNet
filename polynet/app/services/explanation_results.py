@@ -1,8 +1,7 @@
 """Portable snapshots of completed GUI explanations, for page 6 plotting.
 
 Snapshots contain selected raw scores and plotting inputs, never fitted models.
-They preserve the population of each split and survive cache changes. Existing
-CLI/GUI caches can also be opened without calculating missing attributions.
+They preserve the population of each split and survive cache changes. Population and molecule views share the same saved model/sample pairs.
 """
 
 from __future__ import annotations
@@ -18,9 +17,10 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 
-from polynet.app.services.cache import file_version, read_csv, read_json
-from polynet.config.enums import FragmentationMethod, IteratorType, ProblemType
-from polynet.config.paths import explanation_json_file_path, representation_file_path
+from polynet.app.services.cache import file_version, read_json
+from polynet.config.display_names import prettify_label
+from polynet.config.enums import FragmentationMethod, ProblemType
+from polynet.config.paths import explanation_json_file_path
 from polynet.explainability.explain import build_display_data
 from polynet.explainability.masking import MASKING_CACHE_VERSION, load_masking_cache
 from polynet.explainability.shap_explain import (
@@ -31,7 +31,7 @@ from polynet.explainability.shap_explain import (
     _rows_of_models,
 )
 
-SNAPSHOT_VERSION = 1
+SNAPSHOT_VERSION = 2
 
 
 def _json_default(value):
@@ -87,6 +87,7 @@ def capture_analysis(family: str, scope: str, params: dict) -> Path:
         "attribution_version": MASKING_CACHE_VERSION if family == "GNN" else SHAP_CACHE_VERSION,
         "family": family,
         "scope": scope,
+        "selection_label": params.get("selection_label"),
         "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "arguments": arguments,
         "prediction_breakdowns": params.get("prediction_breakdowns") or {},
@@ -135,9 +136,20 @@ def capture_analysis(family: str, scope: str, params: dict) -> Path:
                 record["descriptors"][descriptor] = _pack_frame(values)
     directory = root / "explanations" / "analyses"
     directory.mkdir(parents=True, exist_ok=True)
-    identity = json.dumps([family, scope, arguments], sort_keys=True, default=_json_default)
+    pairs = attribution_coverage(_restore_record(record))
+    identity = json.dumps(
+        [
+            family,
+            sorted(models),
+            arguments.get("target_class"),
+            arguments.get("fragmentation_approach"),
+            sorted((sid, sorted(names)) for sid, names in pairs.items()),
+        ],
+        sort_keys=True,
+        default=_json_default,
+    )
     key = hashlib.sha256(identity.encode()).hexdigest()[:20]
-    destination = directory / f"{family.lower()}_{scope}_{key}.json"
+    destination = directory / f"{family.lower()}_{key}.json"
     # Replace only after serialization succeeds, leaving any older snapshot intact.
     contents = json.dumps(_clean_metadata(record), default=_json_default, allow_nan=False)
     with tempfile.NamedTemporaryFile(mode="w", dir=directory, delete=False, suffix=".tmp") as file:
@@ -159,7 +171,7 @@ def list_saved_analyses(root: Path) -> list[Path]:
 def load_analysis(path: Path) -> dict:
     """Read a snapshot into rendering arguments; this never loads fitted models."""
     record = read_json(Path(path))
-    if record.get("version") != SNAPSHOT_VERSION:
+    if record.get("version") not in {1, SNAPSHOT_VERSION}:
         raise ValueError(
             "Unsupported explanation snapshot version. Run the analysis again on page 5."
         )
@@ -190,145 +202,95 @@ def _restore_record(record):
     return {**record, "arguments": arguments}
 
 
-def list_cached_analyses(root: Path) -> list[dict]:
-    """Describe existing compatible caches, including analyses run before snapshots.
-
-    Cache-only imports have no record of the original set selection. They expose
-    all cached samples explicitly; new GUI snapshots retain the exact population.
-    """
-    paths = sorted((Path(root) / "explanations").glob("shap_*.csv"))
-    masking_path = explanation_json_file_path(root)
-    if masking_path.exists():
-        paths.append(masking_path)
-    versions = tuple(file_version(p) for p in paths)
-    return [
-        {**entry, "cache_version": versions}
-        for entry in _scan_caches(str(Path(root).resolve()), versions)
-    ]
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
-def _scan_caches(root: str, versions: tuple) -> list[dict]:
-    # File fingerprints invalidate after CLI runs or atomic replacements.
-    root = Path(root)
-    entries = []
-    by_class = {}
-    for path in sorted((Path(root) / "explanations").glob("shap_*.csv")):
-        descriptor = path.stem.removeprefix("shap_")
-        frame = _load_shap_cache(root, descriptor)
-        if frame.empty:
-            continue
-        for class_key, rows in frame.groupby("class_idx"):
-            by_class.setdefault(str(class_key), {})[descriptor] = rows
-    for class_key, frames in by_class.items():
-        entries.append({"family": "TML", "class_key": class_key, "raw": frames})
-    path = explanation_json_file_path(root)
-    if path.exists():
-        raw = load_masking_cache(read_json(path))
-        groups = {}
-        for model, iterations in raw.items():
-            if not isinstance(iterations, dict):
-                continue
+def attribution_coverage(record: dict) -> dict[str, set[str]]:
+    """Return actual saved model/bootstrap combinations per molecule."""
+    args = record["arguments"]
+    coverage = {}
+    if record["family"] == "TML":
+        for descriptor, frame in args["cache_by_descriptor"].items():
+            for row in frame.itertuples():
+                name = f"{row.model_type}-{descriptor}_{row.iteration}"
+                coverage.setdefault(str(row.sample_id), set()).add(name)
+    else:
+        class_key = "regression" if args.get("target_class") is None else str(args["target_class"])
+        fragmentation = str(args["fragmentation_approach"])
+        for model, iterations in args["combined_explanations"].items():
             for iteration, samples in iterations.items():
                 for sid, sample in samples.items():
-                    for class_key, monomers in sample.get("chemistry_masking", {}).items():
-                        for smiles, fragments in monomers.items():
-                            for fragmentation, scores in fragments.items():
-                                group = groups.setdefault((class_key, fragmentation), {})
-                                entry = (
-                                    group.setdefault(model, {})
-                                    .setdefault(iteration, {})
-                                    .setdefault(sid, {})
-                                )
-                                entry.setdefault("chemistry_masking", {}).setdefault(
-                                    class_key, {}
-                                ).setdefault(smiles, {})[fragmentation] = scores
-        for (class_key, fragmentation), data in groups.items():
-            entries.append(
-                {
-                    "family": "GNN",
-                    "class_key": class_key,
-                    "fragmentation": fragmentation,
-                    "raw": data,
-                }
-            )
-    return entries
+                    monomers = sample.get("chemistry_masking", {}).get(class_key, {})
+                    if any(fragmentation in fragments for fragments in monomers.values()):
+                        coverage.setdefault(str(sid), set()).add(f"{model}_{iteration}")
+    return coverage
 
 
-def load_cached_analysis(entry: dict, root: Path, scope: str, data_options) -> dict:
-    """Prepare a legacy cache for plotting, without inference or graph processing."""
-    arguments = {
-        "problem_type": (
-            ProblemType.Regression
-            if entry["class_key"] == "regression"
-            else ProblemType.Classification
-        ),
-        "target_class": None if entry["class_key"] == "regression" else int(entry["class_key"]),
+def analysis_summary(path: Path) -> dict:
+    """Read a small cached description for the analysis selector."""
+    return _summary(file_version(path))
+
+
+@st.cache_data(show_spinner=False, max_entries=64)
+def _summary(version) -> dict:
+    with open(version[0]) as file:
+        record = json.load(file)
+    args = record["arguments"]
+    return {
+        "family": record["family"],
+        "model_names": args["model_names"],
+        "sample_ids": args.get("explain_mols", args.get("explain_sample_ids", [])),
+        "target_class": args.get("target_class"),
+        "fragmentation": args.get("fragmentation_approach"),
+        "selection_label": record.get("selection_label"),
     }
-    record = {**entry, "scope": scope, "arguments": arguments, "prediction_breakdowns": {}}
-    if entry["family"] == "TML":
-        frames = entry["raw"]
-        arguments["model_names"] = sorted(
-            {
-                f"{row.model_type}-{descriptor}_{row.iteration}"
-                for descriptor, frame in frames.items()
-                for row in frame.itertuples()
+
+
+def analysis_label(summary: dict) -> str:
+    """Describe scientific selections, without run dates, hashes or view types."""
+    models = sorted({prettify_label(name.rsplit("_", 1)[0]) for name in summary["model_names"]})
+    splits = sorted({int(name.rsplit("_", 1)[1]) for name in summary["model_names"]})
+    ids = summary["sample_ids"]
+    selection = summary.get("selection_label")
+    if not selection:
+        selection = ", ".join(map(str, ids[:3])) + (", …" if len(ids) > 3 else "")
+    parts = [
+        summary["family"],
+        ", ".join(models),
+        f"splits {', '.join(map(str, splits))}",
+        f"{selection} ({len(ids)} samples)",
+    ]
+    if summary.get("fragmentation"):
+        parts.append(prettify_label(summary["fragmentation"]))
+    if summary.get("target_class") is not None:
+        parts.append(f"class {summary['target_class']}")
+    return " · ".join(parts)
+
+
+def local_prediction_breakdowns(
+    record: dict, sample_ids: list, model_names: list[str] | None = None
+) -> dict:
+    """Keep prediction rows for the exact saved model/sample pairs being plotted."""
+    coverage = attribution_coverage(record)
+    saved = record.get("prediction_breakdowns") or {}
+
+    def subset(entries, descriptor=None):
+        result = {}
+        for sid in map(str, sample_ids):
+            entry = entries.get(sid)
+            if entry is None:
+                continue
+            allowed = {
+                (prettify_label(name.rsplit("_", 1)[0]), int(name.rsplit("_", 1)[1]))
+                for name in coverage.get(sid, ())
+                if (model_names is None or name in model_names)
+                and (descriptor is None or _parse_model_log_name(name)[1] == descriptor)
             }
-        )
-        arguments["explain_sample_ids"] = sorted(
-            {str(s) for frame in frames.values() for s in frame["sample_id"]}
-        )
-        arguments.update(cache_by_descriptor=frames, target_col=data_options.target_variable_col)
-        descriptors = {}
-        for descriptor in frames:
-            path = representation_file_path(root) / f"{descriptor}.csv"
-            if path.exists():
-                descriptors[descriptor] = read_csv(path, index_col=0)
-                descriptors[descriptor].index = descriptors[descriptor].index.astype(str)
-        arguments["descriptor_dfs"] = descriptors
-    else:
-        raw = entry["raw"]
-        arguments["model_names"] = sorted(
-            f"{model}_{iteration}" for model, iterations in raw.items() for iteration in iterations
-        )
-        molecules = {}
-        for iterations in raw.values():
-            for samples in iterations.values():
-                for sid, sample in samples.items():
-                    molecules.setdefault(sid, list(sample["chemistry_masking"][entry["class_key"]]))
-        arguments.update(
-            combined_explanations=raw,
-            explain_mols=list(molecules),
-            dataset=[SimpleNamespace(idx=sid, mols=smiles) for sid, smiles in molecules.items()],
-            fragmentation_approach=FragmentationMethod(entry["fragmentation"]),
-        )
-    predictions_path = root / "predictions.csv"
-    if not predictions_path.exists():
-        predictions_path = root / "ml_results" / "predictions.csv"
-    if predictions_path.exists():
-        predictions = read_csv(predictions_path, index_col=0)
-        predictions.index = predictions.index.astype(str)
-        iterator_cols = [c for c in predictions if c in {it.value for it in IteratorType}]
-        iterator_col = iterator_cols[0] if iterator_cols else None
-        if entry["family"] == "TML":
-            from polynet.app.components.forms.explain_tml import _build_prediction_breakdowns
+            rows = [
+                row
+                for row in entry["rows"]
+                if "Bootstrap" not in row or (row["Model"], int(row["Bootstrap"])) in allowed
+            ]
+            result[sid] = {**entry, "rows": rows}
+        return result
 
-            record["prediction_breakdowns"] = _build_prediction_breakdowns(
-                predictions,
-                arguments["model_names"],
-                arguments["explain_sample_ids"],
-                data_options,
-                iterator_col=iterator_col,
-                selected_iterations=None,
-            )
-        else:
-            from polynet.app.components.forms.explain_model import _build_gnn_prediction_breakdowns
-
-            record["prediction_breakdowns"] = _build_gnn_prediction_breakdowns(
-                predictions,
-                arguments["model_names"],
-                arguments["explain_mols"],
-                data_options,
-                iterator_col=iterator_col,
-            )
-    return record
+    if record["family"] == "TML":
+        return {descriptor: subset(entries, descriptor) for descriptor, entries in saved.items()}
+    return subset(saved)
