@@ -352,39 +352,10 @@ def _shared_params_section(
             st.info(f"`{target_class}` corresponds to model output index `{class_num}`.")
             target_class = int(class_num)
 
-    with st.expander("Advanced settings", expanded=False):
-        normalisation_type = st.radio(
-            "Normalisation",
-            options=[
-                ImportanceNormalisationMethod.Local,
-                ImportanceNormalisationMethod.PerModel,
-                ImportanceNormalisationMethod.Global,
-                ImportanceNormalisationMethod.NoNormalisation,
-            ],
-            key=ExplainModelStateKeys.NormalisationMethodSelector,
-            index=1,
-            horizontal=True,
-            help=(
-                "**Local** — each (model × molecule) unit scaled to [−1, 1] independently.  \n"
-                "**PerModel** — each model run scaled by its own maximum attribution.  \n"
-                "**Global** — single divisor across all models and molecules.  \n"
-                "**None** — raw scores."
-            ),
-        )
-
-        cols = st.columns(2)
-        with cols[0]:
-            neg_color = st.color_picker(
-                "Negative attribution colour",
-                key=ExplainModelStateKeys.NegColorPlots,
-                value="#40bcde",
-            )
-        with cols[1]:
-            pos_color = st.color_picker(
-                "Positive attribution colour",
-                key=ExplainModelStateKeys.PosColorPlots,
-                value="#e64747",
-            )
+    # Page 5 uses stable previews; presentation controls live on Analyse Results.
+    normalisation_type = ImportanceNormalisationMethod.PerModel
+    neg_color, pos_color = "#40bcde", "#e64747"
+    st.caption("Run the analysis here; customise its saved plots on page 6 — Analyse Results.")
 
     return {
         "models_dict": models_dict,
@@ -437,29 +408,8 @@ def _global_tab_section(
         set_name=st.session_state.get(ExplainModelStateKeys.GlobalExplainSet),
     )
 
-    cols = st.columns(2)
-    with cols[0]:
-        plot_type = st.radio(
-            "Plot type",
-            options=[AttributionPlotType.Ridge, AttributionPlotType.Bar, AttributionPlotType.Strip],
-            format_func=lambda x: {
-                AttributionPlotType.Ridge: "Ridge (full distribution)",
-                AttributionPlotType.Bar: "Bar (mean ± 95 % CI)",
-                AttributionPlotType.Strip: "Strip (individual scores + mean)",
-            }[x],
-            key=ExplainModelStateKeys.GlobalPlotType,
-            horizontal=False,
-        )
-    with cols[1]:
-        top_n = st.number_input(
-            "Fragments to show (top N + bottom N)",
-            min_value=1,
-            max_value=50,
-            value=10,
-            step=1,
-            key=ExplainModelStateKeys.TopNFragments,
-            help="Show the N fragments with the highest and N with the lowest mean attribution.",
-        )
+    plot_type = AttributionPlotType.Ridge
+    top_n = 10
 
     if st.button("Run Global Explanation") or st.toggle(
         "Keep running automatically", key=ExplainModelStateKeys.GlobalKeepRunning
@@ -594,30 +544,8 @@ def _local_tab_section(
         st.info("Select at least one molecule above to generate local explanations.")
         return
 
-    aggregation = st.radio(
-        "Models display",
-        options=[ExplanationAggregation.Average, ExplanationAggregation.Separate],
-        format_func=lambda x: {
-            ExplanationAggregation.Average: "Average across models (one plot per molecule)",
-            ExplanationAggregation.Separate: "Show each model separately (one plot per model)",
-        }[x],
-        key=ExplainModelStateKeys.LocalAggregation,
-        horizontal=True,
-        help="How to combine explanations from the selected models for the same molecule.",
-    )
-
-    # Optional monomer name labels
     mol_names: dict = {}
-    with st.expander("Set custom monomer names (optional)", expanded=False):
-        for mol in local_mols:
-            mol_names[mol] = []
-            for smile_col in data_options.smiles_cols:
-                name = st.text_input(
-                    f"Name for {smile_col} in {mol}",
-                    key=f"{ExplainModelStateKeys.LocalSetMolName}_{mol}_{smile_col}",
-                )
-                if name:
-                    mol_names[mol].append(name)
+    aggregation = ExplanationAggregation.Average
 
     # Build predictions dict for true/pred label display
     preds_dict: dict = {}
