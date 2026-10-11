@@ -27,8 +27,8 @@ Typical usage::
 
 from polynet.models.base import BaseNetwork, BaseNetworkClassifier
 from polynet.models.gnn import (
-    CGGNNClassifier,
-    CGGNNRegressor,
+    CGCNNClassifier,
+    CGCNNRegressor,
     GATClassifier,
     GATRegressor,
     GCNClassifier,
@@ -51,9 +51,9 @@ __all__ = [
     # GAT
     "GATClassifier",
     "GATRegressor",
-    # CGGNN
-    "CGGNNClassifier",
-    "CGGNNRegressor",
+    # CGCNN
+    "CGCNNClassifier",
+    "CGCNNRegressor",
     # GraphSAGE
     "GraphSAGEClassifier",
     "GraphSAGERegressor",

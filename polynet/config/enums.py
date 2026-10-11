@@ -64,6 +64,9 @@ class SplitSampler(StrEnum):
     ``dbscan`` and ``sphere_exclusion`` are not offered: their default distance
     thresholds (eps 0.5, cutoff 0.25) are far below typical distances between
     count fingerprints, so they cannot fill the sets.
+
+    ``optisim`` is disabled (``DISABLED_SAMPLERS``): kept only so experiments
+    saved with it still load.
     """
 
     Random = "random"
@@ -269,7 +272,15 @@ class Network(StrEnum):
     GAT = "GAT"
     GraphSAGE = "GraphSAGE"
     MPNN = "MPNN"
-    CGGNN = "CGGNN"
+    CGCNN = "CGCNN"
+    # CGCNN was called CGGNN before 1.0.0, and experiments saved then still use
+    # the old name (pickled models) and value (file names, configs). The alias
+    # is not listed when iterating over the enum.
+    CGGNN = "CGCNN"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "Network | None":
+        return cls.CGCNN if value == "CGGNN" else None
 
 
 class ArchitectureParam(StrEnum):

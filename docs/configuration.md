@@ -181,7 +181,7 @@ splitting:
   val_ratio: 0.15                  # fraction of the full dataset (70/15/15 here)
   test_ratio: 0.15                 # fraction of the full dataset
   train_set_balance: null          # Optional: balance training set (0.0–1.0)
-  sampler: "random"                # random | kennard_stone | spxy | kmeans | optisim | target_property
+  sampler: "random"                # random | kennard_stone | spxy | kmeans | target_property
   sampling_fingerprint:            # fingerprint samplers only; used for splitting only
     fingerprint: "morgan"          # morgan | rdkitfp | polybert
     fp_size: 2048                  # morgan / rdkitfp only
@@ -221,7 +221,6 @@ sampler, always with astartes' default hyperparameters:
 | `kennard_stone` | sampling fingerprint | Training set chosen to span the fingerprint space; validation and test are the most "interpolated" polymers. Deterministic. |
 | `spxy` | sampling fingerprint + target | Kennard–Stone on joint fingerprint and target distances. Deterministic. |
 | `kmeans` | sampling fingerprint | k-means clusters (n/10 + 1); each cluster stays in one set (extrapolation). |
-| `optisim` | sampling fingerprint | OptiSim diverse clusters; each cluster stays in one set (extrapolation). |
 | `target_property` | target | Polymers sorted by target value; the extremes go to the test set. Deterministic. |
 
 - **Sampling fingerprint (`sampling_fingerprint`).** Fingerprint samplers place each polymer
@@ -239,7 +238,7 @@ sampler, always with astartes' default hyperparameters:
   all `n_bootstrap_iterations` repetitions use the same split. This is allowed, with a warning:
   the models still differ between repetitions because each is trained with its own seed,
   but models without randomness (e.g. linear regression) will be identical.
-- **Cluster samplers** (`kmeans`, `optisim`) keep each cluster in one set, so validation and
+- **Cluster samplers** (`kmeans`) keep each cluster in one set, so validation and
   test can be smaller or larger than requested (astartes' message is logged); they can fail
   on small datasets or small classes when a cluster is larger than the validation set.
 - `spxy` and `target_property` cannot be combined with `split_method: stratified` (the target
@@ -247,6 +246,9 @@ sampler, always with astartes' default hyperparameters:
   would put a single class in the test set). The GUI only offers the samplers that are valid
   for the problem type and split method, and reports a sampler that cannot split the data
   (e.g. clusters larger than the validation set) as a message instead of an error.
+- `optisim` is disabled: in astartes 1.3.3 OptiSim assigns polymers to its clusters at
+  random, so it does not give an extrapolative split. Configs that request it stop with an
+  error; experiments saved with it still load.
 - `dbscan` and `sphere_exclusion` are not offered: their default distance thresholds are far
   below the typical distance between polymer count fingerprints, so they cannot fill the
   sets.
@@ -354,7 +356,7 @@ Setting a scheduler parameter that the chosen scheduler does not use emits a war
 config-load time. In the GUI these options are under **Advanced training options** in
 the GNN section of the Train Models page.
 
-**Available architectures:** `GCN`, `GAT`, `CGGNN`, `MPNN`, `GraphSAGE`, `TransformerConvGNN`
+**Available architectures:** `GCN`, `GAT`, `CGCNN`, `MPNN`, `GraphSAGE`, `TransformerConvGNN`
 
 Every key is checked when the config is loaded: a misspelt `gnn_training` key, an
 unknown parameter in an architecture block (including one that belongs to another

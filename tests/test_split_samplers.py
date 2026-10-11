@@ -19,8 +19,10 @@ import pytest
 from polynet.config.enums import MolecularDescriptor, SplitSampler
 from polynet.config.schemas import SplitConfig
 from polynet.config.schemas.fingerprints import SamplingFingerprintConfig
+from polynet.config.schemas.split_data import DISABLED_SAMPLERS
 from polynet.data.sampling import sampling_features, sampling_metadata
 from polynet.factories.dataloader import get_data_split_indices
+from polynet.pipeline import runner
 from polynet.featurizer.descriptors import (
     build_vector_representation,
     polymer_count_fingerprints,
@@ -142,7 +144,7 @@ def test_polybert_sampling_fingerprint_matches_the_weighted_representation():
 # --- splitting --------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("sampler", [s for s in SplitSampler])
+@pytest.mark.parametrize("sampler", [s for s in SplitSampler if s not in DISABLED_SAMPLERS])
 def test_every_sampler_gives_disjoint_complete_splits(sampler):
     cfg = _split_cfg(sampler=sampler, n_bootstrap_iterations=1)
     train, val, test = _split(cfg, n_iter=1)
@@ -150,6 +152,15 @@ def test_every_sampler_gives_disjoint_complete_splits(sampler):
     assert all(sets) and not (sets[0] & sets[1] or sets[0] & sets[2] or sets[1] & sets[2])
     # Cluster samplers keep clusters whole; the rest uses every sample.
     assert set().union(*sets) <= set(_DATA.index)
+
+
+def test_disabled_sampler_loads_but_cannot_split():
+    # Experiments saved with OptiSim still load; new splits are refused.
+    cfg = _split_cfg(sampler="optisim", n_bootstrap_iterations=1)
+    with pytest.raises(ValueError, match="disabled"):
+        _split(cfg, n_iter=1)
+    with pytest.raises(ValueError, match="disabled"):
+        runner._build_split_config({"splitting": cfg.model_dump(mode="json")})
 
 
 def test_kennard_stone_uses_the_sampling_fingerprints():
@@ -240,7 +251,7 @@ def test_every_offered_sampler_gives_a_valid_config(problem_type, split_method):
     assert offered[0] == SplitSampler.Random
     for sampler in offered:
         _split_cfg(sampler=sampler, split_method=split_method)  # must not raise
-    for sampler in set(SplitSampler) - set(offered):
+    for sampler in set(SplitSampler) - set(offered) - DISABLED_SAMPLERS:
         if split_method == "stratified" and sampler in {
             SplitSampler.SPXY,
             SplitSampler.TargetProperty,

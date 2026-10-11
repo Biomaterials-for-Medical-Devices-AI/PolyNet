@@ -43,7 +43,8 @@ _MODEL_NAMES: dict[str, tuple[str, str]] = {
     "GAT": ("GAT", "GAT"),
     "GraphSAGE": ("GraphSAGE", "SAGE"),
     "MPNN": ("MPNN", "MPNN"),
-    "CGGNN": ("CGGNN", "CGGNN"),
+    "CGCNN": ("CGCNN", "CGCNN"),
+    "CGGNN": ("CGCNN", "CGCNN"),  # name before 1.0.0, in older experiments
 }
 
 # Molecular descriptors (MolecularDescriptor).

@@ -8,7 +8,7 @@ features to a per-edge weight matrix that modulates node message passing.
 This makes MPNN one of the most expressive edge-feature-aware architectures
 available for molecular graphs.
 
-Like CGGNN, MPNN includes a node projection layer that maps raw node
+Like CGCNN, MPNN includes a node projection layer that maps raw node
 features to ``embedding_dim`` before the first convolution.
 """
 
