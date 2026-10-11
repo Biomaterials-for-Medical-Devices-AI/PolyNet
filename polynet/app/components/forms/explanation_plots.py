@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 import hashlib
 import inspect
 from pathlib import Path
@@ -10,14 +9,17 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import streamlit as st
 
+from polynet.app.services.cache import file_version
 from polynet.app.services.explain_model import display_gnn_global, display_gnn_local
 from polynet.app.services.explain_source import list_external_datasets, resolve_explain_source
 from polynet.app.services.explain_tml import display_tml_global, display_tml_local
 from polynet.app.services.explanation_results import (
-    list_cached_analyses,
+    analysis_label,
+    analysis_summary,
+    attribution_coverage,
     list_saved_analyses,
     load_analysis,
-    load_cached_analysis,
+    local_prediction_breakdowns,
 )
 from polynet.config.enums import (
     AttributionPlotType,
@@ -36,112 +38,136 @@ from polynet.explainability.shap_explain import (
 
 
 def explanation_plots_form(experiment_path: Path, data_options) -> None:
-    """Load a completed run, then redraw it with the existing presentation options."""
+    """One saved analysis, selectable population/molecule views, no inference."""
     st.subheader("Feature importance plots")
     sources = {"Experiment data": experiment_path}
     for name in list_external_datasets(experiment_path):
         sources[f"External dataset: {name}"] = resolve_explain_source(
             experiment_path, name
         ).cache_root
-    available = {
-        label: root
-        for label, root in sources.items()
-        if list_saved_analyses(root)
-        or (root / "explanations" / "explanation.json").exists()
-        or any((root / "explanations").glob("shap_*.csv"))
-    }
+    available = {label: root for label, root in sources.items() if list_saved_analyses(root)}
     if not available:
         st.info(
-            "No feature importance analysis found. Run a global or local explanation on page 5 — Explain Models first."
+            "No feature importance analysis found. Run an explanation on page 5 — Explain Models first."
         )
         return
     if not st.checkbox("Customise feature importance plots", key="analyse_explanations_enabled"):
         return
-    label = st.selectbox(
-        "Explanation data source", list(available), key="analyse_explanation_source"
+    label = (
+        st.selectbox("Explanation data source", list(available), key="analyse_explanation_source")
+        if len(available) > 1
+        else next(iter(available))
     )
     root = available[label]
-    snapshots = list_saved_analyses(root)
-    use_cache = not snapshots or st.checkbox(
-        "Load an older GUI / CLI attribution cache", key="analyse_explanation_legacy"
-    )
-    loaded_key = f"loaded_explanation_{experiment_path}"
-    if use_cache:
-        try:
-            entries = list_cached_analyses(root)
-        except (OSError, ValueError, KeyError) as exc:
-            st.error(f"Could not read saved attribution caches: {exc}")
-            return
-        if not entries:
-            st.info("No compatible attribution values found. Run the analysis again on page 5.")
-            return
-        selected = st.selectbox(
-            "Cached feature importance analysis",
-            range(len(entries)),
-            format_func=lambda i: f"{entries[i]['family']} — class {entries[i]['class_key']}"
-            + (f" — {entries[i]['fragmentation']}" if entries[i]["family"] == "GNN" else " — SHAP"),
-            key="analyse_explanation_cache",
+    paths = list_saved_analyses(root)
+    try:
+        labels = {path: analysis_label(analysis_summary(path)) for path in paths}
+        # Rare equal labels get a simple index; internal hashes/dates stay hidden.
+        duplicate_labels = {
+            value for value in labels.values() if list(labels.values()).count(value) > 1
+        }
+        for i, path in enumerate(paths, 1):
+            if labels[path] in duplicate_labels:
+                labels[path] += f" (analysis {i})"
+        path = (
+            st.selectbox(
+                "Feature importance analysis",
+                paths,
+                format_func=labels.get,
+                key="analyse_explanation_snapshot",
+            )
+            if len(paths) > 1
+            else paths[0]
         )
-        scope = st.radio(
-            "Explanation view", ["global", "local"], key="analyse_explanation_view", horizontal=True
-        )
-        entry = entries[selected]
-        version = hashlib.sha256(repr(entry["cache_version"]).encode()).hexdigest()[:12]
-        identity = f"{root}:cache:{entry['family']}:{entry['class_key']}:{entry.get('fragmentation', '')}:{scope}:{version}"
-        st.caption(
-            "Older caches do not record the original sample/set selection. This view uses all cached samples and models for the selected class and fragmentation. No missing scores will be calculated."
-        )
-        loader = lambda: load_cached_analysis(entries[selected], root, scope, data_options)
-    else:
-        path = st.selectbox(
-            "Completed feature importance analysis",
-            snapshots,
-            format_func=lambda p: f"{p.stem.split('_')[0].upper()} — {p.stem.split('_')[1]} — {datetime.fromtimestamp(p.stat().st_mtime).strftime('%Y-%m-%d %H:%M:%S')} ({p.stem.rsplit('_', 1)[1][:6]})",
-            key="analyse_explanation_snapshot",
-        )
-        identity = f"{path}:{path.stat().st_mtime_ns}"
-        loader = lambda: load_analysis(path)
-    if st.button("Load selected analysis", key="analyse_explanation_load"):
-        try:
-            st.session_state[loaded_key] = (identity, loader())
-        except (OSError, ValueError, KeyError, TypeError) as exc:
-            st.error(f"Could not load this analysis: {exc}. Run it again on page 5.")
-            return
-    loaded = st.session_state.get(loaded_key)
-    if loaded is None or loaded[0] != identity:
-        st.info("Load the selected analysis to customise its plots.")
+        if len(paths) == 1:
+            st.caption(labels[path])
+        identity = repr(file_version(path))
+        loaded_key = f"loaded_explanation_{experiment_path}"
+        loaded = st.session_state.get(loaded_key)
+        if loaded is None or loaded[0] != identity:
+            loaded = (identity, load_analysis(path))
+            st.session_state[loaded_key] = loaded
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not load this analysis: {exc}")
         return
     analysis = loaded[1]
     args = analysis["arguments"].copy()
-    family, scope = analysis["family"], analysis["scope"]
+    family = analysis["family"]
+    coverage = attribution_coverage(analysis)
+    if not coverage:
+        st.info("This analysis has no saved attribution values. Run it again on page 5.")
+        return
     prefix = "explanation_plot_" + hashlib.sha256(identity.encode()).hexdigest()[:12]
-    ids = args.get("explain_mols", args.get("explain_sample_ids", []))
-    st.caption(
-        f"{family} {scope} analysis · {len(ids)} selected samples · {len(args['model_names'])} trained model instances"
-        + (f" · completed {analysis['created_at']}" if "created_at" in analysis else "")
+    view = st.radio(
+        "Plot view", ["Population", "Individual molecules"], horizontal=True, key=f"{prefix}_view"
     )
-    st.write("Models: " + ", ".join(args["model_names"]))
-    if args.get("target_class") is not None:
-        st.caption(f"Target class: {args['target_class']}")
-    _plot_controls(args, family, scope, prefix)
+    scope = "global" if view == "Population" else "local"
+    selected = list(coverage)
+    if scope == "local":
+        selected = st.multiselect(
+            "Molecules to display",
+            sorted(coverage),
+            default=[sorted(coverage)[0]],
+            key=f"{prefix}_molecules",
+        )
+        if not selected:
+            st.info("Select at least one explained molecule.")
+            return
+        available_names = sorted(set().union(*(coverage[sid] for sid in selected)))
+        args["model_names"] = st.multiselect(
+            "Cached models / bootstraps to show",
+            available_names,
+            default=available_names,
+            key=f"{prefix}_models",
+        )
+        if not args["model_names"]:
+            st.info("Select at least one cached model/bootstrap combination.")
+            return
+        for sid in selected:
+            names = sorted(coverage[sid] & set(args["model_names"]))
+            st.caption(
+                f"{sid}: showing cached explanations from "
+                + (", ".join(names) or "none of the selected combinations")
+            )
+            missing = set(args["model_names"]) - coverage[sid]
+            if missing:
+                st.info(
+                    f"{sid} was not explained by {', '.join(sorted(missing))}. This plot uses the saved combinations listed above. Run page 5 for additional combinations."
+                )
+        if family == "GNN":
+            stored_ids = {str(mol.idx): mol.idx for mol in args["dataset"]}
+            args["explain_mols"] = [stored_ids[sid] for sid in selected]
+            # Keep the full raw population for the PerModel reference maximum.
+            args["dataset"] = [mol for mol in args["dataset"] if str(mol.idx) in selected]
+        else:
+            args["explain_sample_ids"] = selected
+            st.caption(
+                "PerModel uses each model/bootstrap's largest absolute attribution across the whole saved analysis. Normalised plots show scaled model output."
+            )
+            if args["problem_type"] == "classification":
+                st.caption(
+                    "SHAP output scales can differ by model (probability or margin/log-odds). Use Separate model display to interpret individual endpoints."
+                )
+    st.caption(
+        f"{len(coverage)} explained molecules · {len(args['model_names'])} model/bootstrap combinations"
+    )
+    _plot_controls(args, family, scope, prefix + "_" + scope)
     renderer, display = {
         ("GNN", "global"): (render_cached_global_attribution, display_gnn_global),
         ("GNN", "local"): (render_cached_local_attribution, display_gnn_local),
         ("TML", "global"): (render_cached_global_shap_attribution, display_tml_global),
         ("TML", "local"): (render_cached_local_shap_attribution, display_tml_local),
     }[family, scope]
-    parameters = inspect.signature(renderer).parameters
     try:
-        # Rendering APIs accept raw scores only: no models, training or cache writes.
+        parameters = inspect.signature(renderer).parameters
         results = renderer(**{k: v for k, v in args.items() if k in parameters})
         if scope == "local":
-            display(results, analysis.get("prediction_breakdowns"))
+            display(results, local_prediction_breakdowns(analysis, selected, args["model_names"]))
         else:
             display(results)
     except (ValueError, KeyError, TypeError) as exc:
         st.error(f"Unable to plot the saved analysis: {exc}")
     finally:
-        # Streamlit has serialized the figures; release their pyplot references.
         plt.close("all")
 
 
@@ -158,7 +184,7 @@ def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
             index=1,
             horizontal=True,
             key=f"{prefix}_normalisation",
-            help="Local scales individual explanations; PerModel scales each trained model; Global uses one divisor; no normalisation shows raw scores. Local plot normalisation retains the existing explanation behaviour.",
+            help="PerModel divides each model/bootstrap by its largest absolute attribution across the saved analysis, before averaging. Local scales individual explanations; Global uses one divisor; no normalisation shows raw scores.",
         )
         columns = st.columns(2)
         args["neg_color"] = columns[0].color_picker(
