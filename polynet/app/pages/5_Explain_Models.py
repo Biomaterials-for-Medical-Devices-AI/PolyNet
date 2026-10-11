@@ -183,7 +183,7 @@ if experiment_name:
     #     merging_approach=representation_options.smiles_merge_approach,
     # )
 
-    st.header("Model Predictions Explainabilty")
+    st.header("Model Predictions Explainability")
 
     st.markdown(
         """
@@ -197,7 +197,9 @@ if experiment_name:
     - **Local Explanation — Single Molecule** answers *"how does this specific polymer's structure influence its prediction?"*
       Each selected molecule gets its own panel with a per-atom attribution heatmap and a fragment importance table.
 
-    Select your models and settings above the tabs, then run each pipeline independently.
+    Select your models and calculation settings above the tabs, then run each pipeline independently.
+    This page shows default previews and saves completed analyses. Load those results on
+    **page 6 — Analyse Results** to customise plots without recalculating importances.
     """
     )
 
