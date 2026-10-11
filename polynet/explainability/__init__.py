@@ -50,6 +50,8 @@ from polynet.explainability.explain import (
     compute_global_attribution,
     compute_local_attribution,
     fragment_attributions_to_atom_weights,
+    render_cached_global_attribution,
+    render_cached_local_attribution,
 )
 from polynet.explainability.masking import (
     calculate_masking_attributions,
@@ -60,6 +62,8 @@ from polynet.explainability.shap_explain import (
     InstanceAttributionResult,
     compute_global_shap_attribution,
     compute_local_shap_attribution,
+    render_cached_global_shap_attribution,
+    render_cached_local_shap_attribution,
 )
 from polynet.explainability.visualization import (
     get_cmap,
@@ -80,6 +84,8 @@ __all__ = [
     "GlobalAttributionResult",
     "MolAttributionResult",
     "fragment_attributions_to_atom_weights",
+    "render_cached_global_attribution",
+    "render_cached_local_attribution",
     # Attribution cache utility
     "deep_update",
     # Masking attributions (low-level)
@@ -93,6 +99,8 @@ __all__ = [
     "compute_global_shap_attribution",
     "compute_local_shap_attribution",
     "InstanceAttributionResult",
+    "render_cached_global_shap_attribution",
+    "render_cached_local_shap_attribution",
     # Visualization
     "get_cmap",
     "plot_mols_with_weights",
