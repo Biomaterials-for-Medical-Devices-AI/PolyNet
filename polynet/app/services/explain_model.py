@@ -12,6 +12,7 @@ from torch_geometric.loader import DataLoader
 
 from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
+from polynet.app.services.reruns import clear_explanation_results
 from polynet.config.enums import (
     AttributionPlotType,
     DimensionalityReduction,
@@ -126,6 +127,12 @@ def explain_model_global(
     ``mols_per_model`` restricts each model to its own molecules (e.g. the
     test set of its split); ``None`` explains every molecule with every model.
     """
+    try:
+        clear_explanation_results("GNN", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     result: GlobalAttributionResult = compute_global_attribution(
         models=models,
         experiment_path=experiment_path,
@@ -154,7 +161,7 @@ def explain_model_global(
 def display_gnn_global(result, prediction_breakdowns=None) -> None:
     """Display computed or loaded results using the same panels."""
     st.info(
-        f"Distribution over **{result.n_mols}** molecule(s) × **{result.n_models}** model(s) — "
+        f"Distribution over **{result.n_mols}** molecule(s), using **{result.n_models}** model/bootstrap combination(s) — "
         f"**{result.n_frags_total}** unique fragments found, "
         f"showing top/bottom **{result.n_shown // 2}** each."
         + (f" | class `{result.target_class}`" if result.target_class is not None else "")
@@ -202,6 +209,12 @@ def explain_model_local(
     one row per selected model × bootstrap with that bootstrap's predicted value
     and set membership. When provided it replaces the single true/predicted lines.
     """
+    try:
+        clear_explanation_results("GNN", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     mol_results: list[MolAttributionResult] = compute_local_attribution(
         models=models,
         experiment_path=experiment_path,

@@ -17,11 +17,15 @@ from polynet.app.services.explanation_results import (
     analysis_label,
     analysis_summary,
     attribution_coverage,
+    attribution_set_membership,
     capture_analysis,
     list_saved_analyses,
     load_analysis,
     local_prediction_breakdowns,
+    select_attribution_coverage,
 )
+from polynet.config.constants import DataSet
+from polynet.config.display_names import prettify_label
 from polynet.config.enums import (
     ExplanationAggregation,
     FragmentationMethod,
@@ -216,14 +220,261 @@ def test_page6_load_and_customise_never_runs_inference(tmp_path, tml_cache, monk
     assert not app.exception and not app.error
     app.radio[0].set_value("Individual molecules").run()
     assert not app.exception and not app.error
-    assert app.multiselect[1].value == ["LinearRegression-rdkit_1"]
-    app.multiselect[0].set_value(["1", "2"]).run()
+    _widget(app.multiselect, "Molecules to display").set_value(["1", "2"]).run()
     assert not app.exception and not app.error
-    app.multiselect[1].set_value(["RandomForest-rdkit_1"]).run()
+    _widget(app.multiselect, "Models to include").set_value(["RandomForest-rdkit"]).run()
     assert not app.exception and not app.error
     app.radio[2].set_value(ExplanationAggregation.Separate).run()
     assert not app.exception and not app.error
     assert path.read_bytes() == before
+
+
+def _widget(widgets, label):
+    return next(widget for widget in widgets if widget.label == label)
+
+
+@pytest.fixture
+def gnn_selection(tmp_path):
+    def entry(score):
+        return {"chemistry_masking": {"regression": {"CO": {"brics": {"CO": [score]}}}}}
+
+    names = ["GCN_1", "GCN_2", "GAT_1", "GAT_2"]
+    raw = {
+        "GCN": {"1": {"1": entry(2.0), "2": entry(4.0)}, "2": {"1": entry(6.0), "2": entry(8.0)}},
+        "GAT": {
+            "1": {"1": entry(10.0), "2": entry(20.0)},
+            "2": {"1": entry(30.0), "2": entry(40.0)},
+        },
+        MASKING_CACHE_VERSION_KEY: MASKING_CACHE_VERSION,
+    }
+    cache = explanation_json_file_path(tmp_path)
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    cache.write_text(json.dumps(raw))
+    breakdowns = {
+        sid: {
+            "true": float(sid),
+            "rows": [
+                {
+                    "Model": prettify_label(name.rsplit("_", 1)[0]),
+                    "Bootstrap": int(name.rsplit("_", 1)[1]),
+                    "Set": (
+                        DataSet.Training
+                        if int(sid) == int(name.rsplit("_", 1)[1])
+                        else DataSet.Test
+                    ),
+                    "Predicted": "1.5",
+                }
+                for name in names
+            ],
+        }
+        for sid in ["1", "2"]
+    }
+    params = dict(
+        models=dict.fromkeys(names),
+        experiment_path=tmp_path,
+        dataset=[SimpleNamespace(idx=i, mols=["CO"]) for i in [1, 2]],
+        explain_mols=[1, 2],
+        problem_type=ProblemType.Regression,
+        fragmentation_approach=FragmentationMethod.BRICS,
+        prediction_breakdowns=breakdowns,
+    )
+    path = capture_analysis("GNN", "global", params)
+    return path, load_analysis(path)
+
+
+def test_saved_set_membership_is_per_model_bootstrap(gnn_selection):
+    _, record = gnn_selection
+    membership = attribution_set_membership(record)
+    assert membership["1"]["GCN_1"] == DataSet.Training
+    assert membership["1"]["GCN_2"] == DataSet.Test
+    assert select_attribution_coverage(record, ["GCN_1", "GCN_2"], DataSet.Test) == {
+        "1": {"GCN_2"},
+        "2": {"GCN_1"},
+    }
+    assert select_attribution_coverage(record, ["GAT_1"], DataSet.Training) == {"1": {"GAT_1"}}
+    # Missing model combinations and unknown split metadata never create scores.
+    assert select_attribution_coverage(record, ["GAT_3"]) == {}
+    record["prediction_breakdowns"] = {}
+    assert not attribution_set_membership(record)
+    assert select_attribution_coverage(record, ["GCN_1"], DataSet.Test) == {}
+    assert select_attribution_coverage(record, ["GCN_1"]) == {"1": {"GCN_1"}, "2": {"GCN_1"}}
+
+
+def test_tml_set_filters_match_saved_descriptor_model_pairs(tmp_path, tml_cache):
+    _, params = tml_cache
+    params["prediction_breakdowns"] = {
+        "rdkit": {
+            sid: {
+                "true": "positive",
+                "rows": [
+                    {
+                        "Model": prettify_label(name.rsplit("_", 1)[0]),
+                        "Bootstrap": 1,
+                        "Set": (
+                            DataSet.Test if name.startswith("RandomForest") else DataSet.Training
+                        ),
+                    }
+                    for name in params["models"]
+                ],
+            }
+            for sid in ["1", "2"]
+        }
+    }
+    record = load_analysis(capture_analysis("TML", "global", params))
+    # Predictions list all models, but only two model/sample pairs were explained.
+    assert attribution_set_membership(record) == {
+        "1": {"LinearRegression-rdkit_1": DataSet.Training},
+        "2": {"RandomForest-rdkit_1": DataSet.Test},
+    }
+    assert select_attribution_coverage(record, list(params["models"]), DataSet.Test) == {
+        "2": {"RandomForest-rdkit_1"}
+    }
+
+
+def _capture_global_plot(result):
+    import streamlit as st
+
+    st.session_state["plotted_scores"] = result.attribution_dict
+    st.session_state["plotted_models"] = result.n_models
+    st.session_state["plotted_molecules"] = result.n_mols
+
+
+def _capture_local_plot(results, breakdowns):
+    import streamlit as st
+
+    st.session_state["plotted_local"] = [
+        (
+            str(result.mol_idx),
+            result.model_label,
+            result.attribution_df["Attribution (Y − Y_masked)"].tolist(),
+        )
+        for result in results
+    ]
+    st.session_state["plotted_breakdowns"] = breakdowns
+
+
+def test_page6_gnn_architectures_bootstraps_sets_and_molecules(gnn_selection, monkeypatch):
+    from polynet.app.components.forms import explanation_plots
+
+    path, _ = gnn_selection
+    before = path.read_bytes()
+    monkeypatch.setattr(explain, "compute_and_cache_masking", _no_inference)
+    monkeypatch.setattr(explanation_plots, "display_gnn_global", _capture_global_plot)
+    monkeypatch.setattr(explanation_plots, "display_gnn_local", _capture_local_plot)
+    app = AppTest.from_function(
+        plots_app, kwargs={"root": str(path.parents[2])}, default_timeout=30
+    ).run()
+    app.checkbox(key="analyse_explanations_enabled").check().run()
+    _widget(app.radio, "Normalisation").set_value(
+        ImportanceNormalisationMethod.NoNormalisation
+    ).run()
+    assert not app.exception and not app.error
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [2, 4, 6, 8, 10, 20, 30, 40]
+    assert app.session_state["plotted_molecules"] == 2
+    assert app.session_state["plotted_models"] == 4
+    _widget(app.multiselect, "GNN architectures to include").set_value(["GCN"]).run()
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [2, 4, 6, 8]
+    _widget(app.multiselect, "GNN architectures to include").set_value(["GAT"]).run()
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [10, 20, 30, 40]
+    _widget(app.multiselect, "Bootstrap iterations to include").set_value([2]).run()
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [30, 40]
+    _widget(app.selectbox, "Explained set").set_value(DataSet.Test).run()
+    assert app.session_state["plotted_scores"]["CO"] == [30]
+    # Both bootstraps: molecule 1 is test in split 2, molecule 2 in split 1.
+    _widget(app.multiselect, "Bootstrap iterations to include").set_value([1, 2]).run()
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [20, 30]
+    _widget(app.checkbox, "Manually refine molecule selection").check().run()
+    _widget(app.multiselect, "Molecules to display").set_value(["2"]).run()
+    assert app.session_state["plotted_scores"]["CO"] == [20]
+    _widget(app.radio, "Plot view").set_value("Individual molecules").run()
+    _widget(app.radio, "Normalisation").set_value(
+        ImportanceNormalisationMethod.NoNormalisation
+    ).run()
+    _widget(app.multiselect, "Molecules to display").set_value(["1", "2"]).run()
+    _widget(app.radio, "Models display").set_value(ExplanationAggregation.Separate).run()
+    assert app.session_state["plotted_local"] == [
+        ("1", f"{prettify_label('GAT')} — bootstrap 2", [30.0]),
+        ("2", f"{prettify_label('GAT')} — bootstrap 1", [20.0]),
+    ]
+    for sid, bootstrap in [("1", 2), ("2", 1)]:
+        rows = app.session_state["plotted_breakdowns"][sid]["rows"]
+        assert (
+            len(rows) == 1 and rows[0]["Bootstrap"] == bootstrap and rows[0]["Set"] == DataSet.Test
+        )
+    assert not app.exception and not app.error
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("family", ["GNN", "TML"])
+@pytest.mark.parametrize("aggregation", list(ExplanationAggregation))
+def test_local_set_filter_preserves_population_normalisation(
+    family, aggregation, gnn_selection, tml_cache
+):
+    if family == "GNN":
+        _, record = gnn_selection
+        arguments = record["arguments"]
+        results = explain.render_cached_local_attribution(
+            combined_explanations=arguments["combined_explanations"],
+            model_names=["GCN_1", "GCN_2"],
+            dataset=arguments["dataset"],
+            explain_mols=[1, 2],
+            problem_type=ProblemType.Regression,
+            mols_per_model={"GCN_1": {"1"}, "GCN_2": {"2"}},
+            aggregation=aggregation,
+        )
+        assert [
+            result.attribution_df["Attribution (Y − Y_masked)"].iloc[0] for result in results
+        ] == [2.0, 8.0]
+        assert [result.attribution_df["Normalised Attribution"].iloc[0] for result in results] == [
+            0.5,
+            1.0,
+        ]
+    else:
+        frame, params = tml_cache
+        results = shap_explain.render_cached_local_shap_attribution(
+            cache_by_descriptor={"rdkit": frame},
+            model_names=list(params["models"]),
+            descriptor_dfs=params["descriptor_dfs"],
+            explain_sample_ids=["1", "2"],
+            problem_type=ProblemType.Classification,
+            target_class=1,
+            samples_per_model={"LinearRegression-rdkit_1": {"1"}, "RandomForest-rdkit_1": {"2"}},
+            aggregation=aggregation,
+        )["rdkit"]
+        assert [
+            result.attribution_df.set_index("Feature").loc["f", "SHAP Value"] for result in results
+        ] == [2.0, 4.0]
+        assert [
+            result.attribution_df.set_index("Feature").loc["f", "Normalised SHAP"]
+            for result in results
+        ] == [0.5, 1.0]
+    plt.close("all")
+
+
+def test_page6_exact_combinations_and_empty_selections(gnn_selection, monkeypatch):
+    from polynet.app.components.forms import explanation_plots
+
+    path, _ = gnn_selection
+    monkeypatch.setattr(explanation_plots, "display_gnn_global", _capture_global_plot)
+    monkeypatch.setattr(explain, "compute_and_cache_masking", _no_inference)
+    app = AppTest.from_function(
+        plots_app, kwargs={"root": str(path.parents[2])}, default_timeout=30
+    ).run()
+    app.checkbox(key="analyse_explanations_enabled").check().run()
+    _widget(app.radio, "Normalisation").set_value(
+        ImportanceNormalisationMethod.NoNormalisation
+    ).run()
+    _widget(app.checkbox, "Choose individual model/bootstrap combinations").check().run()
+    _widget(app.multiselect, "Cached models / bootstraps to show").set_value(
+        ["GAT_2", "GCN_1"]
+    ).run()
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [2, 4, 30, 40]
+    _widget(app.multiselect, "GNN architectures to include").set_value(["GCN"]).run()
+    assert _widget(app.multiselect, "Cached models / bootstraps to show").value == ["GCN_1"]
+    assert sorted(app.session_state["plotted_scores"]["CO"]) == [2, 4]
+    _widget(app.multiselect, "Bootstrap iterations to include").set_value([]).run()
+    assert not app.exception and not app.error
+    assert "Select at least one" in app.info[0].value
 
 
 def test_no_completed_analysis_shows_instruction(tmp_path):

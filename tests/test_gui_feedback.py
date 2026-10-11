@@ -286,11 +286,24 @@ def test_training_page_tml_only_end_to_end(tmp_path, monkeypatch):
     assert app.status[0].state == "complete"
     assert "split/bootstrap 1/1" in app.code[0].value
     predictions = read_csv(paths.ml_results_file_path(exp))
-    # Retrain with the previous results present: no duplicate widget keys and
-    # identical numerical predictions, including when read through the cache.
+    # Rerunning requires acknowledgement and invalidates downstream outputs.
+    stale_paths = [
+        exp / "explanations" / "analyses" / "old.json",
+        exp / "unseen_predictions" / "unseen" / "predictions.csv",
+        exp / "gnn_hyp_opt" / "old_search.csv",
+    ]
+    for path in stale_paths:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("old")
     app.run()
+    assert app.button[0].disabled and all(path.exists() for path in stale_paths)
+    confirmation = next(
+        checkbox for checkbox in app.checkbox if checkbox.key.startswith("rerun_ack:")
+    )
+    confirmation.check().run()
     app.button[0].click().run()
     assert not app.exception
+    assert all(not path.exists() for path in stale_paths)
     pd.testing.assert_frame_equal(read_csv(paths.ml_results_file_path(exp)), predictions)
 
 

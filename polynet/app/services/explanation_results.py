@@ -18,6 +18,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.services.cache import file_version, read_json
+from polynet.config.constants import DataSet
 from polynet.config.display_names import prettify_label
 from polynet.config.enums import FragmentationMethod, ProblemType
 from polynet.config.paths import explanation_json_file_path
@@ -223,6 +224,50 @@ def attribution_coverage(record: dict) -> dict[str, set[str]]:
     return coverage
 
 
+def attribution_set_membership(record: dict) -> dict[str, dict[str, str]]:
+    """Saved split membership per actual model/bootstrap/sample attribution.
+
+    Membership belongs to a fitted bootstrap, not to the molecule globally.
+    External data and snapshots without membership do not invent train/test sets.
+    """
+    coverage = attribution_coverage(record)
+    saved = record.get("prediction_breakdowns") or {}
+    entries = saved.values() if record["family"] == "TML" else [saved]
+    membership = {}
+    for group in entries:
+        for sid, entry in group.items():
+            names = {
+                (prettify_label(name.rsplit("_", 1)[0]), int(name.rsplit("_", 1)[1])): name
+                for name in coverage.get(str(sid), ())
+            }
+            for row in entry["rows"]:
+                if row.get("Set") not in {DataSet.Training, DataSet.Validation, DataSet.Test}:
+                    continue
+                if "Bootstrap" not in row:
+                    continue
+                name = names.get((row["Model"], int(row["Bootstrap"])))
+                if name is not None:
+                    membership.setdefault(str(sid), {})[name] = row["Set"]
+    return membership
+
+
+def select_attribution_coverage(
+    record: dict, model_names: list[str], set_name: str | None = None
+) -> dict[str, set[str]]:
+    """Intersect saved pairs with selected models and each bootstrap's own set."""
+    coverage = attribution_coverage(record)
+    membership = attribution_set_membership(record) if set_name is not None else {}
+    selected = set(model_names)
+    result = {}
+    for sid, names in coverage.items():
+        matches = names & selected
+        if set_name is not None:
+            matches = {name for name in matches if membership.get(sid, {}).get(name) == set_name}
+        if matches:
+            result[sid] = matches
+    return result
+
+
 def analysis_summary(path: Path) -> dict:
     """Read a small cached description for the analysis selector."""
     return _summary(file_version(path))
@@ -265,7 +310,10 @@ def analysis_label(summary: dict) -> str:
 
 
 def local_prediction_breakdowns(
-    record: dict, sample_ids: list, model_names: list[str] | None = None
+    record: dict,
+    sample_ids: list,
+    model_names: list[str] | None = None,
+    samples_per_model: dict[str, set[str]] | None = None,
 ) -> dict:
     """Keep prediction rows for the exact saved model/sample pairs being plotted."""
     coverage = attribution_coverage(record)
@@ -281,6 +329,7 @@ def local_prediction_breakdowns(
                 (prettify_label(name.rsplit("_", 1)[0]), int(name.rsplit("_", 1)[1]))
                 for name in coverage.get(sid, ())
                 if (model_names is None or name in model_names)
+                and (samples_per_model is None or sid in samples_per_model.get(name, ()))
                 and (descriptor is None or _parse_model_log_name(name)[1] == descriptor)
             }
             rows = [

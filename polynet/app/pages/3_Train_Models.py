@@ -1,6 +1,5 @@
 import json
 import logging
-from shutil import rmtree
 
 import pandas as pd
 import streamlit as st
@@ -25,13 +24,13 @@ from polynet.app.options.file_paths import (
     gnn_raw_data_path,
     hpo_search_spaces_path,
     ml_results_file_path,
-    ml_results_parent_directory,
     model_metrics_file_path,
     plots_directory,
     polynet_experiment_path,
     preprocessing_tml_model_options_path,
     representation_file_path,
     representation_options_path,
+    split_indices_path,
     target_transform_options_path,
     train_gnn_model_options_path,
     train_tml_model_options_path,
@@ -46,6 +45,7 @@ from polynet.app.services.configurations import load_options, save_options
 from polynet.app.services.experiments import get_experiments
 from polynet.app.services.model_training import load_dataframes
 from polynet.app.services.progress import run_progress
+from polynet.app.services.reruns import clear_stage_results, rerun_warning, stage_rerun_plan
 from polynet.app.services.workload import estimate_workload
 from polynet.app.utils import save_data
 from polynet.config.column_names import get_iterator_name, get_true_label_column_name
@@ -64,6 +64,7 @@ from polynet.config.schemas import (
 )
 from polynet.config.schemas.base import DEFAULT_HPO_NUM_SAMPLES
 from polynet.config.search_grid import effective_search_spaces
+from polynet.data.sampling import sampling_metadata
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
 from polynet.pipeline import (
     compute_data_splits,
@@ -100,25 +101,9 @@ def train_models(
     preprocessing_opts_path = preprocessing_tml_model_options_path(experiment_path=experiment_path)
     gnn_training_opts_path = train_gnn_model_options_path(experiment_path=experiment_path)
     target_transform_opts_path = target_transform_options_path(experiment_path=experiment_path)
-    ml_results_dir = ml_results_parent_directory(experiment_path=experiment_path)
     split_cfg_path = data_spliting_options_path(experiment_path=experiment_path)
     gen_options_path = general_options_path(experiment_path=experiment_path)
 
-    # delete old options if they exist
-    if tml_training_opts_path.exists():
-        tml_training_opts_path.unlink()
-    if preprocessing_opts_path.exists():
-        preprocessing_opts_path.unlink()
-    if gnn_training_opts_path.exists():
-        gnn_training_opts_path.unlink()
-    if target_transform_opts_path.exists():
-        target_transform_opts_path.unlink()
-    if hpo_search_spaces_path(experiment_path).exists():
-        hpo_search_spaces_path(experiment_path).unlink()
-    if ml_results_dir.exists():
-        rmtree(ml_results_dir)
-    if split_cfg_path.exists():
-        split_cfg_path.unlink()
     # Load general experiment options saved by Page 1 (Create Experiment)
     general_experiment_options = load_options(path=gen_options_path, options_class=GeneralConfig)
 
@@ -132,13 +117,6 @@ def train_models(
         sampler=st.session_state.get(GeneralConfigStateKeys.Sampler, SplitSampler.Random),
         sampling_fingerprint=sampling_fingerprint_from_state(),
     )
-    save_options(split_cfg_path, split_cfg)
-    save_options(target_transform_opts_path, target_cfg)
-    # Pipeline-wide feature preprocessing (TML descriptors and GNN polymer
-    # descriptors); only set when there are tabular features to scale.
-    if preprocessing_cfg is not None:
-        save_options(path=preprocessing_opts_path, options=preprocessing_cfg)
-
     # read the data
     raw_path = gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path)
     data = read_csv(raw_path if raw_path.exists() else data_options.data_path, index_col=0)
@@ -152,7 +130,7 @@ def train_models(
             data_cfg=data_options,
             split_cfg=split_cfg,
             random_seed=general_experiment_options.random_seed,
-            out_dir=experiment_path,
+            out_dir=None,
             weights_col=representation_options.weights_col,
         )
     except ValueError as e:
@@ -216,6 +194,27 @@ def train_models(
     except ValueError as e:
         st.error(str(e))
         st.stop()
+
+    # Validation succeeded. Clear stale dependants before writing this run's files.
+    try:
+        clear_stage_results(experiment_path, "training")
+    except OSError as exc:
+        st.error(f"Could not clear previous results: {exc}")
+        st.stop()
+    save_options(split_cfg_path, split_cfg)
+    save_options(target_transform_opts_path, target_cfg)
+    if preprocessing_cfg is not None:
+        save_options(preprocessing_opts_path, preprocessing_cfg)
+    save_options(
+        split_indices_path(experiment_path),
+        {
+            **{
+                name: [list(map(str, ids)) for ids in groups]
+                for name, groups in zip(("train", "val", "test"), train_val_test_idxs)
+            },
+            "sampling": sampling_metadata(split_cfg, representation_options.weights_col),
+        },
+    )
 
     # Provenance: the HPO grids actually searched (default candidates, with any
     # parameter set in hpo_search_grid replacing its defaults).
@@ -405,10 +404,6 @@ if experiment_name:
     train_gnn_options = train_gnn_model_options_path(experiment_path=experiment_path)
 
     if train_gnn_options.exists() or train_tml_model_options_path(experiment_path).exists():
-        st.warning(
-            "Trained model options already exist for this experiment. "
-            "You can modify the settings below, but be aware that this will overwrite the existing results."
-        )
         display_model_results(experiment_path=experiment_path, expanded=False)
 
     advanced = st.toggle(
@@ -545,7 +540,10 @@ if experiment_name:
                 "traditional ML training here primarily uses CPUs. Training remains available."
             )
 
-    if st.button("Run Training", disabled=disabled):
+    confirmed = rerun_warning(
+        stage_rerun_plan(experiment_path, "training"), f"training:{experiment_path}"
+    )
+    if st.button("Run Training", disabled=disabled or not confirmed):
         st.write("Training models...")
 
         train_models(

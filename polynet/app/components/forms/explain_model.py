@@ -12,6 +12,7 @@ from polynet.app.services.explain_model import (
     explain_model_local,
 )
 from polynet.app.services.model_training import load_gnn_model
+from polynet.app.services.reruns import explanation_rerun_button
 from polynet.app.utils import extract_number
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import DataSet, ResultColumn
@@ -411,7 +412,19 @@ def _global_tab_section(
     plot_type = AttributionPlotType.Ridge
     top_n = 10
 
-    if st.button("Run Global Explanation"):
+    selection = dict(
+        models=shared["models_dict"],
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_mols=explain_mols,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+        fragmentation_approach=shared["fragmentation_approach"],
+        mols_per_model=mols_per_model,
+    )
+    if explanation_rerun_button(
+        "Run Global Explanation", "GNN", selection, f"gnn_global:{experiment_path}"
+    ):
         explain_model_global(
             models=shared["models_dict"],
             experiment_path=experiment_path,
@@ -586,7 +599,18 @@ def _local_tab_section(
         iterator_col=shared["iterator_col"],
     )
 
-    if st.button("Run Local Explanation"):
+    selection = dict(
+        models=shared["models_dict"],
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_mols=local_mols,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+        fragmentation_approach=shared["fragmentation_approach"],
+    )
+    if explanation_rerun_button(
+        "Run Local Explanation", "GNN", selection, f"gnn_local:{experiment_path}"
+    ):
         explain_model_local(
             models=shared["models_dict"],
             experiment_path=experiment_path,

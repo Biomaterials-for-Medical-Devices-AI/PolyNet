@@ -259,6 +259,16 @@ def compute_and_cache_masking(
         target_class=target_class,
     )
 
+    # JSON restores molecule IDs as strings. Reuse an existing string key for
+    # numeric IDs so a refreshed class/fragmentation merges into that molecule
+    # instead of serialising duplicate keys and discarding its other scores.
+    for model_name, iterations in node_masks.items():
+        for number, samples in iterations.items():
+            saved_samples = existing_explanations.get(model_name, {}).get(number, {})
+            for mol_id in list(samples):
+                if mol_id not in saved_samples and str(mol_id) in saved_samples:
+                    samples[str(mol_id)] = samples.pop(mol_id)
+
     combined_explanations = deep_update(existing_explanations, node_masks)
     combined_explanations[MASKING_CACHE_VERSION_KEY] = MASKING_CACHE_VERSION
     with open(explanation_file, "w") as f:
@@ -500,8 +510,13 @@ def render_cached_global_attribution(
         for mon_data in mol_data.get(_ALG_KEY, {}).get(ck, {}).values()
         for frag in mon_data.get(fk, {})
     }
-    n_mols = sum(
-        len(num_data) for model_data in display_data.values() for num_data in model_data.values()
+    n_mols = len(
+        {
+            str(sid)
+            for model_data in display_data.values()
+            for num_data in model_data.values()
+            for sid in num_data
+        }
     )
     n_models = len(models)
     n_frags_total = len(all_frags)
@@ -769,12 +784,17 @@ def render_cached_local_attribution(
     predictions: dict | None = None,
     class_labels: dict | None = None,
     aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+    mols_per_model: dict[str, set[str]] | None = None,
 ) -> list[MolAttributionResult]:
-    """Render saved raw attributions without models, inference or cache writes."""
+    """Render saved raw scores, optionally restricting each model to its own set.
+
+    PerModel still references the full saved population before filtering displayed
+    pairs. No models, inference or cache writes are needed.
+    """
     models = dict.fromkeys(model_names)
     mol_names = mol_names or {}
     predictions = predictions or {}
-    display_data = build_display_data(combined_explanations, models, explain_mols)
+    display_data = build_display_data(combined_explanations, models, explain_mols, mols_per_model)
 
     fk = _frag_key(fragmentation_approach)
     ck = _class_key(target_class)
@@ -843,7 +863,7 @@ def render_cached_local_attribution(
                     for fragments in entry.get(_ALG_KEY, {}).get(ck, {}).values():
                         for fragment, values in fragments.get(fk, {}).items():
                             fragments[fk][fragment] = [s / divisor for s in values]
-        normalised = build_display_data(normalised, models, explain_mols)
+        normalised = build_display_data(normalised, models, explain_mols, mols_per_model)
 
     merged = merge_fragment_attributions(display_data, list(models))
     scaled_merged = (

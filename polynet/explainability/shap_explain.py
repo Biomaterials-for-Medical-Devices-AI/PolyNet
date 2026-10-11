@@ -1230,11 +1230,14 @@ def render_cached_local_shap_attribution(
     predictions: dict | None = None,
     target_col: str | None = None,
     aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+    samples_per_model: dict[str, set[str]] | None = None,
 ) -> dict[str, list[InstanceAttributionResult]]:
     """Plot cached scores and baselines; PerModel uses the whole saved population.
 
     Scaling happens per fitted model/bootstrap before ensemble averaging, using
     all available saved samples of that model, even when displaying one sample.
+    ``samples_per_model`` restricts displayed pairs to each bootstrap's own set
+    without changing that normalisation reference.
     No missing model/sample pairs are calculated or silently fabricated.
     """
     results = {}
@@ -1245,7 +1248,7 @@ def render_cached_local_shap_attribution(
         frame = frame.loc[frame["class_idx"].astype(str) == class_key].copy()
         reference = _rows_of_models(frame, names, frame["sample_id"].tolist())
         features = [c for c in reference.columns if c not in _META_COLS]
-        raw = _rows_of_models(reference, names, explain_sample_ids).copy()
+        raw = _rows_of_models(reference, names, explain_sample_ids, samples_per_model).copy()
         displayed = raw.copy()
         if normalisation_type == ImportanceNormalisationMethod.PerModel and not reference.empty:
             for (model_type, iteration), block in reference.groupby(["model_type", "iteration"]):

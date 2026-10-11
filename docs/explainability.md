@@ -198,15 +198,27 @@ Normalisation, colours and plot styles remain presentation settings.
 Page 6 automatically loads the selected snapshot. Population and individual-molecule
 views use the same raw attributions; there are no separate Global/Local entries or run
 dates in the selector. Individual molecules can be chosen from any completed analysis.
+In both views, choose architectures/models, bootstrap iterations and the explained set,
+or refine the selection to individual model/bootstrap combinations. Selecting one GNN
+architecture produces its own population plot. Set membership is read from the saved
+prediction breakdown for each model/bootstrap/sample pair; it is not a global molecule
+label. Only saved pairs in the requested set are displayed. External data and snapshots
+without set metadata do not offer train/validation/test filters. The snapshot's class and
+fragmentation remain fixed; select another saved analysis to view different ones.
 Select the cached model/bootstrap combinations to show, then choose an ensemble average
 or separate plots. Each molecule lists its available combinations. Missing pairs are
 excluded from averages and never computed on page 6; run page 5 to add them. The older
 GUI/CLI raw-cache import option has been removed: plotting uses completed GUI snapshots.
 Rendering calls the core `render_cached_*_attribution` APIs and never writes raw caches.
+Local renderers accept per-model sample restrictions, also applied to prediction panels;
+PerModel scaling still uses each selected model's complete saved population as reference.
 
-Snapshots remain a record of their completed analysis after retraining. To explain newly
-trained models, remove outdated raw caches and run page 5 again; old snapshots can be
-kept for comparison or removed separately.
+GUI retraining or representation rebuilding removes old explanations and snapshots,
+including those for external predictions, because they refer to the old models or inputs.
+A GUI explanation rerun warns before replacing only the chosen analysis and its cached
+model/bootstrap/sample/class/fragmentation scores; other saved analyses retain their own
+raw scores. This does not change the CLI's cache reuse. For CLI retraining, remove outdated
+raw caches manually before explaining newly trained models.
 
 ## Statistical model comparison (Analyse Results)
 

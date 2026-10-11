@@ -17,10 +17,14 @@ from polynet.app.services.explanation_results import (
     analysis_label,
     analysis_summary,
     attribution_coverage,
+    attribution_set_membership,
     list_saved_analyses,
     load_analysis,
     local_prediction_breakdowns,
+    select_attribution_coverage,
 )
+from polynet.config.constants import DataSet
+from polynet.config.display_names import prettify_label
 from polynet.config.enums import (
     AttributionPlotType,
     ExplanationAggregation,
@@ -102,9 +106,13 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         "Plot view", ["Population", "Individual molecules"], horizontal=True, key=f"{prefix}_view"
     )
     scope = "global" if view == "Population" else "local"
-    selected = list(coverage)
+    chosen = _selection_controls(analysis, prefix)
+    if not chosen:
+        return
+    requested_names, coverage = chosen
+    selected = sorted(coverage)
     if scope == "local":
-        selected = st.multiselect(
+        selected = _multiselect(
             "Molecules to display",
             sorted(coverage),
             default=[sorted(coverage)[0]],
@@ -113,34 +121,18 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         if not selected:
             st.info("Select at least one explained molecule.")
             return
-        available_names = sorted(set().union(*(coverage[sid] for sid in selected)))
-        args["model_names"] = st.multiselect(
-            "Cached models / bootstraps to show",
-            available_names,
-            default=available_names,
-            key=f"{prefix}_models",
-        )
-        if not args["model_names"]:
-            st.info("Select at least one cached model/bootstrap combination.")
-            return
         for sid in selected:
-            names = sorted(coverage[sid] & set(args["model_names"]))
+            names = sorted(coverage[sid])
             st.caption(
                 f"{sid}: showing cached explanations from "
                 + (", ".join(names) or "none of the selected combinations")
             )
-            missing = set(args["model_names"]) - coverage[sid]
+            missing = set(requested_names) - coverage[sid]
             if missing:
                 st.info(
-                    f"{sid} was not explained by {', '.join(sorted(missing))}. This plot uses the saved combinations listed above. Run page 5 for additional combinations."
+                    f"{sid}: {', '.join(sorted(missing))} has no saved score for the chosen set. This plot uses only the combinations listed above. Run page 5 for additional scores."
                 )
-        if family == "GNN":
-            stored_ids = {str(mol.idx): mol.idx for mol in args["dataset"]}
-            args["explain_mols"] = [stored_ids[sid] for sid in selected]
-            # Keep the full raw population for the PerModel reference maximum.
-            args["dataset"] = [mol for mol in args["dataset"] if str(mol.idx) in selected]
-        else:
-            args["explain_sample_ids"] = selected
+        if family == "TML":
             st.caption(
                 "PerModel uses each model/bootstrap's largest absolute attribution across the whole saved analysis. Normalised plots show scaled model output."
             )
@@ -148,8 +140,32 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
                 st.caption(
                     "SHAP output scales can differ by model (probability or margin/log-odds). Use Separate model display to interpret individual endpoints."
                 )
+    elif st.checkbox("Manually refine molecule selection", key=f"{prefix}_refine"):
+        selected = _multiselect(
+            "Molecules to display",
+            sorted(coverage),
+            default=sorted(coverage),
+            key=f"{prefix}_population_molecules",
+        )
+        if not selected:
+            st.info("Select at least one explained molecule.")
+            return
+    # Both renderers and prediction panels must use exactly the same saved pairs.
+    args["model_names"] = sorted(set().union(*(coverage[sid] for sid in selected)))
+    allowed = {
+        name: {sid for sid in selected if name in coverage[sid]} for name in args["model_names"]
+    }
+    if family == "GNN":
+        stored_ids = {str(mol.idx): mol.idx for mol in args["dataset"]}
+        args["explain_mols"] = [stored_ids[sid] for sid in selected]
+        args["mols_per_model"] = allowed
+        args["dataset"] = [mol for mol in args["dataset"] if str(mol.idx) in selected]
+    else:
+        args["explain_sample_ids"] = selected
+        args["samples_per_model"] = allowed
     st.caption(
-        f"{len(coverage)} explained molecules · {len(args['model_names'])} model/bootstrap combinations"
+        f"Showing {len(selected)} explained molecules · {len(args['model_names'])} model/bootstrap combinations: "
+        + ", ".join(args["model_names"])
     )
     _plot_controls(args, family, scope, prefix + "_" + scope)
     renderer, display = {
@@ -162,13 +178,84 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         parameters = inspect.signature(renderer).parameters
         results = renderer(**{k: v for k, v in args.items() if k in parameters})
         if scope == "local":
-            display(results, local_prediction_breakdowns(analysis, selected, args["model_names"]))
+            display(
+                results,
+                local_prediction_breakdowns(analysis, selected, args["model_names"], allowed),
+            )
         else:
             display(results)
     except (ValueError, KeyError, TypeError) as exc:
         st.error(f"Unable to plot the saved analysis: {exc}")
     finally:
         plt.close("all")
+
+
+def _multiselect(label, options, default, key, **kwargs):
+    """Keep selections valid when an upstream architecture/set choice changes."""
+    if key in st.session_state:
+        st.session_state[key] = [value for value in st.session_state[key] if value in options]
+    return st.multiselect(label, options, default=default, key=key, **kwargs)
+
+
+def _selection_controls(analysis: dict, prefix: str):
+    """Page 5-style selection in either view, limited to completed scores."""
+    all_names = sorted(set().union(*attribution_coverage(analysis).values()))
+    architectures = sorted({name.rsplit("_", 1)[0] for name in all_names})
+    selected_architectures = _multiselect(
+        "GNN architectures to include" if analysis["family"] == "GNN" else "Models to include",
+        architectures,
+        default=architectures,
+        format_func=prettify_label,
+        key=f"{prefix}_architectures",
+    )
+    # Keep bootstrap options stable across architecture changes; only real saved
+    # combinations enter the plot, even for incomplete architecture/split grids.
+    iterations = sorted({int(name.rsplit("_", 1)[1]) for name in all_names})
+    selected_iterations = _multiselect(
+        "Bootstrap iterations to include",
+        iterations,
+        default=iterations,
+        key=f"{prefix}_bootstraps",
+    )
+    names = [
+        name
+        for name in all_names
+        if name.rsplit("_", 1)[0] in selected_architectures
+        and int(name.rsplit("_", 1)[1]) in selected_iterations
+    ]
+    if st.checkbox("Choose individual model/bootstrap combinations", key=f"{prefix}_exact"):
+        names = _multiselect(
+            "Cached models / bootstraps to show", names, default=names, key=f"{prefix}_models"
+        )
+    if not names:
+        st.info("Select at least one saved model/bootstrap combination.")
+        return None
+    membership = attribution_set_membership(analysis)
+    saved_sets = {
+        value for entries in membership.values() for name, value in entries.items() if name in names
+    }
+    options = ["All cached molecules"] + [
+        value
+        for value in (DataSet.Training, DataSet.Validation, DataSet.Test)
+        if value in saved_sets
+    ]
+    if len(options) > 1:
+        key = f"{prefix}_set"
+        if st.session_state.get(key) not in options:
+            st.session_state[key] = options[0]
+        set_name = st.selectbox("Explained set", options, key=key)
+    else:
+        set_name = options[0]
+    st.caption(
+        "Only scores saved in this analysis are available. Set membership is evaluated separately for each bootstrap; use page 5 to calculate additional scores."
+    )
+    coverage = select_attribution_coverage(
+        analysis, names, None if set_name == options[0] else set_name
+    )
+    if not coverage:
+        st.info("No saved explanations match these models, bootstraps and set.")
+        return None
+    return names, coverage
 
 
 def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:

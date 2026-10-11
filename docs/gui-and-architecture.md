@@ -33,6 +33,32 @@ The app is organised into six sequential pages:
 The GUI is an optional extension of the core package. `polynet.app` can be omitted
 entirely — the core pipeline works without Streamlit.
 
+### Rerunning GUI stages
+
+Existing outputs trigger a warning beside the Run button. Acknowledge **I understand
+these existing results will be replaced** before rerunning; browsing pages and changing
+options do not delete anything. New outputs require a fresh acknowledgement.
+
+| Stage | Outputs replaced or invalidated |
+|---|---|
+| Representation | Existing representations/configuration, models/scalers, splits, tuning results, predictions, metrics, plots and explanations, including external prediction outputs |
+| Training | Models/scalers, splits and training configuration, tuning results, predictions, metrics, plots and explanations, including external prediction outputs; saved representations are retained |
+| Explanation | Only the chosen analysis and cached scores for its model/bootstrap/sample/class/fragmentation selection in the selected data source; other analyses remain available |
+
+Source data, data options, general experiment settings and graph feature analysis are
+retained. Training validates split settings and HPO folds before cleanup, without
+writing over the previous split indices. Once validation succeeds, old generated outputs
+are removed before computing the replacement; if computation then fails, the old results
+are not restored. Predict external datasets again after rebuilding representations or
+retraining. This behaviour applies only to the GUI; CLI cache behaviour is unchanged.
+
+`services.reruns` centralises read-only replacement plans, warnings, and cleanup. Shared
+SHAP CSVs and GNN JSON caches are rewritten atomically to remove only selected scores.
+Small, file-versioned selection summaries avoid rereading large snapshots on every
+widget interaction. Loaded page 6 analysis state is cleared when results are removed.
+GNN cache updates reuse existing string keys for numeric molecule IDs so recomputing one
+class/fragmentation retains the others.
+
 ### Explain Models (page 5)
 
 Choose models, bootstrap repetitions, representations, target class, fragmentation
@@ -53,6 +79,15 @@ automatically. A single available analysis requires no extra selector. Analysis 
 show selections and models, without dates. Choose **Population** or **Individual
 molecules** to view the same saved data.
 
+Both views let you select GNN architectures (or TML models/descriptor sets), bootstrap
+iterations and an explained Training/Validation/Test set. Select a single architecture
+to create its own population plot, then select another architecture to plot it separately.
+An optional individual-combination selector allows finer control than the architecture
+and bootstrap selectors. Population plots also allow manual molecule selection.
+Only combinations saved in the chosen analysis are offered; its class and fragmentation
+remain fixed by that analysis. Select another completed analysis for another class or
+fragmentation. External datasets have no train/validation/test membership.
+
 All existing presentation controls are available here: Local/PerModel/Global/no
 normalisation; positive/negative colours; GNN ridge/bar/strip and top/bottom N;
 TML beeswarm/bar/violin and top N; local Average/Separate model display; TML
@@ -61,10 +96,16 @@ per-bootstrap set membership and attribution tables remain in the local panels.
 Changing a control redraws saved scores without loading models or running inference.
 
 Snapshots retain the exact selected samples and each model's own split population.
+Set filtering intersects those saved pairs with each bootstrap's own membership; a
+molecule can be Training in one bootstrap and Test in another. Local prediction panels
+use exactly the same filtered pairs as the attribution plots. Filtering never computes
+missing scores or adds samples outside the saved analysis.
 For individual molecules, choose which cached model/bootstrap combinations to show and
 whether to average them as an ensemble or show them separately. Each molecule clearly
 lists the available combinations used in its plot; missing pairs are excluded. PerModel
 uses the model's maximum absolute score across the whole saved analysis, before averaging.
+This reference remains unchanged when a local plot is filtered to a set or molecule.
+Population summaries count distinct molecules rather than counting them once per model.
 The older GUI/CLI raw-cache checkbox has been removed. Run page 5 again if saved SHAP
 results predate baseline storage or if additional scores are required.
 
@@ -167,9 +208,9 @@ reruns; first imports and first-time computations still take time.
 
 ### Review checklist for these changes
 
-Use a new or copied experiment: the existing training workflow deletes old
-results before validating splits/HPO folds. That pre-existing behaviour remains
-unchanged in this logging/display update.
+Use a new or copied experiment for rerun checks: acknowledge the replacement warning
+and verify that old downstream results disappear. Invalid split/HPO settings should
+leave the existing results and split metadata intact.
 
 1. **Page loading and freshness.** Open Representation, Train Models, Explain
    Models and Analyse Results. Revisit them and change selectors. Previous

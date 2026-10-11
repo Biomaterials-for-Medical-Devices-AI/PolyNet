@@ -18,6 +18,7 @@ import streamlit as st
 from polynet.app.components.forms.explain_model import explain_mols_widget
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
+from polynet.app.services.reruns import explanation_rerun_button
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.display_names import prettify_label
@@ -176,7 +177,18 @@ def _tml_global_tab(
     plot_type = ShapGlobalPlotType.Beeswarm
     top_n = 10
 
-    if st.button("Run Global SHAP Explanation"):
+    selection = dict(
+        models=models,
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_sample_ids=explain_samples,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+        samples_per_model=per_model_samples,
+    )
+    if explanation_rerun_button(
+        "Run Global SHAP Explanation", "TML", selection, f"tml_global:{experiment_path}"
+    ):
         explain_tml_global(
             models=models,
             descriptor_dfs=descriptor_dfs,
@@ -351,7 +363,17 @@ def _tml_local_tab(
         selected_iterations=selected_iterations,
     )
 
-    if st.button("Run Local SHAP Explanation"):
+    selection = dict(
+        models=models,
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_sample_ids=local_samples,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+    )
+    if explanation_rerun_button(
+        "Run Local SHAP Explanation", "TML", selection, f"tml_local:{experiment_path}"
+    ):
         explain_tml_local(
             models=models,
             descriptor_dfs=descriptor_dfs,

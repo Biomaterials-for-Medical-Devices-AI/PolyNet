@@ -16,6 +16,7 @@ import streamlit as st
 
 from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
+from polynet.app.services.reruns import clear_explanation_results
 from polynet.config.enums import (
     ExplanationAggregation,
     ImportanceNormalisationMethod,
@@ -54,6 +55,12 @@ def explain_tml_global(
     ``samples_per_model`` restricts each model to its own samples (e.g. the
     test set of its split); ``None`` explains every sample with every model.
     """
+    try:
+        clear_explanation_results("TML", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     results: dict[str, GlobalAttributionResult] = compute_global_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,
@@ -125,6 +132,12 @@ def explain_tml_local(
     plot per sample (``Average``) or shown as one plot per model × sample
     (``Separate``).
     """
+    try:
+        clear_explanation_results("TML", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     results: dict[str, list[InstanceAttributionResult]] = compute_local_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,

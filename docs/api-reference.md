@@ -221,9 +221,10 @@ These helpers belong to the optional Streamlit layer, not the core pipeline:
 | Module | Public entry points | Responsibility |
 |---|---|---|
 | `services.cache` | `file_version`, `read_csv`, `read_json` | Bounded copy-on-read caches keyed by resolved path, size and nanosecond modification/change timestamps. Missing files raise; rewritten files refresh. CSV keyword arguments participate in the key. |
+| `services.reruns` | `RerunPlan`, `stage_rerun_plan`, `rerun_warning`, `clear_stage_results`, `explanation_rerun_plan`, `explanation_rerun_button`, `clear_explanation_results` | GUI-only warnings and acknowledgement before replacing results. Representation/training invalidate downstream generated outputs; explanation replacement preserves unrelated analyses, classes, model/sample pairs and data sources. Cache rewrites are atomic; inspection never deletes files. |
 | `services.progress` | `run_progress`, `RunLogHandler` | Context manager/decorator for session-thread logging, an 80-message tail, throttled epoch rendering, and handler/level cleanup on success or failure. |
-| `services.explanation_results` | `capture_analysis`, `list_saved_analyses`, `load_analysis`, `analysis_summary`, `analysis_label`, `attribution_coverage`, `local_prediction_breakdowns` | Atomic JSON snapshots of completed explanations; population and molecule views share saved scores. Cached selection summaries omit dates; coverage and prediction filters identify the actual selected model/sample pairs. No fitted-model loading or inference. |
-| `components.forms.explanation_plots` | `explanation_plots_form` | Page 6 saved-analysis selection and all GNN/TML plot controls; renders saved scores and prediction panels. |
+| `services.explanation_results` | `capture_analysis`, `list_saved_analyses`, `load_analysis`, `analysis_summary`, `analysis_label`, `attribution_coverage`, `attribution_set_membership`, `select_attribution_coverage`, `local_prediction_breakdowns` | Atomic JSON snapshots of completed explanations; population and molecule views share saved scores. Cached selection summaries omit dates; coverage, per-bootstrap set membership and prediction filters identify the actual selected model/sample pairs. No fitted-model loading or inference. |
+| `components.forms.explanation_plots` | `explanation_plots_form` | Page 6 saved-analysis selection and all GNN/TML plot controls; both views select architectures/models, bootstraps, sets and exact combinations. Renders saved scores and matching prediction panels. |
 | `services.workload` | `estimate_workload`, `Workload` | Pure calculation of final fits, tuning-inclusive fit/epoch budgets and advisory warning reasons. No training, timing prediction or device allocation. |
 | `components.forms.representation` | `default_molecular_descriptors`, `basic_representation`, `cached_graph_feature_analysis` | Input-type-aware GUI descriptor defaults, locked representation controls and cached legacy graph analysis. |
 | `components.forms.train_models` | `default_feature_preprocessing` | GUI MinMax/variance/correlation baseline; GNN descriptors receive scaling only. |
@@ -247,3 +248,6 @@ model names and plotting inputs, and return the same result dataclasses as the e
 `compute_*` functions. They have no Streamlit dependency, load no fitted models, never
 perform inference, and do not update caches. The existing computation APIs retain their
 signatures and delegate rendering to these helpers.
+Local GNN rendering accepts optional `mols_per_model`; local SHAP rendering accepts
+optional `samples_per_model`. These restrict displayed pairs to each model/bootstrap's
+chosen samples while retaining the full saved population for PerModel normalisation.
