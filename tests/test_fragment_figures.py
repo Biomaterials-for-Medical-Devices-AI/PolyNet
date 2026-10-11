@@ -9,6 +9,7 @@ from PIL import Image
 import matplotlib
 
 matplotlib.use("Agg")
+from matplotlib.colors import to_hex, to_rgb
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -28,6 +29,7 @@ from polynet.explainability.fragment_figures import (
 )
 from polynet.explainability.masking import MASKING_CACHE_VERSION, MASKING_CACHE_VERSION_KEY
 from polynet.explainability.visualization import (
+    attribution_fragment_colors,
     ordered_attribution_fragments,
     plot_attribution_bar,
     plot_attribution_distribution,
@@ -80,6 +82,55 @@ def test_display_labels_preserve_scores_order_and_top_bottom_selection(plotter):
     plt.close("all")
 
 
+@pytest.mark.parametrize(
+    "plotter,style",
+    [
+        (plot_attribution_distribution, AttributionPlotType.Ridge),
+        (plot_attribution_bar, AttributionPlotType.Bar),
+        (plot_attribution_strip, AttributionPlotType.Strip),
+    ],
+)
+@pytest.mark.parametrize("match_distribution", [False, True])
+def test_tag_colours_match_distribution_or_custom_without_recolouring_data(
+    plotter, style, match_distribution
+):
+    scores = {"CO": [-3.0, -2.0, -1.0], "CCN": [-0.2, 0.0, 0.2], "C=O": [1.0, 3.0, 5.0]}
+    labels = {"CO": "F1", "CCN": "F2", "C=O": "F3"}
+    before = json.dumps(scores)
+    negative, positive = "#0088ff", "#ff3300"
+    matched = attribution_fragment_colors(scores, style, 1, negative, positive)
+    colors = matched if match_distribution else dict.fromkeys(scores, "#228833")
+    fig = plotter(
+        scores,
+        top_n=1,
+        neg_color=negative,
+        pos_color=positive,
+        fragment_labels=labels,
+        fragment_label_colors=colors,
+    )
+    texts = (
+        [text for ax in fig.axes for text in ax.texts]
+        if style == AttributionPlotType.Ridge
+        else fig.axes[0].get_yticklabels()
+    )
+    assert {text.get_text() for text in texts} == {"F1", "F3"}
+    for text in texts:
+        fragment = next(frag for frag, tag in labels.items() if tag == text.get_text())
+        assert to_rgb(text.get_color()) == pytest.approx(to_rgb(colors[fragment]))
+    # A custom tag colour must not affect the existing data palettes.
+    if style == AttributionPlotType.Bar:
+        for bar, fragment in zip(fig.axes[0].patches, ["CO", "C=O"]):
+            assert bar.get_facecolor()[:3] == pytest.approx(matched[fragment])
+    elif style == AttributionPlotType.Strip:
+        for collection, fragment in zip(fig.axes[0].collections[1::2], ["CO", "C=O"]):
+            assert collection.get_facecolors()[0][:3] == pytest.approx(matched[fragment])
+    else:
+        for ax, fragment in zip(fig.axes, ["C=O", "CO"]):
+            assert ax.collections[0].get_facecolors()[0][:3] == pytest.approx(matched[fragment])
+    assert json.dumps(scores) == before
+    plt.close("all")
+
+
 def test_structure_svg_is_vector_physical_size_and_keeps_table_order():
     table = fragment_label_table(["CO", "c1ccccc1", "C[C@H](O)F"])
     table = table.iloc[[2, 0, 1]]
@@ -116,6 +167,32 @@ def test_png_is_redrawn_at_requested_dpi_with_matching_physical_dimensions():
     width_mm = float(svg.attrib["width"][:-2])
     height_mm = float(svg.attrib["height"][:-2])
     assert np.array(sizes[1]) * 25.4 / 300 == pytest.approx([width_mm, height_mm], abs=0.2)
+
+
+def test_structure_tag_colours_are_exported_without_recolouring_molecules():
+    table = fragment_label_table(["CO", "C=O"])
+    colors = {"CO": "#ff0000", "C=O": "#0000ff"}
+    root = ET.fromstring(fragment_structure_svg(table, tag_colors=colors))
+    for cell, row in zip(root.findall(f"{SVG}svg"), table.itertuples()):
+        paths = cell.findall(f".//{SVG}path")
+        legends = [path for path in paths if "legend" in path.attrib.get("class", "")]
+        chemical_paths = [path for path in paths if "legend" not in path.attrib.get("class", "")]
+        assert legends
+        assert all(
+            to_hex(colors[row.Fragment]).upper()
+            in path.attrib.get("fill", path.attrib.get("style", "")).upper()
+            for path in legends
+        )
+        assert not any(
+            to_hex(colors[row.Fragment]).upper() in path.attrib.get("style", "").upper()
+            for path in chemical_paths
+        )
+    with Image.open(BytesIO(fragment_structure_png(table, dpi=150, tag_colors=colors))) as image:
+        pixels = np.asarray(image)
+        coloured = (pixels[:, :, 0] != pixels[:, :, 1]) | (pixels[:, :, 1] != pixels[:, :, 2])
+        y_positions = np.where(coloured)[0]
+        assert len(y_positions) > 100
+        assert y_positions.min() > image.height * 0.75
 
 
 @pytest.mark.parametrize(
@@ -164,6 +241,10 @@ def _capture_plot(result):
     st.session_state["labels"] = [
         text.get_text() for text in result.figure.axes[0].get_yticklabels()
     ]
+    st.session_state["label_colors"] = {
+        text.get_text(): to_hex(text.get_color())
+        for text in result.figure.axes[0].get_yticklabels()
+    }
 
 
 def _widget(widgets, label):
@@ -224,10 +305,11 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
     monkeypatch.setattr(explanation_plots, "display_gnn_global", _capture_plot)
     exported = {}
 
-    def capture_svg(table, options):
+    def capture_svg(table, options, tag_colors=None):
         exported["table"] = table.copy()
         exported["options"] = options
-        return fragment_structure_svg(table, options)
+        exported["tag_colors"] = tag_colors
+        return fragment_structure_svg(table, options, tag_colors)
 
     monkeypatch.setattr(fragment_plots, "_structure_svg", capture_svg)
     download_button = fragment_plots.st.download_button
@@ -245,6 +327,7 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
     original_labels = app.session_state["labels"]
     assert _widget(app.radio, "Fragment labels").value == "Fragment SMILES"
     assert set(original_labels) == set(before.Fragment)
+    assert set(app.session_state["label_colors"].values()) == {"#000000"}
     _widget(app.radio, "Fragment labels").set_value("F tags").run()
     assert app.session_state["scores"] == scores
     assert set(app.session_state["labels"]) == set(before.Tag)
@@ -256,6 +339,17 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
     _widget(app.multiselect, "GNN architectures to include").set_value(["GAT"]).run()
     assert exported["table"].Fragment.tolist() == ["CO", "CCO"]
     assert exported["table"].Tag.tolist() == ["F3", "F1"]
+    _widget(app.color_picker, "Tag colour").set_value("#228833").run()
+    assert set(app.session_state["label_colors"].values()) == {"#228833"}
+    assert set(to_hex(color) for color in exported["tag_colors"].values()) == {"#228833"}
+    current_scores = app.session_state["scores"]
+    _widget(app.radio, "Tag colour mode").set_value("Match distribution").run()
+    assert app.session_state["scores"] == current_scores
+    assert app.session_state["label_colors"] == {
+        row.Tag: to_hex(exported["tag_colors"][row.Fragment])
+        for row in exported["table"].itertuples()
+    }
+    assert len(set(app.session_state["label_colors"].values())) == 2
     csv = pd.read_csv(BytesIO(exported["downloads"]["sme_fragment_mapping.csv"]))
     pd.testing.assert_frame_equal(csv, exported["table"].reset_index(drop=True))
     _widget(app.number_input, "Structures per row").set_value(1).run()

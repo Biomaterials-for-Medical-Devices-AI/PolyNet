@@ -16,6 +16,7 @@ import math
 import xml.etree.ElementTree as ET
 
 from PIL import Image
+from matplotlib.colors import to_rgb
 import pandas as pd
 from rdkit import Chem, rdBase
 from rdkit.Chem import rdDepictor
@@ -111,7 +112,7 @@ def _layout(table: pd.DataFrame, options: FragmentGridOptions, units_per_mm: flo
     return width, height, gap_x, gap_y, margin, columns, total_width, total_height, label_mm
 
 
-def _draw_fragment(fragment, tag, width, height, label_mm, options, units_per_mm, svg):
+def _draw_fragment(fragment, tag, width, height, label_mm, options, units_per_mm, svg, tag_color):
     mol = _fragment_molecule(fragment)
     mol.UpdatePropertyCache(strict=False)
     rdDepictor.Compute2DCoords(mol, canonOrient=True, forceRDKit=True)
@@ -125,6 +126,7 @@ def _draw_fragment(fragment, tag, width, height, label_mm, options, units_per_mm
     opts.fixedFontSize = round(options.atom_font_pt * units_per_mm / _MM_TO_PT)
     opts.legendFontSize = round(options.tag_font_pt * units_per_mm / _MM_TO_PT)
     opts.legendFraction = label_mm * units_per_mm / height
+    opts.setLegendColour(to_rgb(tag_color))
     opts.bondLineWidth = options.bond_width_pt * units_per_mm / _MM_TO_PT
     opts.scaleBondWidth = False
     opts.addStereoAnnotation = True
@@ -133,11 +135,15 @@ def _draw_fragment(fragment, tag, width, height, label_mm, options, units_per_mm
     return drawer.GetDrawingText()
 
 
-def fragment_structure_svg(table: pd.DataFrame, options: FragmentGridOptions | None = None) -> str:
+def fragment_structure_svg(
+    table: pd.DataFrame, options: FragmentGridOptions | None = None, tag_colors: dict | None = None
+) -> str:
     """A separate scalable vector figure, with each F tag beneath its structure.
 
     Row order follows the supplied table, usually distribution-plot order.
     RDKit draws the original fragment, preserving its chemistry and query features.
+    ``tag_colors`` maps original fragment identifiers to colours; missing tags
+    default to black. Only tag text changes colour, not atoms or bonds.
     """
     options = options or FragmentGridOptions()
     w, h, gx, gy, margin, cols, total_w, total_h, label_mm = _layout(
@@ -154,7 +160,15 @@ def fragment_structure_svg(table: pd.DataFrame, options: FragmentGridOptions | N
     ET.SubElement(root, f"{{{_SVG}}}rect", width="100%", height="100%", fill="white")
     for i, row in enumerate(table.itertuples(index=False)):
         drawing = _draw_fragment(
-            row.Fragment, row.Tag, w, h, label_mm, options, _SVG_UNITS_PER_MM, True
+            row.Fragment,
+            row.Tag,
+            w,
+            h,
+            label_mm,
+            options,
+            _SVG_UNITS_PER_MM,
+            True,
+            (tag_colors or {}).get(row.Fragment, "#000000"),
         )
         cell = ET.fromstring(drawing)
         cell.set("x", str(margin + (i % cols) * (w + gx)))
@@ -170,12 +184,16 @@ def fragment_structure_svg(table: pd.DataFrame, options: FragmentGridOptions | N
 
 
 def fragment_structure_png(
-    table: pd.DataFrame, options: FragmentGridOptions | None = None, dpi: int = 600
+    table: pd.DataFrame,
+    options: FragmentGridOptions | None = None,
+    dpi: int = 600,
+    tag_colors: dict | None = None,
 ) -> bytes:
     """Redraw at publication DPI and embed resolution metadata in a lossless PNG.
 
     Raster canvases above 40 million pixels are rejected before allocating memory;
     reduce DPI/layout size or use the vector SVG, which has no raster limit.
+    ``tag_colors`` has the same meaning as for :func:`fragment_structure_svg`.
     """
     if not isinstance(dpi, int) or isinstance(dpi, bool) or dpi < 72 or dpi > 1200:
         raise ValueError("PNG resolution must be an integer between 72 and 1200 DPI.")
@@ -188,7 +206,17 @@ def fragment_structure_png(
         )
     canvas = Image.new("RGB", (total_w, total_h), "white")
     for i, row in enumerate(table.itertuples(index=False)):
-        drawing = _draw_fragment(row.Fragment, row.Tag, w, h, label_mm, options, units, False)
+        drawing = _draw_fragment(
+            row.Fragment,
+            row.Tag,
+            w,
+            h,
+            label_mm,
+            options,
+            units,
+            False,
+            (tag_colors or {}).get(row.Fragment, "#000000"),
+        )
         with Image.open(BytesIO(drawing)) as cell:
             canvas.paste(cell, (margin + (i % cols) * (w + gx), margin + (i // cols) * (h + gy)))
     output = BytesIO()

@@ -27,7 +27,7 @@ python -m pytest tests/ --co -q
 
 | Module | What it covers |
 |---|---|
-| `test_fragment_figures.py` | Stable SME F tags and generated SMARTS, ridge/bar/strip label and top-bottom selection without score changes, vector SVG and physical layout, PNG resolution metadata, invalid/oversized exports, and page 6 CSV/structure exports without inference or cache writes |
+| `test_fragment_figures.py` | Stable SME F tags and generated SMARTS, ridge/bar/strip label and top-bottom selection without score changes, custom and distribution-matched tag colours without recolouring data or molecules, vector SVG and physical layout, PNG resolution metadata, invalid/oversized exports, and page 6 CSV/structure exports without inference or cache writes |
 | `test_explanation_results.py` | Saved GNN/TML replay without inference, exact class/split populations, external roots, numeric IDs, native plot styles, population/molecule views, architecture/bootstrap/exact-combination selection, each bootstrap's own set membership in plots and prediction panels, additive SHAP baselines, stable PerModel scaling after set filtering, unique population counts and page 5/6 Streamlit interactions |
 | `test_gui_reruns.py` | GUI rerun warnings/acknowledgement, dependency cleanup, source/config preservation, selected explanation replacement, classes/fragmentations/bootstrap populations, external isolation, floating-point preservation, numeric-ID cache merges preserving other GNN scores, and invalid splits leaving old results intact |
 | `test_gui_feedback.py` | GUI defaults by string type, preprocessing defaults, cache freshness, session log isolation, workload warnings, external results layouts, parity legend styling and training PNG exports, and repeat-training predictions |

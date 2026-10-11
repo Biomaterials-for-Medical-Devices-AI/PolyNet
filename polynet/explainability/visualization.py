@@ -32,6 +32,8 @@ from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 import seaborn as sns
 
+from polynet.config.enums import AttributionPlotType
+
 # ---------------------------------------------------------------------------
 # Colormap
 # ---------------------------------------------------------------------------
@@ -247,6 +249,7 @@ def plot_attribution_distribution(
     kde_bandwidth: float = 0.5,
     top_n: int | None = None,
     fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
 ) -> plt.Figure:
     """
     Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
@@ -278,6 +281,9 @@ def plot_attribution_distribution(
     fragment_labels:
         Optional display-only labels keyed by original fragment identifiers.
         Scores, fragment ordering and top/bottom selection are unchanged.
+    fragment_label_colors:
+        Optional colours keyed by original fragment identifiers. Only tag text
+        is recoloured; distributions retain their existing palette.
 
     Returns
     -------
@@ -335,7 +341,7 @@ def plot_attribution_distribution(
             0.2,
             (fragment_labels or {}).get(label, label),
             fontweight="bold",
-            color=color,
+            color=(fragment_label_colors or {}).get(label, color),
             ha="left",
             va="center",
             transform=ax.transAxes,
@@ -407,6 +413,33 @@ def _build_fragment_palette(
     }
 
 
+def attribution_fragment_colors(
+    attribution_dict: dict[str, list[float]],
+    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    top_n: int | None = None,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+) -> dict:
+    """RGB colours matching each displayed fragment's distribution/mean marker.
+
+    Ridge/bar use their mean-based endpoint palette. Strip points vary in colour,
+    so its tag matches the mean diamond using that plot's symmetric score scale.
+    Top/bottom selection and normalisation are exactly those of the plotted data.
+    """
+    if not attribution_dict:
+        return {}
+    frame, fragments, means = _prepare_attribution_df(attribution_dict, top_n)
+    if plot_type != AttributionPlotType.Strip:
+        return _build_fragment_palette(fragments, means, neg_color, pos_color)
+    scores = frame["attribution"].to_numpy()
+    maximum = max(abs(scores.min()), abs(scores.max())) or 1.0
+    norm = plt.Normalize(vmin=-maximum, vmax=maximum)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "fragment_tag_cmap", [neg_color, "white", pos_color]
+    )
+    return {fragment: tuple(cmap(norm(means[fragment]))[:3]) for fragment in fragments}
+
+
 def plot_attribution_bar(
     attribution_dict: dict[str, list[float]],
     figsize: tuple[int, int] = (10, 6),
@@ -414,6 +447,7 @@ def plot_attribution_bar(
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
     fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
 ) -> plt.Figure:
     """
     Horizontal bar chart of mean fragment attributions with 95 % CI error bars.
@@ -436,6 +470,8 @@ def plot_attribution_bar(
         fragments. Pass ``None`` to show all.
     fragment_labels:
         Optional display labels; raw identifiers and statistics remain unchanged.
+    fragment_label_colors:
+        Optional text colours keyed by original fragment identifiers.
 
     Returns
     -------
@@ -473,6 +509,9 @@ def plot_attribution_bar(
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(y_pos)
     ax.set_yticklabels([(fragment_labels or {}).get(f, f) for f in plot_frags], fontsize=9)
+    for tick, fragment in zip(ax.get_yticklabels(), plot_frags):
+        if fragment in (fragment_label_colors or {}):
+            tick.set_color(fragment_label_colors[fragment])
     ax.set_xlabel("Mean Attribution (Y − Y_masked)", fontsize=11)
     ax.set_title("Fragment Mean Attribution", fontsize=13, pad=10)
     sns.despine(ax=ax, left=True)
@@ -489,6 +528,7 @@ def plot_attribution_strip(
     top_n: int | None = None,
     feature_values_dict: dict[str, list[float]] | None = None,
     fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
 ) -> plt.Figure:
     """
     Horizontal strip / swarm-style plot showing every individual attribution score.
@@ -516,6 +556,8 @@ def plot_attribution_strip(
         (default) to retain attribution-based colouring (GNN behaviour).
     fragment_labels:
         Optional display labels; raw identifiers, colours and scores are unchanged.
+    fragment_label_colors:
+        Optional text colours keyed by original fragment identifiers.
 
     Returns
     -------
@@ -606,6 +648,9 @@ def plot_attribution_strip(
     ax.set_yticklabels(
         [(fragment_labels or {}).get(f, f) for f in reversed(ordered_frags)], fontsize=9
     )
+    for tick, fragment in zip(ax.get_yticklabels(), reversed(ordered_frags)):
+        if fragment in (fragment_label_colors or {}):
+            tick.set_color(fragment_label_colors[fragment])
     ax.set_xlabel("Attribution (SHAP value)", fontsize=11)
     title_suffix = "coloured by feature value" if colour_by_feature else "coloured by attribution"
     ax.set_title(

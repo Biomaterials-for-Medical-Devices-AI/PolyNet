@@ -32,16 +32,22 @@ def saved_fragment_table(analysis: dict) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def _structure_svg(table: pd.DataFrame, options: FragmentGridOptions) -> str:
-    return fragment_structure_svg(table, options)
+def _structure_svg(
+    table: pd.DataFrame, options: FragmentGridOptions, tag_colors: dict | None = None
+) -> str:
+    return fragment_structure_svg(table, options, tag_colors)
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
-def _structure_png(table: pd.DataFrame, options: FragmentGridOptions, dpi: int) -> bytes:
-    return fragment_structure_png(table, options, dpi)
+def _structure_png(
+    table: pd.DataFrame, options: FragmentGridOptions, dpi: int, tag_colors: dict | None = None
+) -> bytes:
+    return fragment_structure_png(table, options, dpi, tag_colors)
 
 
-def fragment_exports(result, table: pd.DataFrame, top_n: int | None, prefix: str) -> None:
+def fragment_exports(
+    result, table: pd.DataFrame, top_n: int | None, prefix: str, tag_colors: dict | None = None
+) -> None:
     """Export the plotted F tags, then optionally draw their separate structure key."""
     fragments = ordered_attribution_fragments(result.attribution_dict, top_n)
     plotted = table.set_index("Fragment").loc[fragments].reset_index()
@@ -147,7 +153,7 @@ def fragment_exports(result, table: pd.DataFrame, top_n: int | None, prefix: str
         bond_width_pt=bond_width,
     )
     try:
-        svg = _structure_svg(plotted, options)
+        svg = _structure_svg(plotted, options, tag_colors)
         st.image(
             svg,
             caption="Fragment structure key — separate from the attribution plot",
@@ -169,7 +175,7 @@ def fragment_exports(result, table: pd.DataFrame, top_n: int | None, prefix: str
     if st.checkbox("Prepare publication PNG", key=f"{prefix}_prepare_png"):
         dpi = st.selectbox("PNG resolution (DPI)", [300, 600, 1200], index=1, key=f"{prefix}_dpi")
         try:
-            png = _structure_png(plotted, options, dpi)
+            png = _structure_png(plotted, options, dpi, tag_colors)
             st.download_button(
                 "Download structure figure (PNG)",
                 data=png,

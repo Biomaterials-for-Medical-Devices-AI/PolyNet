@@ -97,6 +97,9 @@ Changing a control redraws saved scores without loading models or running infere
 
 GNN population plots also select original **Fragment SMILES** (atom-letter labels,
 the default) or fixed **F tags** as fragment labels.
+**Tag colour mode** chooses a custom colour (black by default, with hex-code entry)
+or matches each ridge/bar colour; strip tags match the mean diamond colour. This
+also colours the separate structure figure's F tags while keeping molecules black.
 F tags offer a CSV mapping and a separate RDKit structure figure, with controls for
 panel size, row/column spacing, columns, fonts and bond dimensions. Tags stay fixed
 throughout the loaded analysis; both exports contain exactly the currently plotted

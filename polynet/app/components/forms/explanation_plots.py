@@ -189,7 +189,13 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         else:
             display(results)
             if family == "GNN" and args["fragment_label_mode"] == "F tags" and not results.warning:
-                fragment_exports(results, fragment_table, args["top_n"], prefix + "_fragments")
+                fragment_exports(
+                    results,
+                    fragment_table,
+                    args["top_n"],
+                    prefix + "_fragments",
+                    tag_colors=results.fragment_label_colors,
+                )
     except (ValueError, KeyError, TypeError) as exc:
         st.error(f"Unable to plot the saved analysis: {exc}")
     finally:
@@ -297,6 +303,24 @@ def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
                     horizontal=True,
                     key=label_key,
                     help="Display the original fragment strings with atom letters (e.g. CO or c1ccccc1), or fixed F1, F2, … tags. Labels never change cached identities or attribution scores.",
+                )
+                color_mode = st.radio(
+                    "Tag colour mode",
+                    ["Custom colour", "Match distribution"],
+                    horizontal=True,
+                    key=f"{prefix}_tag_color_mode",
+                    help="Applies to fragment labels and the structure figure's F tags. Ridge/bar match each fragment's distribution/bar colour; strip matches its mean diamond colour. Molecules stay black.",
+                )
+                args["match_fragment_label_colors"] = color_mode == "Match distribution"
+                args["fragment_label_color"] = (
+                    st.color_picker(
+                        "Tag colour",
+                        "#000000",
+                        key=f"{prefix}_tag_color",
+                        help="Choose a colour or enter a hexadecimal code, for example #000000 for black.",
+                    )
+                    if color_mode == "Custom colour"
+                    else None
                 )
                 args["plot_type"] = st.radio(
                     "Plot type",

@@ -47,6 +47,7 @@ import json
 import logging
 from pathlib import Path
 
+from matplotlib.colors import to_rgb
 import matplotlib.pyplot as plt
 import pandas as pd
 from rdkit import Chem
@@ -72,6 +73,7 @@ from polynet.explainability.masking import (
     merge_fragment_attributions,
 )
 from polynet.explainability.visualization import (
+    attribution_fragment_colors,
     get_cmap,
     plot_attribution_bar,
     plot_attribution_distribution,
@@ -117,6 +119,9 @@ class GlobalAttributionResult:
         The normalisation strategy applied.
     warning:
         Non-empty string if no attributions were found; ``None`` otherwise.
+    fragment_label_colors:
+        Optional RGB mapping keyed by original fragment identifiers, shared by
+        the distribution labels and separate structure-figure tags.
     """
 
     figure: plt.Figure | None
@@ -128,6 +133,7 @@ class GlobalAttributionResult:
     target_class: int | None
     normalisation_type: ImportanceNormalisationMethod
     warning: str | None = None
+    fragment_label_colors: dict | None = None
 
 
 @dataclass
@@ -495,8 +501,15 @@ def render_cached_global_attribution(
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     mols_per_model: dict[str, set[str]] | None = None,
     fragment_labels: dict[str, str] | None = None,
+    fragment_label_color: str | None = None,
+    match_fragment_label_colors: bool = False,
 ) -> GlobalAttributionResult:
-    """Render saved raw attributions without models, inference or cache writes."""
+    """Render saved raw attributions without models, inference or cache writes.
+
+    ``fragment_label_color`` sets a custom label colour. Matching instead uses
+    each ridge/bar colour or strip mean-marker colour and takes precedence.
+    Leaving both unset preserves the plotting functions' existing defaults.
+    """
     models = dict.fromkeys(model_names)
     display_data = build_display_data(combined_explanations, models, explain_mols, mols_per_model)
 
@@ -550,12 +563,21 @@ def render_cached_global_attribution(
             **base_result,
         )
 
+    label_colors = None
+    if match_fragment_label_colors:
+        label_colors = attribution_fragment_colors(
+            attribution_dict, plot_type, top_n, neg_color, pos_color
+        )
+    elif fragment_label_color is not None:
+        label_colors = {fragment: to_rgb(fragment_label_color) for fragment in attribution_dict}
+    base_result["fragment_label_colors"] = label_colors
     shared_kwargs = dict(
         attribution_dict=attribution_dict,
         neg_color=neg_color,
         pos_color=pos_color,
         top_n=top_n,
         fragment_labels=fragment_labels,
+        fragment_label_colors=label_colors,
     )
 
     if plot_type == AttributionPlotType.Bar:

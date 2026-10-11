@@ -46,6 +46,14 @@ rather than atomic-number SMARTS such as `[#6]-[#8]`. This is presentation
 only: raw attribution values, normalisation, ranking and top/bottom selection are
 unchanged. Page 5 previews and CLI defaults are unchanged.
 
+**Tag colour mode** applies to both original fragment labels and F tags. Choose
+**Custom colour** (default black, `#000000`) to use a colour picker or enter a hex
+code, or **Match distribution** to use each fragment's ridge/bar colour. For strip
+plots, which colour individual observations separately, tags match the mean diamond.
+The separate structure figure uses the same tag colours; atom labels and bonds
+remain black. Colours update with the selected data and plot palette without
+changing attribution values or fixed F assignments.
+
 The masking cache stores canonical fragment **SMILES**, rather than SMARTS queries.
 The CSV's additional SMARTS column is generated with RDKit `MolToSmarts`; it is
 not used as the distribution plot label.

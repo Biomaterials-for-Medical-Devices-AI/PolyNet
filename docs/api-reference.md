@@ -256,6 +256,13 @@ chosen samples while retaining the full saved population for PerModel normalisat
 SME `render_cached_global_attribution` and the ridge/bar/strip plotting functions accept
 optional `fragment_labels={original_identifier: display_label}`. Display labels never
 replace raw keys or affect numerical values and filtering.
+The renderer also accepts `fragment_label_color` (a Matplotlib colour string) and
+`match_fragment_label_colors` (matching takes precedence). Its returned
+`GlobalAttributionResult.fragment_label_colors` maps original identifiers to RGB
+colours for consistent structure exports. The three plotting functions accept this
+mapping as `fragment_label_colors`. Leaving these arguments unset retains their
+existing defaults. `visualization.attribution_fragment_colors` computes the shared
+ridge/bar palette or strip mean-marker colours for the selected top/bottom fragments.
 
 `polynet.explainability.fragment_figures` (also exported from `polynet.explainability`)
 provides `fragment_label_table`, `FragmentGridOptions`, `fragment_structure_svg` and
@@ -265,3 +272,6 @@ for stable tags. Structure renderers take a selected mapping DataFrame in plot o
 and bond width in pt, and bond length in mm. PNG defaults to 600 DPI and embeds resolution
 metadata; SVG is vector. `ordered_attribution_fragments` returns the shared descending
 mean/top-bottom selection used by the distribution and its exports.
+Both structure renderers accept optional `tag_colors={original_identifier: colour}`,
+defaulting missing tags to black. These colours affect tag text only. GUI drawing
+caches include this mapping so changing colours refreshes SVG and PNG exports.
