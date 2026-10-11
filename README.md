@@ -6,6 +6,7 @@
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
 [![RDKit](https://img.shields.io/badge/RDKit-supported-informational)](https://www.rdkit.org/)
 [![Tests](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml/badge.svg)](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml)
+[![DOI](https://zenodo.org/badge/927135580.svg)](https://doi.org/10.5281/zenodo.23302984)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Poetry](https://img.shields.io/badge/dependency%20management-poetry-60A5FA)](https://python-poetry.org/)
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
@@ -266,8 +267,13 @@ If you use PolyNet, please cite the software (GitHub's "Cite this repository" bu
   title   = {PolyNet: A Python Package for Polymer Informatics},
   version = {1.0.0},
   year    = {2026},
+  doi     = {10.5281/zenodo.23302984},
   url     = {https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}
 }
 ```
+
+This DOI always resolves to the latest release. To cite the exact version you used,
+take its DOI from the [Zenodo record](https://doi.org/10.5281/zenodo.23302984)
+(1.0.0: [10.5281/zenodo.23302985](https://doi.org/10.5281/zenodo.23302985)).
 
 Changes between versions are listed in [`CHANGELOG.md`](CHANGELOG.md).

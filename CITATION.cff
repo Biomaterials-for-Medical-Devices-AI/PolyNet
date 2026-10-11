@@ -12,6 +12,7 @@ abstract: >-
   them statistically, explains their predictions (GNN fragment masking and
   SHAP), and predicts new polymers with ensembles and an applicability domain,
   through a YAML-driven command-line pipeline or a Streamlit GUI.
+doi: 10.5281/zenodo.23302984
 repository-code: "https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet"
 authors:
   - given-names: Eduardo
