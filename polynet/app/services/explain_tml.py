@@ -46,6 +46,8 @@ def explain_tml_global(
     cache_root: Path | None = None,
     target_col: str | None = None,
     samples_per_model: dict[str, set[str]] | None = None,
+    selection_label: str | None = None,
+    prediction_breakdowns: dict | None = None,
 ) -> None:
     """Compute and render the global SHAP summary (one section per descriptor).
 
@@ -180,7 +182,8 @@ def display_tml_local(results, prediction_breakdowns=None) -> None:
                     container.markdown(f"**{inst.model_label}**")
                 if inst.warning:
                     container.warning(inst.warning)
-                    continue
+                    if inst.attribution_df.empty:
+                        continue
                 container.dataframe(inst.attribution_df, use_container_width=True)
                 if inst.figure is not None:
                     container.pyplot(inst.figure, use_container_width=True)
