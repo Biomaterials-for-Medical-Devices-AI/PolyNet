@@ -411,9 +411,7 @@ def _global_tab_section(
     plot_type = AttributionPlotType.Ridge
     top_n = 10
 
-    if st.button("Run Global Explanation") or st.toggle(
-        "Keep running automatically", key=ExplainModelStateKeys.GlobalKeepRunning
-    ):
+    if st.button("Run Global Explanation"):
         explain_model_global(
             models=shared["models_dict"],
             experiment_path=experiment_path,
@@ -429,6 +427,16 @@ def _global_tab_section(
             plot_type=plot_type,
             cache_root=cache_root,
             mols_per_model=mols_per_model,
+            selection_label=str(
+                st.session_state.get(ExplainModelStateKeys.GlobalExplainSet) or "Selected molecules"
+            ),
+            prediction_breakdowns=_build_gnn_prediction_breakdowns(
+                shared["preds"],
+                list(shared["models_dict"]),
+                explain_mols,
+                data_options,
+                shared["iterator_col"],
+            ),
         )
 
 
@@ -578,9 +586,7 @@ def _local_tab_section(
         iterator_col=shared["iterator_col"],
     )
 
-    if st.button("Run Local Explanation") or st.toggle(
-        "Keep running automatically", key=ExplainModelStateKeys.LocalKeepRunning
-    ):
+    if st.button("Run Local Explanation"):
         explain_model_local(
             models=shared["models_dict"],
             experiment_path=experiment_path,
