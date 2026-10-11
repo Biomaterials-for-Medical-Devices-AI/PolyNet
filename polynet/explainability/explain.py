@@ -503,12 +503,15 @@ def render_cached_global_attribution(
     fragment_labels: dict[str, str] | None = None,
     fragment_label_color: str | None = None,
     match_fragment_label_colors: bool = False,
+    observation_count_position: str | None = None,
 ) -> GlobalAttributionResult:
     """Render saved raw attributions without models, inference or cache writes.
 
     ``fragment_label_color`` sets a custom label colour. Matching instead uses
     each ridge/bar colour or strip mean-marker colour and takes precedence.
     Leaving both unset preserves the plotting functions' existing defaults.
+    Optional observation counts (``"tag"`` or ``"right"``) count the selected
+    attribution values, including repeated fragment occurrences and model pairs.
     """
     models = dict.fromkeys(model_names)
     display_data = build_display_data(combined_explanations, models, explain_mols, mols_per_model)
@@ -578,6 +581,7 @@ def render_cached_global_attribution(
         top_n=top_n,
         fragment_labels=fragment_labels,
         fragment_label_colors=label_colors,
+        observation_count_position=observation_count_position,
     )
 
     if plot_type == AttributionPlotType.Bar:
@@ -610,6 +614,7 @@ def _build_mol_attribution_result(
     mol_names: dict,
     model_label: str | None = None,
     normalised_monomer_dict: dict | None = None,
+    drawing_dpi: int | None = None,
 ) -> MolAttributionResult:
     """
     Build a single molecule's attribution table + atom-heatmap figure.
@@ -694,6 +699,7 @@ def _build_mol_attribution_result(
         legend=names,
         min_weight=cmap_min,
         max_weight=cmap_max,
+        drawing_dpi=drawing_dpi,
     )
 
     return MolAttributionResult(
@@ -812,11 +818,13 @@ def render_cached_local_attribution(
     class_labels: dict | None = None,
     aggregation: ExplanationAggregation = ExplanationAggregation.Average,
     mols_per_model: dict[str, set[str]] | None = None,
+    drawing_dpi: int | None = None,
 ) -> list[MolAttributionResult]:
     """Render saved raw scores, optionally restricting each model to its own set.
 
     PerModel still references the full saved population before filtering displayed
     pairs. No models, inference or cache writes are needed.
+    ``drawing_dpi`` optionally redraws embedded heatmap images at export resolution.
     """
     models = dict.fromkeys(model_names)
     mol_names = mol_names or {}
@@ -945,6 +953,7 @@ def render_cached_local_attribution(
                     mol_names=mol_names,
                     model_label=label,
                     normalised_monomer_dict=scaled,
+                    drawing_dpi=drawing_dpi,
                 )
             )
     return results

@@ -10,6 +10,7 @@ import torch
 from torch.nn import Module
 from torch_geometric.loader import DataLoader
 
+from polynet.app.components.figure_export import display_exportable_figure
 from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
 from polynet.app.services.reruns import clear_explanation_results
@@ -158,7 +159,7 @@ def explain_model_global(
     display_gnn_global(result)
 
 
-def display_gnn_global(result, prediction_breakdowns=None) -> None:
+def display_gnn_global(result, prediction_breakdowns=None, *, export_options=None) -> None:
     """Display computed or loaded results using the same panels."""
     st.info(
         f"Distribution over **{result.n_mols}** molecule(s), using **{result.n_models}** model/bootstrap combination(s) — "
@@ -172,7 +173,9 @@ def display_gnn_global(result, prediction_breakdowns=None) -> None:
         st.warning(result.warning)
         return
 
-    st.pyplot(result.figure, use_container_width=True)
+    display_exportable_figure(
+        result.figure, export_options=export_options, plot_id=("sme", "population")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -241,7 +244,7 @@ def explain_model_local(
     display_gnn_local(mol_results, prediction_breakdowns)
 
 
-def display_gnn_local(mol_results, prediction_breakdowns=None) -> None:
+def display_gnn_local(mol_results, prediction_breakdowns=None, *, export_options=None) -> None:
     """Display computed or loaded results using the same panels."""
     # Group by molecule (preserving order). In Average mode each molecule has one
     # result (model_label is None); in Separate mode it has one per model.
@@ -271,4 +274,9 @@ def display_gnn_local(mol_results, prediction_breakdowns=None) -> None:
                 container.warning(result.warning)
                 continue
             container.dataframe(result.attribution_df, use_container_width=True)
-            container.pyplot(result.mol_figure, use_container_width=True)
+            display_exportable_figure(
+                result.mol_figure,
+                container=container,
+                export_options=export_options,
+                plot_id=("sme", mid, result.model_label or "ensemble"),
+            )

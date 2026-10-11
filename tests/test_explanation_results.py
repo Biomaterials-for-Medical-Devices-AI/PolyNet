@@ -331,7 +331,7 @@ def test_tml_set_filters_match_saved_descriptor_model_pairs(tmp_path, tml_cache)
     }
 
 
-def _capture_global_plot(result):
+def _capture_global_plot(result, **kwargs):
     import streamlit as st
 
     st.session_state["plotted_scores"] = result.attribution_dict
@@ -339,7 +339,7 @@ def _capture_global_plot(result):
     st.session_state["plotted_molecules"] = result.n_mols
 
 
-def _capture_local_plot(results, breakdowns):
+def _capture_local_plot(results, breakdowns, **kwargs):
     import streamlit as st
 
     st.session_state["plotted_local"] = [

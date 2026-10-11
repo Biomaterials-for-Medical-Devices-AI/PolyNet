@@ -100,6 +100,11 @@ the default) or fixed **F tags** as fragment labels.
 **Tag colour mode** chooses a custom colour (black by default, with hex-code entry)
 or matches each ridge/bar colour; strip tags match the mean diamond colour. This
 also colours the separate structure figure's F tags while keeping molecules black.
+**Observation counts** shows the contributing attribution-value count next to
+each tag or on the right, including occurrences and selected model/bootstrap pairs.
+**Export DPI** controls lossless PNG resolution and redraws local GNN heatmaps at
+the requested resolution. Each population/descriptor and individual/model plot
+has its own **Export plot** button, with SVG (default), PDF and PNG formats.
 F tags offer a CSV mapping and a separate RDKit structure figure, with controls for
 panel size, row/column spacing, columns, fonts and bond dimensions. Tags stay fixed
 throughout the loaded analysis; both exports contain exactly the currently plotted
@@ -108,6 +113,14 @@ These controls live in `components.forms.fragment_plots`, using the Streamlit-fr
 `explainability.fragment_figures` module. The original cache fragment SMILES are
 preserved as plot labels, with an additional RDKit-generated SMARTS CSV column. See
 [SME fragment labels](explainability.md#sme-fragment-labels-and-publication-structure-key-gui).
+
+Every results plot created on page 6 (parity, confusion matrix, prediction/metric
+p-value matrix and metric box plot) uses the same SVG/PDF/PNG export buttons and
+its existing plot-settings DPI. Prediction and metric matrices use independent
+widget keys so they can be customised together. Previously saved training images
+offer an export of their original PNG bytes, preserving their original quality.
+The shared implementation is `components.figure_export`; exports download the
+selected figure without recalculating predictions, attributions or statistics.
 
 Snapshots retain the exact selected samples and each model's own split population.
 Set filtering intersects those saved pairs with each bootstrap's own membership; a

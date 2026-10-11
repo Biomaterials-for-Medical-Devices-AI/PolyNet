@@ -131,6 +131,36 @@ def test_tag_colours_match_distribution_or_custom_without_recolouring_data(
     plt.close("all")
 
 
+@pytest.mark.parametrize(
+    "plotter", [plot_attribution_distribution, plot_attribution_bar, plot_attribution_strip]
+)
+@pytest.mark.parametrize("position", [None, "tag", "right"])
+def test_observation_counts_follow_fragment_occurrences_and_top_bottom_selection(plotter, position):
+    scores = {"CO": [-3.0, -2.0, -1.0], "CCN": [-0.2, 0.0], "C=O": [1.0, 3.0, 5.0, 7.0]}
+    before = json.dumps(scores)
+    labels = {"CO": "F1", "CCN": "F2", "C=O": "F3"}
+    fig = plotter(scores, top_n=1, fragment_labels=labels, observation_count_position=position)
+    texts = [text.get_text() for ax in fig.axes for text in ax.texts]
+    tags = (
+        [text for text in texts if text.startswith("F")]
+        if plotter == plot_attribution_distribution
+        else [text.get_text() for text in fig.axes[0].get_yticklabels()]
+    )
+    assert set(tags) == ({"F1 (n=3)", "F3 (n=4)"} if position == "tag" else {"F1", "F3"})
+    assert {text for text in texts if text.startswith("n=")} == (
+        {"n=3", "n=4"} if position == "right" else set()
+    )
+    assert json.dumps(scores) == before
+    if plotter == plot_attribution_strip and position == "right":
+        fig.canvas.draw()
+        renderer = fig.canvas.get_renderer()
+        colourbar_left = fig.axes[1].get_window_extent(renderer).x0
+        for text in fig.axes[0].texts:
+            if text.get_text().startswith("n="):
+                assert text.get_window_extent(renderer).x1 < colourbar_left
+    plt.close("all")
+
+
 def test_structure_svg_is_vector_physical_size_and_keeps_table_order():
     table = fragment_label_table(["CO", "c1ccccc1", "C[C@H](O)F"])
     table = table.iloc[[2, 0, 1]]
@@ -234,7 +264,7 @@ def _plot_app(root):
     explanation_plots_form(Path(root), SimpleNamespace())
 
 
-def _capture_plot(result):
+def _capture_plot(result, **kwargs):
     import streamlit as st
 
     st.session_state["scores"] = result.attribution_dict
@@ -350,6 +380,13 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
         for row in exported["table"].itertuples()
     }
     assert len(set(app.session_state["label_colors"].values())) == 2
+    _widget(app.radio, "Observation counts").set_value("Next to tag").run()
+    assert set(app.session_state["labels"]) == {"F3 (n=1)", "F1 (n=1)"}
+    assert exported["table"].Tag.tolist() == ["F3", "F1"]
+    _widget(app.radio, "Observation counts").set_value("Right side").run()
+    assert set(app.session_state["labels"]) == {"F3", "F1"}
+    assert app.session_state["scores"] == current_scores
+    _widget(app.radio, "Observation counts").set_value("Hidden").run()
     csv = pd.read_csv(BytesIO(exported["downloads"]["sme_fragment_mapping.csv"]))
     pd.testing.assert_frame_equal(csv, exported["table"].reset_index(drop=True))
     _widget(app.number_input, "Structures per row").set_value(1).run()

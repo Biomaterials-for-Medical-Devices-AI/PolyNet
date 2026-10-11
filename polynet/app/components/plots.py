@@ -25,7 +25,7 @@ def display_predictions(predictions_df: pd.DataFrame):
     st.write(predictions_df)
 
 
-def display_plots(plots_path: Path):
+def display_plots(plots_path: Path, *, export_plots: bool = False):
     """
     Organize and display plots from a directory with the following hierarchy:
     - Model name
@@ -67,6 +67,16 @@ def display_plots(plots_path: Path):
             for plot_type, plot_path in sorted(plot_groups[model][iteration]):
                 st.markdown(f"*{plot_type}*")
                 st.image(plot_path, use_container_width=True)
+                if export_plots:
+                    st.download_button(
+                        "Export plot",
+                        data=plot_path.read_bytes(),
+                        file_name=plot_path.name,
+                        mime="image/png",
+                        key=f"saved_plot_export:{plot_path.resolve()}",
+                        help="Downloads the original saved PNG without resizing or recompression.",
+                        on_click="ignore",
+                    )
 
 
 def display_model_metrics(metrics_dict: dict):
@@ -151,11 +161,13 @@ def display_model_results(
     expander_str: str = "Model Results",
     *,
     external: bool = False,
+    export_plots: bool = False,
 ):
     """Load saved results on demand, using the training or external-run layout.
 
     External runs write predictions.csv and metrics.json directly in their
     dataset folder; older runs may use the training-style ml_results layout.
+    ``export_plots`` adds a download of each original saved PNG on page 6.
     """
     # Collapsed expanders still execute their bodies in Streamlit. An explicit
     # toggle avoids reading and rendering all previous runs on each page visit.
@@ -204,7 +216,7 @@ def display_model_results(
             else plots_directory(experiment_path=experiment_path)
         )
         if plots_path.exists():
-            display_plots(plots_path)
+            display_plots(plots_path, export_plots=export_plots)
             displayed = displayed or any(plots_path.glob("*.png"))
         if not displayed:
             st.info("No saved predictions, metrics or plots were found for this run.")

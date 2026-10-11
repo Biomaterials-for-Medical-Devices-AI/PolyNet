@@ -14,6 +14,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from polynet.app.components.figure_export import display_exportable_figure
 from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
 from polynet.app.services.reruns import clear_explanation_results
@@ -86,7 +87,7 @@ def explain_tml_global(
     display_tml_global(results)
 
 
-def display_tml_global(results, prediction_breakdowns=None) -> None:
+def display_tml_global(results, prediction_breakdowns=None, *, export_options=None) -> None:
     """Display computed or loaded results using the same panels."""
     for descriptor, result in results.items():
         st.markdown(f"**{descriptor}**")
@@ -99,7 +100,11 @@ def display_tml_global(results, prediction_breakdowns=None) -> None:
         if result.warning:
             st.warning(result.warning)
         else:
-            st.pyplot(result.figure, use_container_width=True)
+            display_exportable_figure(
+                result.figure,
+                export_options=export_options,
+                plot_id=("shap", descriptor, "population"),
+            )
 
 
 @run_progress("Computing local explanations")
@@ -164,7 +169,7 @@ def explain_tml_local(
     display_tml_local(results, prediction_breakdowns)
 
 
-def display_tml_local(results, prediction_breakdowns=None) -> None:
+def display_tml_local(results, prediction_breakdowns=None, *, export_options=None) -> None:
     """Display computed or loaded results using the same panels."""
     for descriptor, instance_results in results.items():
         st.markdown(f"**{descriptor}**")
@@ -199,4 +204,9 @@ def display_tml_local(results, prediction_breakdowns=None) -> None:
                         continue
                 container.dataframe(inst.attribution_df, use_container_width=True)
                 if inst.figure is not None:
-                    container.pyplot(inst.figure, use_container_width=True)
+                    display_exportable_figure(
+                        inst.figure,
+                        container=container,
+                        export_options=export_options,
+                        plot_id=("shap", descriptor, sid, inst.model_label or "ensemble"),
+                    )

@@ -54,6 +54,38 @@ The separate structure figure uses the same tag colours; atom labels and bonds
 remain black. Colours update with the selected data and plot palette without
 changing attribution values or fixed F assignments.
 
+**Observation counts** can be hidden (default), placed **Next to tag** as
+`F1 (n=…)`, or on the **Right side** as `n=…`, for ridge, bar and strip plots.
+The count is the number of attribution values in that fragment's displayed
+distribution. Repeated occurrences and selected model/bootstrap combinations
+contribute separate observations; this is not a count of unique molecules.
+Changing models, sets or molecule selection updates the counts. Top-N filtering
+only changes which fragments are displayed; it does not renumber F tags.
+
+### Exporting explanation plots (GUI)
+
+Every population plot and every individual molecule/model plot on page 6 has its
+own **Export format** selector and **Export plot** button. **SVG** is the default;
+**PDF** also preserves vector lines, points, distributions and text. Font outlines
+in SVG and embedded fonts in PDF avoid relying on fonts installed on the reader's
+computer. **PNG** is lossless and records the selected **Export DPI** (72–1200,
+default 300). The controls cover all SME and SHAP plot styles and each descriptor.
+
+Local GNN heatmaps are redrawn by RDKit at the requested resolution for their
+three-inch molecule panels, rather than enlarging a fixed 600-pixel bitmap.
+These heatmaps and SHAP force-plot gradients remain embedded raster images in
+SVG/PDF; their source detail limits enlargement. Other plot artists, including
+colourbars, retain vector detail. Exports include the current colours, labels,
+observation counts, normalisation and selection, with a tight boundary to include
+right-side counts. Screen previews use 150 DPI to keep rendering responsive.
+Downloading does not rerun inference or write attribution caches. PNGs exceeding
+40 million pixels prompt a lower DPI or vector export.
+
+The separate fragment structure key retains its own vector SVG and publication
+PNG export controls, described below.
+
+### Separate fragment structure key (GUI)
+
 The masking cache stores canonical fragment **SMILES**, rather than SMARTS queries.
 The CSV's additional SMARTS column is generated with RDKit `MolToSmarts`; it is
 not used as the distribution plot label.

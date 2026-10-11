@@ -1,7 +1,9 @@
+import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 
 from polynet.app.components.experiments import experiment_selector
+from polynet.app.components.figure_export import display_exportable_figure
 from polynet.app.components.forms.analyse_results import (
     compare_metrics_form,
     compare_predictions_form,
@@ -102,7 +104,7 @@ if experiment_name:
         st.error("No models have been trained yet. Please train a GNN or TML model first.")
         st.stop()
 
-    display_model_results(experiment_path=experiment_path, expanded=False)
+    display_model_results(experiment_path=experiment_path, expanded=False, export_plots=True)
 
     predictions_path = ml_results_file_path(experiment_path=experiment_path)
     predictions = read_csv(predictions_path, index_col=0)
@@ -122,12 +124,20 @@ if experiment_name:
 
         if parity_plot:
 
-            st.pyplot(parity_plot, clear_figure=False)
+            display_exportable_figure(
+                parity_plot,
+                export_options={
+                    "dpi": int(parity_plot.dpi),
+                    "prefix": f"results_export_{experiment_name}",
+                },
+                plot_id=("parity",),
+            )
 
             if st.button("Save Parity Plot"):
                 parity_plot_path = experiment_path / "parity_plot.png"
                 parity_plot.savefig(parity_plot_path)
                 st.success(f"Parity plot saved to {parity_plot_path}")
+            plt.close(parity_plot)
 
     elif data_options.problem_type == ProblemType.Classification:
         st.subheader("Confusion Matrix")
@@ -137,7 +147,15 @@ if experiment_name:
         )
 
         if confusion_matrix_plot:
-            st.pyplot(confusion_matrix_plot, clear_figure=True)
+            display_exportable_figure(
+                confusion_matrix_plot,
+                export_options={
+                    "dpi": int(confusion_matrix_plot.dpi),
+                    "prefix": f"results_export_{experiment_name}",
+                },
+                plot_id=("confusion-matrix",),
+            )
+            plt.close(confusion_matrix_plot)
 
     st.subheader("Compare models")
 
@@ -149,7 +167,15 @@ if experiment_name:
 
     if compare_preds_plot:
 
-        st.pyplot(compare_preds_plot)
+        display_exportable_figure(
+            compare_preds_plot,
+            export_options={
+                "dpi": int(compare_preds_plot.dpi),
+                "prefix": f"results_export_{experiment_name}",
+            },
+            plot_id=("prediction-p-values",),
+        )
+        plt.close(compare_preds_plot)
 
     st.divider()
 
@@ -163,7 +189,15 @@ if experiment_name:
     )
 
     if compare_metrics_plot:
-        st.pyplot(compare_metrics_plot)
+        display_exportable_figure(
+            compare_metrics_plot,
+            export_options={
+                "dpi": int(compare_metrics_plot.dpi),
+                "prefix": f"results_export_{experiment_name}",
+            },
+            plot_id=("metric-comparison",),
+        )
+        plt.close(compare_metrics_plot)
 
     st.divider()
     explanation_plots_form(experiment_path, data_options)

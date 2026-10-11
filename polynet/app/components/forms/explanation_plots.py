@@ -169,6 +169,9 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         + ", ".join(args["model_names"])
     )
     _plot_controls(args, family, scope, prefix + "_" + scope)
+    export_options = {"dpi": args["export_dpi"], "prefix": prefix + "_" + scope}
+    if family == "GNN" and scope == "local":
+        args["drawing_dpi"] = args["export_dpi"]
     renderer, display = {
         ("GNN", "global"): (render_cached_global_attribution, display_gnn_global),
         ("GNN", "local"): (render_cached_local_attribution, display_gnn_local),
@@ -185,9 +188,10 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
             display(
                 results,
                 local_prediction_breakdowns(analysis, selected, args["model_names"], allowed),
+                export_options=export_options,
             )
         else:
-            display(results)
+            display(results, export_options=export_options)
             if family == "GNN" and args["fragment_label_mode"] == "F tags" and not results.warning:
                 fragment_exports(
                     results,
@@ -272,6 +276,17 @@ def _selection_controls(analysis: dict, prefix: str):
 
 def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
     with st.expander("Plot settings", expanded=True):
+        args["export_dpi"] = int(
+            st.number_input(
+                "Export DPI",
+                min_value=72,
+                max_value=1200,
+                value=300,
+                step=1,
+                key=f"{prefix}_export_dpi",
+                help="Resolution for PNG and embedded GNN molecule heatmaps. SVG/PDF lines and text stay vector. Screen previews use 150 DPI.",
+            )
+        )
         args["normalisation_type"] = st.radio(
             "Normalisation",
             [
@@ -312,6 +327,18 @@ def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
                     help="Applies to fragment labels and the structure figure's F tags. Ridge/bar match each fragment's distribution/bar colour; strip matches its mean diamond colour. Molecules stay black.",
                 )
                 args["match_fragment_label_colors"] = color_mode == "Match distribution"
+                count_position = st.radio(
+                    "Observation counts",
+                    ["Hidden", "Next to tag", "Right side"],
+                    horizontal=True,
+                    key=f"{prefix}_counts",
+                    help="n counts attribution observations in each displayed distribution, including repeated fragment occurrences and selected model/bootstrap combinations; it is not a count of unique molecules.",
+                )
+                args["observation_count_position"] = {
+                    "Hidden": None,
+                    "Next to tag": "tag",
+                    "Right side": "right",
+                }[count_position]
                 args["fragment_label_color"] = (
                     st.color_picker(
                         "Tag colour",
