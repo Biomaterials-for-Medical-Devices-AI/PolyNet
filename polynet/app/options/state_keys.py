@@ -215,14 +215,12 @@ class ExplainModelStateKeys(StrEnum):
     GlobalExplainSet = "GlobalExplainSet"
     GlobalExplainManuallySelector = "GlobalExplainManuallySelector"
     GlobalExplainIDSelector = "GlobalExplainIDSelector"
-    GlobalKeepRunning = "GlobalKeepRunning"
     GlobalPlotType = "GlobalPlotType"
 
     # Local explanation tab
     LocalExplainIDSelector = "LocalExplainIDSelector"
     LocalSetMolName = "LocalSetMolName"
     LocalAggregation = "LocalAggregation"
-    LocalKeepRunning = "LocalKeepRunning"
 
     # Deprecated — kept for session-state compatibility
     # ExplainSet, ExplainIDSelector, ExplainManuallySelector, PlotIDSelector, SetMolName
@@ -247,14 +245,12 @@ class TMLExplainStateKeys(StrEnum):
     GlobalTMLIDSelector = "GlobalTMLIDSelector"
     GlobalTMLPlotType = "GlobalTMLPlotType"
     GlobalTMLTopN = "GlobalTMLTopN"
-    GlobalTMLKeepRunning = "GlobalTMLKeepRunning"
 
     # Local explanation tab
     LocalTMLIDSelector = "LocalTMLIDSelector"
     LocalTMLPlotType = "LocalTMLPlotType"
     LocalTMLTopN = "LocalTMLTopN"
     LocalTMLAggregation = "LocalTMLAggregation"
-    LocalTMLKeepRunning = "LocalTMLKeepRunning"
 
 
 class PredictPageStateKeys(StrEnum):
