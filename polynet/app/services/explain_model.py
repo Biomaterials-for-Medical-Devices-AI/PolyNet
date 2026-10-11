@@ -10,6 +10,7 @@ import torch
 from torch.nn import Module
 from torch_geometric.loader import DataLoader
 
+from polynet.app.services.explanation_results import capture_analysis
 from polynet.app.services.progress import run_progress
 from polynet.config.enums import (
     AttributionPlotType,
@@ -140,6 +141,16 @@ def explain_model_global(
         mols_per_model=mols_per_model,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("GNN", "global", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_gnn_global(result)
+
+
+def display_gnn_global(result, prediction_breakdowns=None) -> None:
+    """Display computed or loaded results using the same panels."""
     st.info(
         f"Distribution over **{result.n_mols}** molecule(s) × **{result.n_models}** model(s) — "
         f"**{result.n_frags_total}** unique fragments found, "
@@ -207,6 +218,16 @@ def explain_model_local(
         aggregation=aggregation,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("GNN", "local", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_gnn_local(mol_results, prediction_breakdowns)
+
+
+def display_gnn_local(mol_results, prediction_breakdowns=None) -> None:
+    """Display computed or loaded results using the same panels."""
     # Group by molecule (preserving order). In Average mode each molecule has one
     # result (model_label is None); in Separate mode it has one per model.
     by_mol: dict[str, list[MolAttributionResult]] = {}
