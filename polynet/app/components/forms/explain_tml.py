@@ -176,9 +176,7 @@ def _tml_global_tab(
     plot_type = ShapGlobalPlotType.Beeswarm
     top_n = 10
 
-    if st.button("Run Global SHAP Explanation") or st.toggle(
-        "Keep running automatically", key=TMLExplainStateKeys.GlobalTMLKeepRunning
-    ):
+    if st.button("Run Global SHAP Explanation"):
         explain_tml_global(
             models=models,
             descriptor_dfs=descriptor_dfs,
@@ -194,6 +192,15 @@ def _tml_global_tab(
             cache_root=cache_root,
             target_col=data_options.target_variable_col,
             samples_per_model=per_model_samples,
+            selection_label=str(explain_set or "Selected samples"),
+            prediction_breakdowns=_build_prediction_breakdowns(
+                preds,
+                list(models),
+                explain_samples,
+                data_options,
+                iterator_col,
+                selected_iterations,
+            ),
         )
 
 
@@ -344,9 +351,7 @@ def _tml_local_tab(
         selected_iterations=selected_iterations,
     )
 
-    if st.button("Run Local SHAP Explanation") or st.toggle(
-        "Keep running automatically", key=TMLExplainStateKeys.LocalTMLKeepRunning
-    ):
+    if st.button("Run Local SHAP Explanation"):
         explain_tml_local(
             models=models,
             descriptor_dfs=descriptor_dfs,

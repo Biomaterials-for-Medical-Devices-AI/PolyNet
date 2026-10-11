@@ -118,6 +118,8 @@ def explain_model_global(
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     cache_root: Path | None = None,
     mols_per_model: dict[str, set[str]] | None = None,
+    selection_label: str | None = None,
+    prediction_breakdowns: dict | None = None,
 ) -> None:
     """Compute and render the population-level fragment attribution plot.
 
