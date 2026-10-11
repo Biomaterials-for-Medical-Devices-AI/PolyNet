@@ -122,7 +122,7 @@ if experiment_name:
 
         if parity_plot:
 
-            st.pyplot(parity_plot, clear_figure=True)
+            st.pyplot(parity_plot, clear_figure=False)
 
             if st.button("Save Parity Plot"):
                 parity_plot_path = experiment_path / "parity_plot.png"
