@@ -118,6 +118,7 @@ def compare_predictions_form(
             color_by_opts=None,
             model_pred_col=None,
             model_true_cols=None,
+            key_prefix="predictions_",
         )
         abbreviate = config.pop("abbreviate_labels", False)
         model_labels = [prettify_label(m, abbreviate=abbreviate) for m in compare_models]
@@ -244,6 +245,7 @@ def compare_metrics_form(
                 color_by_opts=None,
                 model_pred_col=None,
                 model_true_cols=None,
+                key_prefix="metrics_",
             )
             n_splits = min(len(v) for v in selected.values())
             test_choice = _metric_test_selector(
@@ -268,6 +270,7 @@ def compare_metrics_form(
                 color_by_opts=None,
                 model_pred_col=None,
                 model_true_cols=None,
+                key_prefix="metrics_",
             )
             abbreviate = config.pop("abbreviate_labels", False)
             selected = {
@@ -286,12 +289,14 @@ def get_plot_customisation_form(
     color_by_opts=None,
     model_pred_col: str = None,
     model_true_cols: str = None,
+    key_prefix: str = "",
 ):
     """
     Renders a dynamic Streamlit form for customizing a plot, based on plot_type.
     Returns a dictionary of kwargs for the plotting function.
     """
     config = {}
+    widget_suffix = key_prefix + plot_type
 
     with st.expander("Customise Plot", expanded=False):
 
@@ -300,7 +305,7 @@ def get_plot_customisation_form(
         abbreviate_labels = st.checkbox(
             "Use abbreviated labels",
             value=False,
-            key=PlotCustomiserStateKeys.AbbreviateLabels + plot_type,
+            key=PlotCustomiserStateKeys.AbbreviateLabels + widget_suffix,
             help="Show short model/descriptor names (e.g. 'RF polyBERT') instead of "
             "full names (e.g. 'Random Forest polyBERT').",
         )
@@ -309,7 +314,7 @@ def get_plot_customisation_form(
         config["title"] = st.text_input(
             "Plot Title",
             value=f"{data_options.target_variable_name} {plot_type.title()} Plot",
-            key=PlotCustomiserStateKeys.PlotTitle + plot_type,
+            key=PlotCustomiserStateKeys.PlotTitle + widget_suffix,
             help="Enter a title for the plot.",
         )
 
@@ -319,7 +324,7 @@ def get_plot_customisation_form(
             max_value=30,
             value=16,
             step=1,
-            key=PlotCustomiserStateKeys.PlotFontSize + plot_type,
+            key=PlotCustomiserStateKeys.PlotFontSize + widget_suffix,
             help="Select the font size for the plot title.",
         )
 
@@ -331,13 +336,13 @@ def get_plot_customisation_form(
                 max_value=14,
                 value=7,
                 step=1,
-                key="plot_height" + plot_type,
+                key="plot_height" + widget_suffix,
             )
             if plot_type not in [Plot.MatrixPlot, Plot.MetricsBoxPlot]:
                 config["x_label"] = st.text_input(
                     "X-axis Label",
                     value=model_true_cols,
-                    key=PlotCustomiserStateKeys.PlotXLabel + plot_type,
+                    key=PlotCustomiserStateKeys.PlotXLabel + widget_suffix,
                     help="Enter a label for the X-axis.",
                 )
             config["x_label_fontsize"] = st.slider(
@@ -346,7 +351,7 @@ def get_plot_customisation_form(
                 max_value=30,
                 value=14,
                 step=1,
-                key=PlotCustomiserStateKeys.PlotXLabelFontSize + plot_type,
+                key=PlotCustomiserStateKeys.PlotXLabelFontSize + widget_suffix,
                 help="Select the font size for the X-axis label.",
             )
         with columns[1]:
@@ -357,14 +362,14 @@ def get_plot_customisation_form(
                 max_value=14,
                 value=7,
                 step=1,
-                key="plot_width" + plot_type,
+                key="plot_width" + widget_suffix,
             )
 
             if plot_type not in [Plot.MatrixPlot, Plot.MetricsBoxPlot]:
                 config["y_label"] = st.text_input(
                     "Y-axis Label",
                     value=model_pred_col,
-                    key=PlotCustomiserStateKeys.PlotYLabel + plot_type,
+                    key=PlotCustomiserStateKeys.PlotYLabel + widget_suffix,
                     help="Enter a label for the Y-axis.",
                 )
             config["y_label_fontsize"] = st.slider(
@@ -373,7 +378,7 @@ def get_plot_customisation_form(
                 max_value=30,
                 value=14,
                 step=1,
-                key=PlotCustomiserStateKeys.PlotYLabelFontSize + plot_type,
+                key=PlotCustomiserStateKeys.PlotYLabelFontSize + widget_suffix,
                 help="Select the font size for the Y-axis label.",
             )
 
@@ -381,7 +386,7 @@ def get_plot_customisation_form(
             "Tick Size",
             options=list(range(8, 21)),
             value=12,
-            key=PlotCustomiserStateKeys.TickSize + plot_type,
+            key=PlotCustomiserStateKeys.TickSize + widget_suffix,
             help="Select the font size for the tick labels.",
         )
 
@@ -390,7 +395,7 @@ def get_plot_customisation_form(
             config["grid"] = st.checkbox(
                 "Show Grid",
                 value=True,
-                key=PlotCustomiserStateKeys.PlotGrid + plot_type,
+                key=PlotCustomiserStateKeys.PlotGrid + widget_suffix,
                 help="Check to display grid lines on the plot.",
             )
 
@@ -400,21 +405,21 @@ def get_plot_customisation_form(
                 max_value=100,
                 value=50,
                 step=1,
-                key=PlotCustomiserStateKeys.PlotPointSize + plot_type,
+                key=PlotCustomiserStateKeys.PlotPointSize + widget_suffix,
                 help="Select the size of the points in the plot.",
             )
 
             config["border_color"] = st.color_picker(
                 "Point Border Color",
                 value="#000000",
-                key=PlotCustomiserStateKeys.PlotPointBorderColour + plot_type,
+                key=PlotCustomiserStateKeys.PlotPointBorderColour + widget_suffix,
                 help="Select a color for the border of the plot.",
             )
 
             config["legend"] = st.checkbox(
                 "Show Legend",
                 value=True,
-                key=PlotCustomiserStateKeys.ShowLegend + plot_type,
+                key=PlotCustomiserStateKeys.ShowLegend + widget_suffix,
                 help="Check to display the legend on the plot.",
             )
 
@@ -425,7 +430,7 @@ def get_plot_customisation_form(
                     max_value=20,
                     value=12,
                     step=1,
-                    key=PlotCustomiserStateKeys.LegendFontSize + plot_type,
+                    key=PlotCustomiserStateKeys.LegendFontSize + widget_suffix,
                     help="Select the font size for the legend.",
                 )
             else:
@@ -436,7 +441,7 @@ def get_plot_customisation_form(
                 hue = st.selectbox(
                     "Color by",
                     options=color_by_opts,
-                    key=PlotCustomiserStateKeys.ColourBy + plot_type,
+                    key=PlotCustomiserStateKeys.ColourBy + widget_suffix,
                     index=1,
                     help="Select a column to color the points in the plot.",
                 )
@@ -445,7 +450,7 @@ def get_plot_customisation_form(
                 style_by = st.selectbox(
                     "Style by",
                     options=color_by_opts,
-                    key=PlotCustomiserStateKeys.StyleBy + plot_type,
+                    key=PlotCustomiserStateKeys.StyleBy + widget_suffix,
                     index=0,
                     help="Select a column to style the points in the plot.",
                 )
@@ -462,7 +467,7 @@ def get_plot_customisation_form(
                 cmap = st.selectbox(
                     "Color Map",
                     options=["tab10", "pastel", "colorblind", "Spectral", "Custom"],
-                    key=PlotCustomiserStateKeys.CMap + plot_type,
+                    key=PlotCustomiserStateKeys.CMap + widget_suffix,
                     help="Select a color map for the points in the plot.",
                 )
                 if cmap == "Custom":
@@ -471,7 +476,7 @@ def get_plot_customisation_form(
                         color = st.color_picker(
                             f"Color for {cat}",
                             value="#1f77b4",
-                            key=f"color_{cat}" + plot_type,
+                            key=f"color_{cat}" + widget_suffix,
                             help=f"Select a color for the category '{cat}' in the plot.",
                         )
                         cmap.append(color)
@@ -482,7 +487,7 @@ def get_plot_customisation_form(
                 config["point_color"] = st.color_picker(
                     "Point Fill Color",
                     value="#1f77b4",
-                    key="point_color" + plot_type,
+                    key="point_color" + widget_suffix,
                     help="Select a color for the points in the plot.",
                 )
 
@@ -490,7 +495,7 @@ def get_plot_customisation_form(
             config["cmap"] = st.selectbox(
                 "Color Map",
                 options=["Blues", "Greens", "Oranges"],
-                key=PlotCustomiserStateKeys.CMap + plot_type,
+                key=PlotCustomiserStateKeys.CMap + widget_suffix,
             )
 
             config["label_fontsize"] = st.slider(
@@ -499,7 +504,7 @@ def get_plot_customisation_form(
                 max_value=30,
                 value=16,
                 step=1,
-                key=PlotCustomiserStateKeys.PlotLabelFontSize + plot_type,
+                key=PlotCustomiserStateKeys.PlotLabelFontSize + widget_suffix,
                 help="Select the font size for the labels in the confusion matrix.",
             )
 
@@ -509,24 +514,28 @@ def get_plot_customisation_form(
                 name = st.text_input(
                     f"Name for label for {label}",
                     value=data_options.class_names[label],
-                    key=f"{PlotCustomiserStateKeys.LabelNames}_{label}" + plot_type,
+                    key=f"{PlotCustomiserStateKeys.LabelNames}_{label}" + widget_suffix,
                     help=f"Enter the label for the class '{label}'.",
                 )
                 config["display_labels"].append(name)
 
         elif plot_type == Plot.MatrixPlot:
 
-            config["mask_upper_triangle"] = st.checkbox("Mask upper triangle")
+            config["mask_upper_triangle"] = st.checkbox(
+                "Mask upper triangle", key="mask_upper_triangle" + widget_suffix
+            )
 
             col1, col2 = st.columns(2)
 
             with col1:
                 config["non_signifficant_colour"] = st.color_picker(
-                    "Non-signifficant colour", value="#4575B4", key="non_signifficant" + plot_type
+                    "Non-signifficant colour",
+                    value="#4575B4",
+                    key="non_signifficant" + widget_suffix,
                 )
             with col2:
                 config["signifficant_colour"] = st.color_picker(
-                    "Non-signifficant colour", value="#D73027", key="signifficant" + plot_type
+                    "Non-signifficant colour", value="#D73027", key="signifficant" + widget_suffix
                 )
 
         elif plot_type == Plot.MetricsBoxPlot:
@@ -537,21 +546,21 @@ def get_plot_customisation_form(
                 fill_colour = st.color_picker(
                     "Box Fill Colour",
                     value="#9aa0a5",
-                    key="box_fill" + plot_type,
+                    key="box_fill" + widget_suffix,
                     help="Select a fill color for the box in the box plot.",
                 )
             with cols[1]:
                 border_colour = st.color_picker(
                     "Box Border Colour",
                     value="#000000",
-                    key="box_border" + plot_type,
+                    key="box_border" + widget_suffix,
                     help="Select a border color for the box in the box plot.",
                 )
             with cols[2]:
                 median_colour = st.color_picker(
                     "Median Line Colour",
                     value="#FF0000",
-                    key="median_color" + plot_type,
+                    key="median_color" + widget_suffix,
                     help="Select a color for the median line in the box plot.",
                 )
 
@@ -565,7 +574,7 @@ def get_plot_customisation_form(
             max_value=600,
             value=300,
             step=10,
-            key="dpi" + plot_type,
+            key="dpi" + widget_suffix,
             help="Select the DPI for the plot.",
         )
 

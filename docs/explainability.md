@@ -1,7 +1,8 @@
 # Explainability
 
 PolyNet provides two attribution pipelines that share the same configuration shape and
-the same options on the Streamlit **Explain Models** page:
+a Streamlit workflow: **Explain Models** calculates importances and shows default
+previews; **Analyse Results** loads saved analyses for full plot customisation:
 
 - **GNN** — chemistry-masking fragment attribution (substructure masking; Wu et al., *Nat. Commun.* 14,
   2585 (2023), [doi:10.1038/s41467-023-38192-3](https://doi.org/10.1038/s41467-023-38192-3)).
@@ -35,6 +36,85 @@ attributions are aggregated per fragment.
   `ridge`, `bar`, or `strip`.
 - **Local** — one per-molecule atom heatmap (the per-fragment scores mapped back to
   atom weights) plus a per-fragment attribution table.
+
+### SME fragment labels and publication structure key (GUI)
+
+On **Analyse Results → Feature importance plots → Population**, GNN SME ridge,
+bar and strip plots offer **Fragment labels: Fragment SMILES / F tags**. The default
+uses the original atom-letter fragment labels (for example `CO` or `c1ccccc1`),
+rather than atomic-number SMARTS such as `[#6]-[#8]`. This is presentation
+only: raw attribution values, normalisation, ranking and top/bottom selection are
+unchanged. Page 5 previews and CLI defaults are unchanged.
+
+**Tag colour mode** applies to both original fragment labels and F tags. Choose
+**Custom colour** (default black, `#000000`) to use a colour picker or enter a hex
+code, or **Match distribution** to use each fragment's ridge/bar colour. For strip
+plots, which colour individual observations separately, tags match the mean diamond.
+The separate structure figure uses the same tag colours; atom labels and bonds
+remain black. Colours update with the selected data and plot palette without
+changing attribution values or fixed F assignments.
+
+**Observation counts** can be hidden (default), placed **Next to tag** as
+`F1 (n=…)`, or on the **Right side** as `n=…`, for ridge, bar and strip plots.
+The count is the number of attribution values in that fragment's displayed
+distribution. Repeated occurrences and selected model/bootstrap combinations
+contribute separate observations; this is not a count of unique molecules.
+Changing models, sets or molecule selection updates the counts. Top-N filtering
+only changes which fragments are displayed; it does not renumber F tags.
+
+### Exporting explanation plots (GUI)
+
+Every population plot and every individual molecule/model plot on page 6 has its
+own **Export format** selector and **Export plot** button. **SVG** is the default;
+**PDF** also preserves vector lines, points, distributions and text. Font outlines
+in SVG and embedded fonts in PDF avoid relying on fonts installed on the reader's
+computer. **PNG** is lossless and records the selected **Export DPI** (72–1200,
+default 300). The controls cover all SME and SHAP plot styles and each descriptor.
+
+Local GNN heatmaps are redrawn by RDKit at the requested resolution for their
+three-inch molecule panels, rather than enlarging a fixed 600-pixel bitmap.
+These heatmaps and SHAP force-plot gradients remain embedded raster images in
+SVG/PDF; their source detail limits enlargement. Other plot artists, including
+colourbars, retain vector detail. Exports include the current colours, labels,
+observation counts, normalisation and selection, with a tight boundary to include
+right-side counts. Screen previews use 150 DPI to keep rendering responsive.
+Downloading does not rerun inference or write attribution caches. PNGs exceeding
+40 million pixels prompt a lower DPI or vector export.
+
+The separate fragment structure key retains its own vector SVG and publication
+PNG export controls, described below.
+
+### Separate fragment structure key (GUI)
+
+The masking cache stores canonical fragment **SMILES**, rather than SMARTS queries.
+The CSV's additional SMARTS column is generated with RDKit `MolToSmarts`; it is
+not used as the distribution plot label.
+With F tags, `F1`, `F2`, … are assigned by sorted original fragment identifiers across
+the **entire saved analysis**, not just the selected models or molecules. Changing
+models, bootstraps, set, normalisation or top-N preserves the fragment's tag. Tags
+are scoped to one analysis; different saved analyses can have different mappings.
+
+**Download F-to-SMARTS CSV** exports `Tag`, `SMARTS` and `Fragment` (the original
+cache identifier). It contains exactly the displayed fragments, in descending
+plot order. Gaps in the F numbering after filtering are expected.
+
+**Create separate fragment structure figure** draws each fragment with its F tag
+beneath it. It is a separate structure key, not an overlay on the distribution.
+Controls include molecule panel width/height, horizontal/vertical spacing, structures
+per row, atom/tag fonts, bond length and line width. Physical sizes are millimetres;
+fonts and line widths are points. Molecule height excludes the tag strip below it.
+RDKit may shorten bonds to fit a large fragment inside the chosen panel.
+
+The **SVG** export contains vector bonds and glyphs and remains sharp at any size.
+Structures are drawn with [RDKit's MolDraw2D SVG/Cairo drawers](https://www.rdkit.org/docs/source/rdkit.Chem.Draw.rdMolDraw2D.html).
+**Prepare publication PNG** redraws the molecules at 300, 600 (default) or 1200 DPI
+and records DPI metadata, rather than enlarging the preview. Choose an appropriate
+physical size for the publication. To avoid excessive raster memory use, PNG canvases
+above 40 million pixels are rejected; SVG remains available. Structure exports retain
+stereochemistry and charges, use black atom labels/bonds, and introduce no new
+dependency or attribution calculation. Invalid structures produce an explicit error.
+
+### Selecting models and samples
 
 `explain_set` selects which molecules go into the global distribution;
 `local_explain_mol_ids` selects which molecules get per-molecule heatmaps/CSVs (the
@@ -128,7 +208,7 @@ When a single model is selected, `per_model` and `global` are mathematically ide
 
 ## Averaged vs per-model display (local)
 
-> **GUI option** (Explain Models → local tab). The non-GUI pipeline always uses
+> **GUI option** (Analyse Results → Feature importance plots → loaded local analysis). The non-GUI pipeline always uses
 > `Average`.
 
 When several models are selected for the same molecule, the **local** view offers two
@@ -172,7 +252,8 @@ Attributions are computed once and reused:
   by an older version is discarded (with a warning) and recomputed.
 - **TML** — SHAP values are written to `explanations/shap_{descriptor}.csv` (one file
   per descriptor) and reused on subsequent runs. A cache written by an older version is
-  discarded (with a warning) and recomputed.
+  discarded (with a warning) and recomputed. Version 3 also stores each explainer
+  baseline for additive waterfall and force plots; run page 5 again for older SHAP caches.
 
 Models without a tree or linear explainer (e.g. SVMs) use SHAP's `KernelExplainer`, which
 samples randomly. PolyNet seeds its background sample and each sample's computation, so
@@ -182,6 +263,41 @@ samples are explained.
 Delete the cache files to force recomputation — for example after retraining or
 changing the target class. Normalisation is **never** written to the cache, so changing
 the normalisation strategy does not require recomputation.
+
+### Completed GUI analysis snapshots
+
+Page 5 also saves `explanations/analyses/{family}_{selection_hash}.json`
+under the selected data source (experiment or external dataset). A versioned snapshot
+contains raw selected scores, model/sample/class/fragmentation selection, per-model
+sample restrictions, descriptor feature values or molecule SMILES, and prediction
+breakdowns. It contains no fitted model objects and uses atomic JSON writes. Re-running
+the same selection replaces its snapshot; different selections have separate entries.
+Normalisation, colours and plot styles remain presentation settings.
+
+Page 6 automatically loads the selected snapshot. Population and individual-molecule
+views use the same raw attributions; there are no separate Global/Local entries or run
+dates in the selector. Individual molecules can be chosen from any completed analysis.
+In both views, choose architectures/models, bootstrap iterations and the explained set,
+or refine the selection to individual model/bootstrap combinations. Selecting one GNN
+architecture produces its own population plot. Set membership is read from the saved
+prediction breakdown for each model/bootstrap/sample pair; it is not a global molecule
+label. Only saved pairs in the requested set are displayed. External data and snapshots
+without set metadata do not offer train/validation/test filters. The snapshot's class and
+fragmentation remain fixed; select another saved analysis to view different ones.
+Select the cached model/bootstrap combinations to show, then choose an ensemble average
+or separate plots. Each molecule lists its available combinations. Missing pairs are
+excluded from averages and never computed on page 6; run page 5 to add them. The older
+GUI/CLI raw-cache import option has been removed: plotting uses completed GUI snapshots.
+Rendering calls the core `render_cached_*_attribution` APIs and never writes raw caches.
+Local renderers accept per-model sample restrictions, also applied to prediction panels;
+PerModel scaling still uses each selected model's complete saved population as reference.
+
+GUI retraining or representation rebuilding removes old explanations and snapshots,
+including those for external predictions, because they refer to the old models or inputs.
+A GUI explanation rerun warns before replacing only the chosen analysis and its cached
+model/bootstrap/sample/class/fragmentation scores; other saved analyses retain their own
+raw scores. This does not change the CLI's cache reuse. For CLI retraining, remove outdated
+raw caches manually before explaining newly trained models.
 
 ## Statistical model comparison (Analyse Results)
 
@@ -222,3 +338,26 @@ the UI:
 
 The significance markers (`*`, `**`, `***`) and the displayed p-values reflect the
 corrected values.
+
+## Local normalisation and SHAP baselines
+
+`PerModel` divides by each fitted model/bootstrap's largest **absolute** attribution
+across its whole saved analysis, before averaging. Choosing a single molecule does not
+change that reference maximum. This applies to TML and GNN local plots; individual models' raw scores remain
+unchanged. A zero maximum uses a divisor of one. `Global` uses one maximum across all
+selected models in the saved population. `Local` scales the displayed local vector.
+
+SHAP caches retain the expected output for each model/class as `base_value`, outside the
+feature columns. Local plots average baselines across exactly the cached combinations
+used for the contributions. A feature absent from a model's selected inputs contributes
+zero to that model's ensemble average. Baselines and contributions use the same scaling,
+so unnormalised waterfall/force endpoints reconstruct the explained output and normalised
+plots are labelled as scaled model output. Force plots include every contribution even
+when a smaller feature limit is selected; waterfall/bar still honour that limit.
+
+Classification output depends on the explainer: probability explainers (e.g. random
+forests) use class probabilities, while binary linear models and some tree explainers
+use margins/log-odds. For class zero,
+both a single-output linear baseline and its contributions are negated. Separate plots
+help interpret outputs from models with different scales. A snapshot missing a baseline
+cannot render a local SHAP plot; run the analysis again on page 5.

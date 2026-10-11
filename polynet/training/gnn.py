@@ -24,6 +24,7 @@ import copy
 from copy import deepcopy
 import logging
 from pathlib import Path
+import time
 
 import numpy as np
 import torch
@@ -374,7 +375,13 @@ def train_gnn_ensemble(
         # Fit the polymer descriptor scaler on training graphs only.
         descriptor_scaler = fit_polymer_descriptor_scaler(train_set, polymer_descriptor_scaler)
 
-        for gnn_arch, arch_params in gnn_conv_params.items():
+        for model_number, (gnn_arch, arch_params) in enumerate(gnn_conv_params.items(), 1):
+            context = (
+                f"GNN {gnn_arch.value} | split/bootstrap {iteration}/{len(train_ids)} | "
+                f"model {model_number}/{len(gnn_conv_params)}"
+            )
+            started = time.perf_counter()
+            logger.info("Starting %s | device=%s | seed=%d", context, device, seed)
             arch_params = arch_params or {}
             is_hpo = not arch_params
 
@@ -461,7 +468,9 @@ def train_gnn_ensemble(
                 scheduler=scheduler,
                 device=device,
                 epochs=epochs,
+                log_context=context,
             )
+            logger.info("Completed %s in %.1fs", context, time.perf_counter() - started)
             trained_models[f"{gnn_arch.value}_{iteration}"] = model
 
     return trained_models, loaders, target_scalers
@@ -482,6 +491,7 @@ def train_model(
     scheduler,
     device: str | torch.device,
     epochs: int = 250,
+    log_context: str = "",
 ) -> Module:
     """
     Train a GNN model with early stopping based on validation loss.
@@ -529,7 +539,7 @@ def train_model(
         step_scheduler(scheduler, val_loss)
 
         logger.info(
-            f"Epoch {epoch:03d} | "
+            f"{log_context + ' | ' if log_context else ''}Epoch {epoch:03d}/{epochs} | "
             f"LR: {scheduler.get_last_lr()[0]:.6f} | "
             f"Train: {train_loss:.4f} | "
             f"Val: {val_loss:.4f} | "

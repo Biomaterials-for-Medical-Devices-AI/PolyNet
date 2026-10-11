@@ -213,3 +213,81 @@ from polynet.utils.statistical_analysis import (
 )
 from polynet.config.display_names import prettify_label, prettify_metric
 ```
+
+### GUI support modules (`polynet.app`)
+
+These helpers belong to the optional Streamlit layer, not the core pipeline:
+
+| Module | Public entry points | Responsibility |
+|---|---|---|
+| `services.cache` | `file_version`, `read_csv`, `read_json` | Bounded copy-on-read caches keyed by resolved path, size and nanosecond modification/change timestamps. Missing files raise; rewritten files refresh. CSV keyword arguments participate in the key. |
+| `services.reruns` | `RerunPlan`, `stage_rerun_plan`, `rerun_warning`, `clear_stage_results`, `explanation_rerun_plan`, `explanation_rerun_button`, `clear_explanation_results` | GUI-only warnings and acknowledgement before replacing results. Representation/training invalidate downstream generated outputs; explanation replacement preserves unrelated analyses, classes, model/sample pairs and data sources. Cache rewrites are atomic; inspection never deletes files. |
+| `services.progress` | `run_progress`, `RunLogHandler` | Context manager/decorator for session-thread logging, an 80-message tail, throttled epoch rendering, and handler/level cleanup on success or failure. |
+| `services.explanation_results` | `capture_analysis`, `list_saved_analyses`, `load_analysis`, `analysis_summary`, `analysis_label`, `attribution_coverage`, `attribution_set_membership`, `select_attribution_coverage`, `local_prediction_breakdowns` | Atomic JSON snapshots of completed explanations; population and molecule views share saved scores. Cached selection summaries omit dates; coverage, per-bootstrap set membership and prediction filters identify the actual selected model/sample pairs. No fitted-model loading or inference. |
+| `components.forms.explanation_plots` | `explanation_plots_form` | Page 6 saved-analysis selection and all GNN/TML plot controls; both views select architectures/models, bootstraps, sets and exact combinations. Renders saved scores and matching prediction panels. |
+| `components.forms.fragment_plots` | `saved_fragment_table`, `fragment_exports` | Page 6 SME F tags fixed across the entire saved analysis; CSV mapping and a separate configurable RDKit SVG/PNG structure key. Bounded drawing caches avoid repeated exports on unrelated widget changes. |
+| `components.figure_export` | `figure_bytes`, `display_exportable_figure` | Per-plot SVG/PDF/lossless PNG exports for page 6 results and explanations. Embedded/outlined fonts, tight boundaries and selected DPI; temporarily disables artist rasterisation for vector output and restores flags afterwards. Screen previews stay at 150 DPI. |
+| `services.workload` | `estimate_workload`, `Workload` | Pure calculation of final fits, tuning-inclusive fit/epoch budgets and advisory warning reasons. No training, timing prediction or device allocation. |
+| `components.forms.representation` | `default_molecular_descriptors`, `basic_representation`, `cached_graph_feature_analysis` | Input-type-aware GUI descriptor defaults, locked representation controls and cached legacy graph analysis. |
+| `components.forms.train_models` | `default_feature_preprocessing` | GUI MinMax/variance/correlation baseline; GNN descriptors receive scaling only. |
+| `components.plots` | `display_model_results(..., external=False, export_plots=False)`, `display_plots(..., export_plots=False)` | On-demand training results; pass `external=True` for external dataset folders, including legacy layouts. Page 6 enables `export_plots` to download each original saved PNG without recompression. |
+
+`services.configurations.load_options` validates freshly copied cached JSON;
+`save_options` still delegates to core configuration I/O. Core training remains
+Streamlit-free. `training.gnn.train_model(log_context=...)` adds optional context
+to epoch messages, and `training.hyperopt.TrainingProgressCallback` forwards Ray
+trial activity through normal logging from the driver.
+
+The focused regression coverage is in `tests/test_gui_feedback.py`: cache
+freshness/copy isolation, session log isolation/cleanup, workload boundaries,
+locked/unlocked defaults, external result layouts, parity legend styling and
+GUI training reproducibility.
+
+The core explainability package also exports `render_cached_global_attribution`,
+`render_cached_local_attribution`, `render_cached_global_shap_attribution` and
+`render_cached_local_shap_attribution`. These accept raw attribution dictionaries/frames,
+model names and plotting inputs, and return the same result dataclasses as the existing
+`compute_*` functions. They have no Streamlit dependency, load no fitted models, never
+perform inference, and do not update caches. The existing computation APIs retain their
+signatures and delegate rendering to these helpers.
+Local GNN rendering accepts optional `mols_per_model`; local SHAP rendering accepts
+optional `samples_per_model`. These restrict displayed pairs to each model/bootstrap's
+chosen samples while retaining the full saved population for PerModel normalisation.
+Local GNN rendering and `visualization.plot_mols_with_weights` accept optional
+`drawing_dpi` to redraw the embedded RDKit bitmap for a three-inch molecule panel;
+leaving it unset keeps the existing 600-pixel drawing. This changes drawing quality
+only, not attribution calculations or normalisation.
+
+SME `render_cached_global_attribution` and the ridge/bar/strip plotting functions accept
+optional `fragment_labels={original_identifier: display_label}`. Display labels never
+replace raw keys or affect numerical values and filtering.
+The renderer also accepts `fragment_label_color` (a Matplotlib colour string) and
+`match_fragment_label_colors` (matching takes precedence). Its returned
+`GlobalAttributionResult.fragment_label_colors` maps original identifiers to RGB
+colours for consistent structure exports. The three plotting functions accept this
+mapping as `fragment_label_colors`. Leaving these arguments unset retains their
+existing defaults. `visualization.attribution_fragment_colors` computes the shared
+ridge/bar palette or strip mean-marker colours for the selected top/bottom fragments.
+The renderer and all three SME plotters accept `observation_count_position=None`
+(hidden), `"tag"` or `"right"`. Counts come from each selected fragment's score-list
+length, including occurrences and model/bootstrap pairs, rather than unique molecules.
+
+The four GUI explanation display functions accept optional `export_options`
+(`{"dpi": 300, "prefix": "unique-analysis-view"}`), enabling independent export
+controls per descriptor/sample/model. Without it, page 5 retains its existing preview.
+`figure_bytes(figure, file_format="svg", dpi=300)` accepts `svg`, `pdf`, or `png`
+and 50–1200 DPI; it preserves the figure size, data and rasterisation flags. PNG
+exports above 40 million pixels are rejected. Molecule heatmaps and force-plot
+gradients retain their source raster detail inside vector documents.
+
+`polynet.explainability.fragment_figures` (also exported from `polynet.explainability`)
+provides `fragment_label_table`, `FragmentGridOptions`, `fragment_structure_svg` and
+`fragment_structure_png`. Supply all saved fragment identifiers to `fragment_label_table`
+for stable tags. Structure renderers take a selected mapping DataFrame in plot order.
+`FragmentGridOptions` defines columns, panel width/height and gaps in mm, atom/tag fonts
+and bond width in pt, and bond length in mm. PNG defaults to 600 DPI and embeds resolution
+metadata; SVG is vector. `ordered_attribution_fragments` returns the shared descending
+mean/top-bottom selection used by the distribution and its exports.
+Both structure renderers accept optional `tag_colors={original_identifier: colour}`,
+defaulting missing tags to black. These colours affect tag text only. GUI drawing
+caches include this mapping so changing colours refreshes SVG and PNG exports.

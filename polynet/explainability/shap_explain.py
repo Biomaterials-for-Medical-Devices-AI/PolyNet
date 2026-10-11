@@ -61,7 +61,9 @@ from polynet.explainability.visualization import get_cmap
 logger = logging.getLogger(__name__)
 
 _REGRESSION_KEY = "regression"
-_META_COLS = ["model_type", "iteration", "sample_id", "class_idx"]
+_ID_COLS = ["model_type", "iteration", "sample_id", "class_idx"]
+BASE_VALUE_COLUMN = "base_value"
+_META_COLS = [*_ID_COLS, BASE_VALUE_COLUMN]
 
 # Fixed seed for the random sampling of SHAP's KernelExplainer (used for models
 # without a tree or linear explainer, e.g. SVMs): its background sample and its
@@ -72,8 +74,8 @@ KERNEL_EXPLAINER_SEED = 0
 
 # Version of the SHAP values stored in the cache files; bump when the
 # computation changes so stale values are recomputed.
-# Version 2: seeded KernelExplainer (reproducible SVM SHAP values).
-SHAP_CACHE_VERSION = 2
+# Version 3: store the explainer baseline alongside unchanged raw SHAP scores.
+SHAP_CACHE_VERSION = 3
 _SHAP_CACHE_VERSION_COL = "shap_cache_version"
 
 
@@ -115,12 +117,12 @@ class InstanceAttributionResult:
     attribution_df:
         Per-feature SHAP table with columns
         ``[Feature, SHAP Value, Normalised SHAP]``.
-        Empty when ``warning`` is set.
+        Empty when no attributions are available; preserved if only the baseline is missing.
     figure:
         Waterfall / force / bar figure for this instance.  ``None`` when
         ``warning`` is set.
     warning:
-        Non-empty string when no SHAP values could be computed; ``None`` otherwise.
+        Non-empty when attributions or the required baseline are unavailable.
     model_label:
         Display label of the model this result belongs to (e.g.
         ``"Random Forest polyBERT — bootstrap 1"``) when explanations are shown
@@ -176,7 +178,7 @@ def _load_shap_cache(experiment_path: Path, descriptor: str) -> pd.DataFrame:
     """
     path = _shap_cache_path(experiment_path, descriptor)
     if path.exists():
-        df = pd.read_csv(path, dtype={col: str for col in _META_COLS})
+        df = pd.read_csv(path, dtype={col: str for col in _ID_COLS})
         versions = df.get(_SHAP_CACHE_VERSION_COL)
         if versions is None or not (versions == SHAP_CACHE_VERSION).all():
             logger.warning(
@@ -185,6 +187,8 @@ def _load_shap_cache(experiment_path: Path, descriptor: str) -> pd.DataFrame:
             )
             return pd.DataFrame(columns=_META_COLS)
         df = df.drop(columns=[_SHAP_CACHE_VERSION_COL])
+        if BASE_VALUE_COLUMN in df:
+            df[BASE_VALUE_COLUMN] = pd.to_numeric(df[BASE_VALUE_COLUMN], errors="coerce")
         feat_cols = [c for c in df.columns if c not in _META_COLS]
         if feat_cols:
             df[feat_cols] = df[feat_cols].apply(pd.to_numeric, errors="coerce")
@@ -310,6 +314,24 @@ def _compute_shap_values_for_row(
         arr = row
 
     return arr.ravel()  # guarantee 1-D
+
+
+def _shap_base_value(explainer, problem_type: ProblemType, target_class: int | None) -> float:
+    """Select the expected output in the same space/class as the SHAP vector.
+
+    Single-output binary explainers work in positive-class margin/log-odds;
+    class zero mirrors both its contributions and its baseline. Probability
+    explainers expose one baseline per class, selected without negation.
+    """
+    values = np.asarray(explainer.expected_value, dtype=float).reshape(-1)
+    if not values.size or not np.isfinite(values).all():
+        raise ValueError("The SHAP explainer did not provide a baseline.")
+    if problem_type == ProblemType.Regression:
+        return float(values[0])
+    class_idx = int(target_class) if target_class is not None else 1
+    if values.size > 1:
+        return float(values[min(class_idx, values.size - 1)])
+    return float(-values[0] if class_idx == 0 else values[0])
 
 
 # ---------------------------------------------------------------------------
@@ -449,6 +471,7 @@ def compute_and_cache_shap(
                     shap_vals = _compute_shap_values_for_row(
                         explainer, x_row, problem_type, target_class
                     )
+                    base_value = _shap_base_value(explainer, problem_type, target_class)
                 except Exception as exc:
                     logger.warning(
                         f"SHAP computation failed for sample '{sample_id}' / "
@@ -461,13 +484,16 @@ def compute_and_cache_shap(
                     "iteration": str(iteration),
                     "sample_id": sample_id,
                     "class_idx": cls_key,
+                    BASE_VALUE_COLUMN: base_value,
                 }
                 row.update(dict(zip(feature_names, shap_vals.tolist())))
                 new_rows.append(row)
 
         if new_rows:
             new_df = pd.DataFrame(new_rows)
-            cache_df = pd.concat([cache_df, new_df], ignore_index=True)
+            cache_df = (
+                new_df if cache_df.empty else pd.concat([cache_df, new_df], ignore_index=True)
+            )
             _save_shap_cache(cache_df, cache_root, descriptor)
             logger.info(f"[SHAP] Cached {len(new_rows)} new row(s) for descriptor '{descriptor}'.")
 
@@ -642,7 +668,10 @@ def merge_shap_attributions(
     if subset.empty:
         return pd.DataFrame()
 
-    merged = subset.groupby("sample_id")[feature_cols].mean().reset_index().set_index("sample_id")
+    # A feature dropped by a fitted transform contributes zero for that model.
+    # Including those zeros preserves ensemble additivity across different feature sets.
+    values = subset[feature_cols].fillna(0.0)
+    merged = values.groupby(subset["sample_id"]).mean()
     return merged
 
 
@@ -748,9 +777,9 @@ def plot_local_shap(
     feature_names:
         Feature names, parallel to ``values``.
     base_value:
-        Anchor for the waterfall / force plot (``E[f(x)]``). The cache stores
-        only SHAP values, so this defaults to 0.0; with normalisation enabled
-        the additive reconstruction is not meaningful anyway.
+        Explainer's expected output, averaged/scaled exactly like contributions.
+        Unnormalised plots reconstruct the explained model output. Normalised
+        plots reconstruct its scaled output and are labelled accordingly.
     data:
         Optional raw feature values for the instance, used to label each row as
         ``value = feature``. ``None`` shows feature names only.
@@ -758,9 +787,8 @@ def plot_local_shap(
         ``"waterfall"`` (default), ``"force"``, or ``"bar"`` — native
         ``shap.plots`` styles.
     max_display:
-        Maximum number of features (by ``|SHAP|``) to show. Waterfall and bar
-        use shap's own ``max_display``; the force plot has none, so it is
-        truncated to the top ``max_display`` features here.
+        Maximum number of features (by ``|SHAP|``) in waterfall and bar plots.
+        Force plots display all features to preserve the additive endpoint.
     neg_color, pos_color:
         Hex colours for negative / positive contributions. Waterfall and bar
         honour them exactly via shap's style context; the force plot is recoloured
@@ -787,19 +815,8 @@ def plot_local_shap(
 
     plt.figure()
     if plot_type == "force":
-        # shap's force plot has no max_display and shows every feature, so
-        # truncate to the top-N by |SHAP| ourselves before drawing.
-        force_expl = explanation
-        vals = np.asarray(explanation.values, dtype=float)
-        if max_display is not None and len(vals) > max_display:
-            top = np.sort(np.argsort(np.abs(vals))[::-1][:max_display])
-            force_expl = shap.Explanation(
-                values=vals[top],
-                base_values=explanation.base_values,
-                data=(explanation.data[top] if explanation.data is not None else None),
-                feature_names=[explanation.feature_names[i] for i in top],
-            )
-        shap.plots.force(force_expl, matplotlib=True, show=False)
+        # Dropping contributions changes f(x); keep every feature in force plots.
+        shap.plots.force(explanation, matplotlib=True, show=False)
         fig = plt.gcf()
         _recolour_force_figure(fig, neg_color, pos_color)
     else:
@@ -982,11 +999,50 @@ def compute_global_shap_attribution(
             parts.setdefault(descriptor, []).append(df)
     cache_by_descriptor = {
         descriptor: pd.concat(dfs, ignore_index=True).drop_duplicates(
-            subset=[c for c in _META_COLS if c in dfs[0].columns]
+            subset=[c for c in _ID_COLS if c in dfs[0].columns]
         )
         for descriptor, dfs in parts.items()
     }
 
+    return render_cached_global_shap_attribution(
+        cache_by_descriptor=cache_by_descriptor,
+        model_names=list(models),
+        descriptor_dfs=descriptor_dfs,
+        explain_sample_ids=explain_sample_ids,
+        problem_type=problem_type,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        target_class=target_class,
+        top_n=top_n,
+        plot_type=plot_type,
+        target_col=target_col,
+        samples_per_model=samples_per_model,
+    )
+
+
+def render_cached_global_shap_attribution(
+    cache_by_descriptor: dict,
+    model_names: list[str],
+    descriptor_dfs: dict,
+    explain_sample_ids: list[str],
+    problem_type: ProblemType,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    target_class: int | None = None,
+    top_n: int | None = 10,
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
+    target_col: str | None = None,
+    samples_per_model: dict[str, set[str]] | None = None,
+) -> dict[str, GlobalAttributionResult]:
+    """Render saved raw attributions without models, inference or cache writes."""
+    models = dict.fromkeys(model_names)
+    class_key = _class_key(problem_type, target_class)
+    cache_by_descriptor = {
+        descriptor: frame.loc[frame["class_idx"].astype(str) == class_key].copy()
+        for descriptor, frame in cache_by_descriptor.items()
+    }
     # Normalise descriptor_dfs keys to strings for lookup
     str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
 
@@ -1067,136 +1123,6 @@ def compute_global_shap_attribution(
     return results
 
 
-def _separate_local_results(
-    cache_df: pd.DataFrame,
-    descriptor: str,
-    model_log_names: list[str],
-    explain_sample_ids: list[str],
-    normalisation_type: ImportanceNormalisationMethod,
-    problem_type: ProblemType,
-    target_class: int | None,
-    descriptor_df: pd.DataFrame | None,
-    target_col: str | None,
-    local_plot_type: str,
-    max_display: int,
-    neg_color: str,
-    pos_color: str,
-) -> list[InstanceAttributionResult]:
-    """
-    Build one :class:`InstanceAttributionResult` per model × sample (Separate).
-
-    Mirrors the per-sample normalisation of the Average path (``Local`` → each
-    row by its own max-abs, ``Global`` → a single divisor over the displayed
-    rows, otherwise raw), but keeps each model's explanation distinct and tags it
-    with ``model_label``. Results are ordered by sample, then by model.
-    """
-    feature_cols = [c for c in cache_df.columns if c not in _META_COLS]
-    results: list[InstanceAttributionResult] = []
-
-    if not feature_cols or cache_df.empty:
-        return results
-
-    sample_ids_set = {str(s) for s in explain_sample_ids}
-
-    # Global divisor over all displayed (model × sample) rows for this descriptor.
-    global_divisor = 1.0
-    if normalisation_type == ImportanceNormalisationMethod.Global:
-        sel = cache_df[cache_df["sample_id"].isin(sample_ids_set)]
-        if not sel.empty:
-            max_abs = np.nanmax(np.abs(sel[feature_cols].to_numpy(dtype=float)))
-            global_divisor = float(max_abs) if max_abs > 0 else 1.0
-
-    cls_str = "" if problem_type == ProblemType.Regression else f", class {target_class}"
-
-    for sample_id in explain_sample_ids:
-        sid = str(sample_id)
-        for key in sorted(model_log_names):
-            model_type, _, iteration = _parse_model_log_name(key)
-            model_label = f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
-
-            mask = (
-                (cache_df["model_type"] == model_type)
-                & (cache_df["iteration"] == str(iteration))
-                & (cache_df["sample_id"] == sid)
-            )
-            row = cache_df.loc[mask]
-            if row.empty:
-                results.append(
-                    InstanceAttributionResult(
-                        sample_idx=sid,
-                        info_msg="",
-                        true_label="N/A",
-                        predicted_label="N/A",
-                        attribution_df=pd.DataFrame(),
-                        figure=None,
-                        warning=f"No SHAP values found for sample '{sid}' / {model_label}.",
-                        model_label=model_label,
-                    )
-                )
-                continue
-
-            raw_vals = row.iloc[0][feature_cols].to_numpy(dtype=float)
-
-            if normalisation_type == ImportanceNormalisationMethod.Local:
-                max_abs = np.nanmax(np.abs(raw_vals))
-                divisor = float(max_abs) if max_abs > 0 else 1.0
-            elif normalisation_type == ImportanceNormalisationMethod.Global:
-                divisor = global_divisor
-            else:
-                divisor = 1.0
-
-            normed_vals = raw_vals / divisor if divisor != 1.0 else raw_vals.copy()
-
-            attr_df = (
-                pd.DataFrame(
-                    {
-                        "Feature": feature_cols,
-                        "SHAP Value": raw_vals,
-                        "Normalised SHAP": normed_vals,
-                    }
-                )
-                .sort_values("SHAP Value", key=abs, ascending=False)
-                .reset_index(drop=True)
-            )
-
-            feature_matrix = _aligned_feature_matrix(
-                sample_index=pd.Index([sid]),
-                feature_cols=feature_cols,
-                descriptor_df=descriptor_df,
-                target_col=target_col,
-            )
-            instance_data = feature_matrix[0] if feature_matrix is not None else None
-            fig = plot_local_shap(
-                values=normed_vals,
-                feature_names=feature_cols,
-                base_value=0.0,
-                data=instance_data,
-                plot_type=local_plot_type,
-                max_display=max_display,
-                neg_color=neg_color,
-                pos_color=pos_color,
-            )
-            plt.close("all")
-
-            info_msg = (
-                f"SHAP attribution for `{sid}` | {descriptor}"
-                f"{cls_str} | normalisation: `{normalisation_type}`"
-            )
-            results.append(
-                InstanceAttributionResult(
-                    sample_idx=sid,
-                    info_msg=info_msg,
-                    true_label="N/A",
-                    predicted_label="N/A",
-                    attribution_df=attr_df,
-                    figure=fig,
-                    model_label=model_label,
-                )
-            )
-
-    return results
-
-
 def compute_local_shap_attribution(
     models: dict,
     descriptor_dfs: dict,
@@ -1266,137 +1192,168 @@ def compute_local_shap_attribution(
         target_col=target_col,
     )
 
-    # Raw descriptor values (per instance) are used to label native SHAP plots.
-    str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
+    cache_by_descriptor = {
+        descriptor: _rows_of_models(frame, list(models), explain_sample_ids)
+        for descriptor, frame in cache_by_descriptor.items()
+    }
 
-    results: dict[str, list[InstanceAttributionResult]] = {}
+    return render_cached_local_shap_attribution(
+        cache_by_descriptor=cache_by_descriptor,
+        model_names=list(models),
+        descriptor_dfs=descriptor_dfs,
+        explain_sample_ids=explain_sample_ids,
+        problem_type=problem_type,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        target_class=target_class,
+        local_plot_type=local_plot_type,
+        max_display=max_display,
+        predictions=predictions,
+        target_col=target_col,
+        aggregation=aggregation,
+    )
 
-    for descriptor, cache_df in cache_by_descriptor.items():
-        model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
-        descriptor_df = str_dfs.get(descriptor)
 
-        # Separate aggregation: one explanation per model × sample (no merge).
-        if aggregation == ExplanationAggregation.Separate:
-            results[descriptor] = _separate_local_results(
-                cache_df=cache_df,
-                descriptor=descriptor,
-                model_log_names=model_log_names,
-                explain_sample_ids=explain_sample_ids,
-                normalisation_type=normalisation_type,
-                problem_type=problem_type,
-                target_class=target_class,
-                descriptor_df=descriptor_df,
-                target_col=target_col,
-                local_plot_type=local_plot_type,
-                max_display=max_display,
-                neg_color=neg_color,
-                pos_color=pos_color,
-            )
-            continue
+def render_cached_local_shap_attribution(
+    cache_by_descriptor: dict,
+    model_names: list[str],
+    descriptor_dfs: dict,
+    explain_sample_ids: list[str],
+    problem_type: ProblemType,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    target_class: int | None = None,
+    local_plot_type: str = "waterfall",
+    max_display: int = 15,
+    predictions: dict | None = None,
+    target_col: str | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+    samples_per_model: dict[str, set[str]] | None = None,
+) -> dict[str, list[InstanceAttributionResult]]:
+    """Plot cached scores and baselines; PerModel uses the whole saved population.
 
-        # ----- Average aggregation (default, historical behaviour) -----
-        # Merge ensemble
-        merged_df = merge_shap_attributions(
-            cache_df=cache_df, model_log_names=model_log_names, sample_ids=explain_sample_ids
-        )
-
-        # Global divisor (if needed)
-        global_divisor = 1.0
-        if normalisation_type == ImportanceNormalisationMethod.Global and not merged_df.empty:
-            feature_cols = [c for c in merged_df.columns if c not in _META_COLS]
-            max_abs = np.nanmax(np.abs(merged_df[feature_cols].to_numpy(dtype=float)))
-            global_divisor = float(max_abs) if max_abs > 0 else 1.0
-
-        descriptor_results: list[InstanceAttributionResult] = []
-
-        for sample_id in explain_sample_ids:
-            sid = str(sample_id)
-
-            if merged_df.empty or sid not in merged_df.index:
+    Scaling happens per fitted model/bootstrap before ensemble averaging, using
+    all available saved samples of that model, even when displaying one sample.
+    ``samples_per_model`` restricts displayed pairs to each bootstrap's own set
+    without changing that normalisation reference.
+    No missing model/sample pairs are calculated or silently fabricated.
+    """
+    results = {}
+    class_key = _class_key(problem_type, target_class)
+    str_dfs = {str(k): v for k, v in descriptor_dfs.items()}
+    for descriptor, frame in cache_by_descriptor.items():
+        names = [k for k in model_names if _parse_model_log_name(k)[1] == descriptor]
+        frame = frame.loc[frame["class_idx"].astype(str) == class_key].copy()
+        reference = _rows_of_models(frame, names, frame["sample_id"].tolist())
+        features = [c for c in reference.columns if c not in _META_COLS]
+        raw = _rows_of_models(reference, names, explain_sample_ids, samples_per_model).copy()
+        displayed = raw.copy()
+        if normalisation_type == ImportanceNormalisationMethod.PerModel and not reference.empty:
+            for (model_type, iteration), block in reference.groupby(["model_type", "iteration"]):
+                maximum = block[features].abs().max().max() if features else 0.0
+                divisor = float(maximum) if pd.notna(maximum) and maximum > 0 else 1.0
+                mask = (displayed["model_type"] == model_type) & (
+                    displayed["iteration"] == iteration
+                )
+                displayed.loc[mask, features] = displayed.loc[mask, features] / divisor
+                if BASE_VALUE_COLUMN in displayed:
+                    displayed.loc[mask, BASE_VALUE_COLUMN] /= divisor
+        descriptor_results = []
+        for sid in map(str, explain_sample_ids):
+            sample_raw = raw.loc[raw["sample_id"].astype(str) == sid]
+            sample_display = displayed.loc[displayed["sample_id"].astype(str) == sid]
+            if aggregation == ExplanationAggregation.Separate:
+                groups = []
+                for name in sorted(names):
+                    model_type, _, iteration = _parse_model_log_name(name)
+                    mask = (sample_raw["model_type"] == model_type) & (
+                        sample_raw["iteration"].astype(str) == str(iteration)
+                    )
+                    if mask.any():
+                        label = f"{prettify_label(f'{model_type}-{descriptor}')} — bootstrap {iteration}"
+                        groups.append((sample_raw.loc[mask], sample_display.loc[mask], label))
+            else:
+                groups = [(sample_raw, sample_display, None)]
+            for raw_rows, display_rows, label in groups:
+                if raw_rows.empty or not features:
+                    descriptor_results.append(
+                        InstanceAttributionResult(
+                            sid,
+                            "",
+                            "N/A",
+                            "N/A",
+                            pd.DataFrame(),
+                            None,
+                            warning=f"No SHAP values found for sample '{sid}' ({descriptor}).",
+                            model_label=label,
+                        )
+                    )
+                    continue
+                raw_vals = raw_rows[features].fillna(0.0).mean().to_numpy(dtype=float)
+                values = display_rows[features].fillna(0.0).mean().to_numpy(dtype=float)
+                divisor = 1.0
+                if normalisation_type == ImportanceNormalisationMethod.Local:
+                    maximum = np.max(np.abs(values))
+                    divisor = float(maximum) if maximum > 0 else 1.0
+                elif normalisation_type == ImportanceNormalisationMethod.Global:
+                    # Match the population view: one maximum across saved trained instances.
+                    maximum = reference[features].abs().max().max()
+                    divisor = float(maximum) if pd.notna(maximum) and maximum > 0 else 1.0
+                values = values / divisor
+                baseline_available = (
+                    BASE_VALUE_COLUMN in display_rows
+                    and display_rows[BASE_VALUE_COLUMN].notna().all()
+                )
+                base_value = (
+                    float(display_rows[BASE_VALUE_COLUMN].mean() / divisor)
+                    if baseline_available
+                    else None
+                )
+                table = (
+                    pd.DataFrame(
+                        {"Feature": features, "SHAP Value": raw_vals, "Normalised SHAP": values}
+                    )
+                    .sort_values("SHAP Value", key=abs, ascending=False)
+                    .reset_index(drop=True)
+                )
+                matrix = _aligned_feature_matrix(
+                    pd.Index([sid]), features, str_dfs.get(descriptor), target_col
+                )
+                figure = None
+                warning = None
+                if baseline_available:
+                    figure = plot_local_shap(
+                        values=values,
+                        feature_names=features,
+                        base_value=base_value,
+                        data=matrix[0] if matrix is not None else None,
+                        plot_type=local_plot_type,
+                        max_display=max_display,
+                        neg_color=neg_color,
+                        pos_color=pos_color,
+                    )
+                    if normalisation_type != ImportanceNormalisationMethod.NoNormalisation:
+                        figure.suptitle("Normalised model output", fontsize=11)
+                    plt.close(figure)
+                else:
+                    warning = "The saved SHAP values lack their baseline. Run the analysis again on page 5."
+                pred = (predictions or {}).get(sid, {})
+                info = f"SHAP attribution for `{sid}` | {descriptor} | normalisation: `{normalisation_type}`"
+                if target_class is not None:
+                    info += f" | class `{target_class}`"
                 descriptor_results.append(
                     InstanceAttributionResult(
-                        sample_idx=sid,
-                        info_msg="",
-                        true_label="N/A",
-                        predicted_label="N/A",
-                        attribution_df=pd.DataFrame(),
-                        figure=None,
-                        warning=f"No SHAP values found for sample '{sid}' (descriptor '{descriptor}').",
+                        sid,
+                        info,
+                        str(pred.get("true", "N/A")),
+                        str(pred.get("predicted", "N/A")),
+                        table,
+                        figure,
+                        warning=warning,
+                        model_label=label,
                     )
                 )
-                continue
-
-            shap_row = merged_df.loc[sid]
-            feature_cols = list(shap_row.index)
-            raw_vals = shap_row.to_numpy(dtype=float)
-
-            # Normalise
-            if normalisation_type == ImportanceNormalisationMethod.Local:
-                max_abs = np.nanmax(np.abs(raw_vals))
-                divisor = float(max_abs) if max_abs > 0 else 1.0
-            elif normalisation_type == ImportanceNormalisationMethod.Global:
-                divisor = global_divisor
-            else:
-                divisor = 1.0
-
-            normed_vals = raw_vals / divisor if divisor != 1.0 else raw_vals.copy()
-
-            # Attribution DataFrame
-            attr_df = (
-                pd.DataFrame(
-                    {
-                        "Feature": feature_cols,
-                        "SHAP Value": raw_vals,
-                        "Normalised SHAP": normed_vals,
-                    }
-                )
-                .sort_values("SHAP Value", key=abs, ascending=False)
-                .reset_index(drop=True)
-            )
-
-            # Labels
-            pred_info = (predictions or {}).get(sid, {})
-            true_label = str(pred_info.get("true", "N/A"))
-            predicted_label = str(pred_info.get("predicted", "N/A"))
-
-            # Figure — native shap local plot. Raw feature values (when available)
-            # label each row; SHAP magnitudes are the merged/normalised values.
-            feature_matrix = _aligned_feature_matrix(
-                sample_index=pd.Index([sid]),
-                feature_cols=feature_cols,
-                descriptor_df=descriptor_df,
-                target_col=target_col,
-            )
-            instance_data = feature_matrix[0] if feature_matrix is not None else None
-            fig = plot_local_shap(
-                values=normed_vals,
-                feature_names=feature_cols,
-                base_value=0.0,
-                data=instance_data,
-                plot_type=local_plot_type,
-                max_display=max_display,
-                neg_color=neg_color,
-                pos_color=pos_color,
-            )
-            plt.close("all")
-
-            cls_str = "" if problem_type == ProblemType.Regression else f", class {target_class}"
-            info_msg = (
-                f"SHAP attribution for `{sid}` | {descriptor}"
-                f"{cls_str} | normalisation: `{normalisation_type}`"
-            )
-
-            descriptor_results.append(
-                InstanceAttributionResult(
-                    sample_idx=sid,
-                    info_msg=info_msg,
-                    true_label=true_label,
-                    predicted_label=predicted_label,
-                    attribution_df=attr_df,
-                    figure=fig,
-                )
-            )
-
         results[descriptor] = descriptor_results
-
     return results

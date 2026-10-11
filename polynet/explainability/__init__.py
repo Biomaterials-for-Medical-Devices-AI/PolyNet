@@ -50,6 +50,14 @@ from polynet.explainability.explain import (
     compute_global_attribution,
     compute_local_attribution,
     fragment_attributions_to_atom_weights,
+    render_cached_global_attribution,
+    render_cached_local_attribution,
+)
+from polynet.explainability.fragment_figures import (
+    FragmentGridOptions,
+    fragment_label_table,
+    fragment_structure_png,
+    fragment_structure_svg,
 )
 from polynet.explainability.masking import (
     calculate_masking_attributions,
@@ -60,9 +68,12 @@ from polynet.explainability.shap_explain import (
     InstanceAttributionResult,
     compute_global_shap_attribution,
     compute_local_shap_attribution,
+    render_cached_global_shap_attribution,
+    render_cached_local_shap_attribution,
 )
 from polynet.explainability.visualization import (
     get_cmap,
+    ordered_attribution_fragments,
     plot_attribution_bar,
     plot_attribution_distribution,
     plot_attribution_strip,
@@ -80,6 +91,8 @@ __all__ = [
     "GlobalAttributionResult",
     "MolAttributionResult",
     "fragment_attributions_to_atom_weights",
+    "render_cached_global_attribution",
+    "render_cached_local_attribution",
     # Attribution cache utility
     "deep_update",
     # Masking attributions (low-level)
@@ -93,6 +106,8 @@ __all__ = [
     "compute_global_shap_attribution",
     "compute_local_shap_attribution",
     "InstanceAttributionResult",
+    "render_cached_global_shap_attribution",
+    "render_cached_local_shap_attribution",
     # Visualization
     "get_cmap",
     "plot_mols_with_weights",
@@ -100,5 +115,10 @@ __all__ = [
     "plot_attribution_distribution",
     "plot_attribution_bar",
     "plot_attribution_strip",
+    "ordered_attribution_fragments",
+    "FragmentGridOptions",
+    "fragment_label_table",
+    "fragment_structure_svg",
+    "fragment_structure_png",
     "plot_projection_embeddings",
 ]

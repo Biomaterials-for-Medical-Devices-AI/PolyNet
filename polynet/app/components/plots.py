@@ -1,5 +1,4 @@
 from collections import defaultdict
-import json
 from pathlib import Path
 import re
 
@@ -12,6 +11,7 @@ from polynet.app.options.file_paths import (
     plots_directory,
     unseen_predictions_parent_path,
 )
+from polynet.app.services.cache import read_csv, read_json
 
 
 def display_predictions(predictions_df: pd.DataFrame):
@@ -25,7 +25,7 @@ def display_predictions(predictions_df: pd.DataFrame):
     st.write(predictions_df)
 
 
-def display_plots(plots_path: Path):
+def display_plots(plots_path: Path, *, export_plots: bool = False):
     """
     Organize and display plots from a directory with the following hierarchy:
     - Model name
@@ -67,6 +67,16 @@ def display_plots(plots_path: Path):
             for plot_type, plot_path in sorted(plot_groups[model][iteration]):
                 st.markdown(f"*{plot_type}*")
                 st.image(plot_path, use_container_width=True)
+                if export_plots:
+                    st.download_button(
+                        "Export plot",
+                        data=plot_path.read_bytes(),
+                        file_name=plot_path.name,
+                        mime="image/png",
+                        key=f"saved_plot_export:{plot_path.resolve()}",
+                        help="Downloads the original saved PNG without resizing or recompression.",
+                        on_click="ignore",
+                    )
 
 
 def display_model_metrics(metrics_dict: dict):
@@ -146,28 +156,70 @@ def display_mean_std_model_metrics(metrics_dict: dict):
 
 
 def display_model_results(
-    experiment_path: Path, expanded: bool, expander_str: str = "Model Results"
+    experiment_path: Path,
+    expanded: bool,
+    expander_str: str = "Model Results",
+    *,
+    external: bool = False,
+    export_plots: bool = False,
 ):
+    """Load saved results on demand, using the training or external-run layout.
 
-    with st.expander(expander_str, expanded=expanded):
+    External runs write predictions.csv and metrics.json directly in their
+    dataset folder; older runs may use the training-style ml_results layout.
+    ``export_plots`` adds a download of each original saved PNG on page 6.
+    """
+    # Collapsed expanders still execute their bodies in Streamlit. An explicit
+    # toggle avoids reading and rendering all previous runs on each page visit.
+    if not st.toggle(
+        f"Show {expander_str}",
+        value=expanded,
+        key=f"results:{experiment_path.resolve()}:{expander_str}:{expanded}",
+    ):
+        return
 
-        predictions_path = ml_results_file_path(experiment_path=experiment_path)
+    with st.expander(expander_str, expanded=True):
+
+        direct_layout = external and (
+            (experiment_path / "predictions.csv").exists()
+            or (experiment_path / "metrics.json").exists()
+        )
+        predictions_path = (
+            experiment_path / "predictions.csv"
+            if direct_layout
+            else ml_results_file_path(experiment_path=experiment_path)
+        )
+        displayed = False
 
         if predictions_path.exists():
-            predictions = pd.read_csv(predictions_path, index_col=0)
+            predictions = read_csv(predictions_path, index_col=0)
             display_predictions(predictions)
+            displayed = True
 
-        metrics_path = model_metrics_file_path(experiment_path=experiment_path)
+        metrics_path = (
+            experiment_path / "metrics.json"
+            if direct_layout
+            else model_metrics_file_path(experiment_path=experiment_path)
+        )
         if metrics_path.exists():
-            with open(metrics_path, "rb") as f:
-                # Load the metrics dictionary from the file
-                metrics_dict = json.load(f)
-            display_model_metrics(metrics_dict)
-            display_mean_std_model_metrics(metrics_dict)
+            metrics_dict = read_json(metrics_path)
+            if metrics_dict:
+                display_model_metrics(metrics_dict)
+                split_metrics = {k: v for k, v in metrics_dict.items() if k != "ensemble"}
+                if split_metrics:
+                    display_mean_std_model_metrics(split_metrics)
+                displayed = True
 
-        plots_path = plots_directory(experiment_path=experiment_path)
+        plots_path = (
+            experiment_path / "plots"
+            if direct_layout
+            else plots_directory(experiment_path=experiment_path)
+        )
         if plots_path.exists():
-            display_plots(plots_path)
+            display_plots(plots_path, export_plots=export_plots)
+            displayed = displayed or any(plots_path.glob("*.png"))
+        if not displayed:
+            st.info("No saved predictions, metrics or plots were found for this run.")
 
 
 def display_unseen_predictions(experiment_path: Path):
@@ -179,6 +231,8 @@ def display_unseen_predictions(experiment_path: Path):
     subdirs = [p for p in unseen_results_path.iterdir() if p.is_dir()]
 
     for path in subdirs:
-        experiment = str(path).split("/")[-1]
+        experiment = path.name
 
-        display_model_results(experiment_path=path, expanded=False, expander_str=experiment)
+        display_model_results(
+            experiment_path=path, expanded=False, expander_str=experiment, external=True
+        )

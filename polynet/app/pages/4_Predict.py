@@ -24,6 +24,7 @@ from polynet.app.options.file_paths import (
 from polynet.app.options.state_keys import PredictPageStateKeys
 from polynet.app.services.configurations import load_options
 from polynet.app.services.experiments import get_experiments
+from polynet.app.services.progress import run_progress
 from polynet.applicability import summarise_domain
 from polynet.config.enums import ProblemType, StringRepresentation, TransformDescriptor
 from polynet.config.schemas import (
@@ -225,7 +226,7 @@ if experiment_name:
             if out_dir.exists():
                 rmtree(out_dir)
 
-            with st.spinner("Running predictions..."):
+            with run_progress("Prediction"):
                 predictions, metrics = predict_external(
                     data=df,
                     data_cfg=data_options,

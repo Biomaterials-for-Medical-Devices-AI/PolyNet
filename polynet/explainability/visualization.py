@@ -32,6 +32,8 @@ from rdkit.Chem import AllChem, Draw
 from rdkit.Chem.Draw import SimilarityMaps, rdMolDraw2D
 import seaborn as sns
 
+from polynet.config.enums import AttributionPlotType
+
 # ---------------------------------------------------------------------------
 # Colormap
 # ---------------------------------------------------------------------------
@@ -77,6 +79,7 @@ def plot_mols_with_weights(
     min_weight: float | None = None,
     max_weight: float | None = None,
     colormap="coolwarm",
+    drawing_dpi: int | None = None,
 ) -> plt.Figure:
     """
     Plot molecules with per-atom attribution weights as a similarity heatmap.
@@ -101,6 +104,9 @@ def plot_mols_with_weights(
         symmetrically from the data range.
     colormap:
         Matplotlib colormap name passed to ``SimilarityMaps``.
+    drawing_dpi:
+        Optional resolution of RDKit heatmap images at their plotted physical
+        size. Omit to retain the existing 600-pixel molecule drawings.
 
     Returns
     -------
@@ -133,13 +139,29 @@ def plot_mols_with_weights(
     for i, (mol, weights) in enumerate(zip(mols, weights_list)):
         AllChem.Compute2DCoords(mol)
 
-        d2d = Draw.MolDraw2DCairo(600, 600)
+        if drawing_dpi is not None:
+            if (
+                not isinstance(drawing_dpi, int)
+                or isinstance(drawing_dpi, bool)
+                or not 72 <= drawing_dpi <= 1200
+            ):
+                raise ValueError("Molecule drawing DPI must be between 72 and 1200.")
+            # Each molecule has a three-inch panel. Drawing for its full size
+            # keeps at least the requested DPI after layout reserves margins.
+            width = height = math.ceil(3 * drawing_dpi)
+        else:
+            width = height = 600
+        scale = min(width, height) / 600
+        d2d = Draw.MolDraw2DCairo(width, height)
         Draw.SetACS1996Mode(d2d.drawOptions(), Draw.MeanBondLength(mol))
         opts = d2d.drawOptions()
+        opts.fixedFontSize = max(1, round(opts.fixedFontSize * scale))
+        opts.fixedBondLength *= scale
+        opts.scalingFactor *= scale
         opts.clearBackground = True
         opts.addStereoAnnotation = True
         opts.addAtomIndices = False
-        opts.bondLineWidth = 2
+        opts.bondLineWidth = 2 * scale
 
         SimilarityMaps.GetSimilarityMapFromWeights(
             mol=mol, weights=weights, draw2d=d2d, colorMap=colormap, alpha=0.7, contourLines=10
@@ -246,6 +268,9 @@ def plot_attribution_distribution(
     pos_color: str = "#ff7f0e",
     kde_bandwidth: float = 0.5,
     top_n: int | None = None,
+    fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
+    observation_count_position: str | None = None,
 ) -> plt.Figure:
     """
     Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
@@ -274,6 +299,15 @@ def plot_attribution_distribution(
         If set, only the ``top_n`` fragments with the highest mean attribution
         and the ``top_n`` with the lowest mean attribution are shown.
         Pass ``None`` to show all fragments.
+    fragment_labels:
+        Optional display-only labels keyed by original fragment identifiers.
+        Scores, fragment ordering and top/bottom selection are unchanged.
+    fragment_label_colors:
+        Optional colours keyed by original fragment identifiers. Only tag text
+        is recoloured; distributions retain their existing palette.
+    observation_count_position:
+        ``"tag"`` appends n to each label; ``"right"`` places n on the right.
+        Counts attribution observations, not unique molecules. Default: hidden.
 
     Returns
     -------
@@ -329,14 +363,28 @@ def plot_attribution_distribution(
         ax.text(
             0,
             0.2,
-            label,
+            _fragment_plot_label(
+                label, attribution_dict, fragment_labels, observation_count_position
+            ),
             fontweight="bold",
-            color=color,
+            color=(fragment_label_colors or {}).get(label, color),
             ha="left",
             va="center",
             transform=ax.transAxes,
             fontsize=9,
         )
+        if observation_count_position == "right":
+            ax.text(
+                1.02,
+                0.2,
+                f"n={len(x)}",
+                transform=ax.transAxes,
+                ha="left",
+                va="center",
+                fontsize=9,
+                color="black",
+                clip_on=False,
+            )
 
     g.map(_label, "attribution")
     g.set_titles("")
@@ -381,6 +429,39 @@ def _prepare_attribution_df(
     return df, ordered_frags, means
 
 
+def _fragment_plot_label(fragment, attribution_dict, fragment_labels, count_position):
+    """A display-only observation count; original identifiers stay untouched."""
+    if count_position not in (None, "tag", "right"):
+        raise ValueError("Observation counts must be hidden, next to the tag or on the right.")
+    label = (fragment_labels or {}).get(fragment, fragment)
+    return f"{label} (n={len(attribution_dict[fragment])})" if count_position == "tag" else label
+
+
+def _right_observation_counts(ax, fragments, attribution_dict, count_position):
+    if count_position == "right":
+        for i, fragment in enumerate(fragments):
+            ax.text(
+                1.02,
+                i,
+                f"n={len(attribution_dict[fragment])}",
+                transform=ax.get_yaxis_transform(),
+                ha="left",
+                va="center",
+                fontsize=9,
+                color="black",
+                clip_on=False,
+            )
+
+
+def ordered_attribution_fragments(
+    attribution_dict: dict[str, list[float]], top_n: int | None = None
+) -> list[str]:
+    """Fragments in distribution-plot order, including the identical top/bottom filter."""
+    if not attribution_dict:
+        return []
+    return _prepare_attribution_df(attribution_dict, top_n)[1]
+
+
 def _build_fragment_palette(
     ordered_frags: list[str], means: pd.Series, neg_color: str, pos_color: str
 ) -> dict:
@@ -394,19 +475,50 @@ def _build_fragment_palette(
     }
 
 
+def attribution_fragment_colors(
+    attribution_dict: dict[str, list[float]],
+    plot_type: AttributionPlotType = AttributionPlotType.Ridge,
+    top_n: int | None = None,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+) -> dict:
+    """RGB colours matching each displayed fragment's distribution/mean marker.
+
+    Ridge/bar use their mean-based endpoint palette. Strip points vary in colour,
+    so its tag matches the mean diamond using that plot's symmetric score scale.
+    Top/bottom selection and normalisation are exactly those of the plotted data.
+    """
+    if not attribution_dict:
+        return {}
+    frame, fragments, means = _prepare_attribution_df(attribution_dict, top_n)
+    if plot_type != AttributionPlotType.Strip:
+        return _build_fragment_palette(fragments, means, neg_color, pos_color)
+    scores = frame["attribution"].to_numpy()
+    maximum = max(abs(scores.min()), abs(scores.max())) or 1.0
+    norm = plt.Normalize(vmin=-maximum, vmax=maximum)
+    cmap = mcolors.LinearSegmentedColormap.from_list(
+        "fragment_tag_cmap", [neg_color, "white", pos_color]
+    )
+    return {fragment: tuple(cmap(norm(means[fragment]))[:3]) for fragment in fragments}
+
+
 def plot_attribution_bar(
     attribution_dict: dict[str, list[float]],
     figsize: tuple[int, int] = (10, 6),
     neg_color: str = "#1f77b4",
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
+    fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
+    observation_count_position: str | None = None,
 ) -> plt.Figure:
     """
     Horizontal bar chart of mean fragment attributions with 95 % CI error bars.
 
     Bars are coloured by the same neg→pos interpolation used in the ridge plot,
     sorted from most positive (top) to most negative (bottom).  Error bars show
-    the 95 % bootstrap confidence interval across all scores for that fragment.
+    a 95 % normal-approximation interval (1.96 × SEM) across that fragment's
+    scores. This is not a resampled bootstrap interval.
 
     Parameters
     ----------
@@ -419,6 +531,12 @@ def plot_attribution_bar(
     top_n:
         Show only the ``top_n`` highest and ``top_n`` lowest mean-attribution
         fragments. Pass ``None`` to show all.
+    fragment_labels:
+        Optional display labels; raw identifiers and statistics remain unchanged.
+    fragment_label_colors:
+        Optional text colours keyed by original fragment identifiers.
+    observation_count_position:
+        ``"tag"`` or ``"right"`` shows attribution observation counts; default hidden.
 
     Returns
     -------
@@ -455,7 +573,17 @@ def plot_attribution_bar(
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(plot_frags, fontsize=9)
+    ax.set_yticklabels(
+        [
+            _fragment_plot_label(f, attribution_dict, fragment_labels, observation_count_position)
+            for f in plot_frags
+        ],
+        fontsize=9,
+    )
+    _right_observation_counts(ax, plot_frags, attribution_dict, observation_count_position)
+    for tick, fragment in zip(ax.get_yticklabels(), plot_frags):
+        if fragment in (fragment_label_colors or {}):
+            tick.set_color(fragment_label_colors[fragment])
     ax.set_xlabel("Mean Attribution (Y − Y_masked)", fontsize=11)
     ax.set_title("Fragment Mean Attribution", fontsize=13, pad=10)
     sns.despine(ax=ax, left=True)
@@ -471,6 +599,9 @@ def plot_attribution_strip(
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
     feature_values_dict: dict[str, list[float]] | None = None,
+    fragment_labels: dict[str, str] | None = None,
+    fragment_label_colors: dict | None = None,
+    observation_count_position: str | None = None,
 ) -> plt.Figure:
     """
     Horizontal strip / swarm-style plot showing every individual attribution score.
@@ -496,6 +627,12 @@ def plot_attribution_strip(
         attribution value.  Each list must be parallel (same length and order)
         to the corresponding list in ``attribution_dict``.  Pass ``None``
         (default) to retain attribution-based colouring (GNN behaviour).
+    fragment_labels:
+        Optional display labels; raw identifiers, colours and scores are unchanged.
+    fragment_label_colors:
+        Optional text colours keyed by original fragment identifiers.
+    observation_count_position:
+        ``"tag"`` or ``"right"`` shows attribution observation counts; default hidden.
 
     Returns
     -------
@@ -583,11 +720,25 @@ def plot_attribution_strip(
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(np.arange(n))
-    ax.set_yticklabels(list(reversed(ordered_frags)), fontsize=9)
+    ax.set_yticklabels(
+        [
+            _fragment_plot_label(f, attribution_dict, fragment_labels, observation_count_position)
+            for f in reversed(ordered_frags)
+        ],
+        fontsize=9,
+    )
+    _right_observation_counts(
+        ax, list(reversed(ordered_frags)), attribution_dict, observation_count_position
+    )
+    for tick, fragment in zip(ax.get_yticklabels(), reversed(ordered_frags)):
+        if fragment in (fragment_label_colors or {}):
+            tick.set_color(fragment_label_colors[fragment])
     ax.set_xlabel("Attribution (SHAP value)", fontsize=11)
     title_suffix = "coloured by feature value" if colour_by_feature else "coloured by attribution"
     ax.set_title(
-        f"Feature Attribution — Individual Scores + Mean (◆) — {title_suffix}", fontsize=11, pad=10
+        f"Feature Attribution — Individual Scores + Mean (diamond) — {title_suffix}",
+        fontsize=11,
+        pad=10,
     )
     sns.despine(ax=ax, left=True)
     ax.grid(axis="x", linestyle="--", alpha=0.4)
@@ -595,7 +746,11 @@ def plot_attribution_strip(
     # Colourbar
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=cb_norm)
     sm.set_array([])
-    cb = fig.colorbar(sm, ax=ax, pad=0.02, fraction=0.03)
+    # Leave a count column between the distributions and colourbar. Otherwise
+    # the colourbar can cover the labels placed just outside the plot axes.
+    cb = fig.colorbar(
+        sm, ax=ax, pad=0.12 if observation_count_position == "right" else 0.02, fraction=0.03
+    )
     cb.set_label(colorbar_label, fontsize=9)
     cb.ax.tick_params(labelsize=8)
     if colour_by_feature:

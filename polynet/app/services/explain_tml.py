@@ -14,6 +14,10 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from polynet.app.components.figure_export import display_exportable_figure
+from polynet.app.services.explanation_results import capture_analysis
+from polynet.app.services.progress import run_progress
+from polynet.app.services.reruns import clear_explanation_results
 from polynet.config.enums import (
     ExplanationAggregation,
     ImportanceNormalisationMethod,
@@ -28,6 +32,7 @@ from polynet.explainability.shap_explain import (
 )
 
 
+@run_progress("Computing global explanations")
 def explain_tml_global(
     models: dict,
     descriptor_dfs: dict[str, pd.DataFrame],
@@ -43,12 +48,20 @@ def explain_tml_global(
     cache_root: Path | None = None,
     target_col: str | None = None,
     samples_per_model: dict[str, set[str]] | None = None,
+    selection_label: str | None = None,
+    prediction_breakdowns: dict | None = None,
 ) -> None:
     """Compute and render the global SHAP summary (one section per descriptor).
 
     ``samples_per_model`` restricts each model to its own samples (e.g. the
     test set of its split); ``None`` explains every sample with every model.
     """
+    try:
+        clear_explanation_results("TML", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     results: dict[str, GlobalAttributionResult] = compute_global_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,
@@ -66,6 +79,16 @@ def explain_tml_global(
         samples_per_model=samples_per_model,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("TML", "global", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_tml_global(results)
+
+
+def display_tml_global(results, prediction_breakdowns=None, *, export_options=None) -> None:
+    """Display computed or loaded results using the same panels."""
     for descriptor, result in results.items():
         st.markdown(f"**{descriptor}**")
         st.info(
@@ -77,9 +100,14 @@ def explain_tml_global(
         if result.warning:
             st.warning(result.warning)
         else:
-            st.pyplot(result.figure, use_container_width=True)
+            display_exportable_figure(
+                result.figure,
+                export_options=export_options,
+                plot_id=("shap", descriptor, "population"),
+            )
 
 
+@run_progress("Computing local explanations")
 def explain_tml_local(
     models: dict,
     descriptor_dfs: dict[str, pd.DataFrame],
@@ -109,6 +137,12 @@ def explain_tml_local(
     plot per sample (``Average``) or shown as one plot per model × sample
     (``Separate``).
     """
+    try:
+        clear_explanation_results("TML", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     results: dict[str, list[InstanceAttributionResult]] = compute_local_shap_attribution(
         models=models,
         descriptor_dfs=descriptor_dfs,
@@ -127,6 +161,16 @@ def explain_tml_local(
         aggregation=aggregation,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("TML", "local", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_tml_local(results, prediction_breakdowns)
+
+
+def display_tml_local(results, prediction_breakdowns=None, *, export_options=None) -> None:
+    """Display computed or loaded results using the same panels."""
     for descriptor, instance_results in results.items():
         st.markdown(f"**{descriptor}**")
 
@@ -156,7 +200,13 @@ def explain_tml_local(
                     container.markdown(f"**{inst.model_label}**")
                 if inst.warning:
                     container.warning(inst.warning)
-                    continue
+                    if inst.attribution_df.empty:
+                        continue
                 container.dataframe(inst.attribution_df, use_container_width=True)
                 if inst.figure is not None:
-                    container.pyplot(inst.figure, use_container_width=True)
+                    display_exportable_figure(
+                        inst.figure,
+                        container=container,
+                        export_options=export_options,
+                        plot_id=("shap", descriptor, sid, inst.model_label or "ensemble"),
+                    )

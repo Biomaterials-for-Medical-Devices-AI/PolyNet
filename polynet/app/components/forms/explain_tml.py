@@ -18,6 +18,7 @@ import streamlit as st
 from polynet.app.components.forms.explain_model import explain_mols_widget
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
+from polynet.app.services.reruns import explanation_rerun_button
 from polynet.config.column_names import get_predicted_label_column_name, get_true_label_column_name
 from polynet.config.constants import ResultColumn
 from polynet.config.display_names import prettify_label
@@ -107,36 +108,13 @@ def _tml_shared_params_section(
             )
             st.info(f"`{selected_class_label}` corresponds to class index `{class_num}`.")
             target_class = int(class_num)
+        else:
+            target_class = int(selected_class_label)
 
-    with st.expander("Advanced settings", expanded=False):
-        normalisation_type = st.radio(
-            "Normalisation",
-            options=[
-                ImportanceNormalisationMethod.Local,
-                ImportanceNormalisationMethod.PerModel,
-                ImportanceNormalisationMethod.Global,
-                ImportanceNormalisationMethod.NoNormalisation,
-            ],
-            key=TMLExplainStateKeys.NormalisationTML,
-            index=1,
-            horizontal=True,
-            help=(
-                "**Local** — each (model × sample) unit scaled to [−1, 1] independently.  \n"
-                "**PerModel** — each model scaled by its own maximum SHAP value.  \n"
-                "**Global** — single divisor across all models and samples.  \n"
-                "**None** — raw SHAP values."
-            ),
-        )
-
-        cols = st.columns(2)
-        with cols[0]:
-            neg_color = st.color_picker(
-                "Negative attribution colour", key=TMLExplainStateKeys.NegColorTML, value="#40bcde"
-            )
-        with cols[1]:
-            pos_color = st.color_picker(
-                "Positive attribution colour", key=TMLExplainStateKeys.PosColorTML, value="#e64747"
-            )
+    # Page 5 uses stable previews; presentation controls live on Analyse Results.
+    normalisation_type = ImportanceNormalisationMethod.PerModel
+    neg_color, pos_color = "#40bcde", "#e64747"
+    st.caption("Run the analysis here; customise its saved plots on page 6 — Analyse Results.")
 
     return {
         "selected_model_types": selected_model_types,
@@ -196,36 +174,20 @@ def _tml_global_tab(
         set_name=explain_set,
     )
 
-    cols = st.columns(2)
-    with cols[0]:
-        plot_type = st.radio(
-            "Plot type",
-            options=[
-                ShapGlobalPlotType.Beeswarm,
-                ShapGlobalPlotType.Bar,
-                ShapGlobalPlotType.Violin,
-            ],
-            format_func=lambda x: {
-                ShapGlobalPlotType.Beeswarm: "Beeswarm (per-sample, coloured by feature value)",
-                ShapGlobalPlotType.Bar: "Bar (mean |SHAP|)",
-                ShapGlobalPlotType.Violin: "Violin (per-feature distribution)",
-            }[x],
-            key=TMLExplainStateKeys.GlobalTMLPlotType,
-            horizontal=False,
-        )
-    with cols[1]:
-        top_n = st.number_input(
-            "Features to show (top N)",
-            min_value=1,
-            max_value=100,
-            value=10,
-            step=1,
-            key=TMLExplainStateKeys.GlobalTMLTopN,
-            help="Show the N features with the highest mean |SHAP| value.",
-        )
+    plot_type = ShapGlobalPlotType.Beeswarm
+    top_n = 10
 
-    if st.button("Run Global SHAP Explanation") or st.toggle(
-        "Keep running automatically", key=TMLExplainStateKeys.GlobalTMLKeepRunning
+    selection = dict(
+        models=models,
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_sample_ids=explain_samples,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+        samples_per_model=per_model_samples,
+    )
+    if explanation_rerun_button(
+        "Run Global SHAP Explanation", "TML", selection, f"tml_global:{experiment_path}"
     ):
         explain_tml_global(
             models=models,
@@ -242,6 +204,15 @@ def _tml_global_tab(
             cache_root=cache_root,
             target_col=data_options.target_variable_col,
             samples_per_model=per_model_samples,
+            selection_label=str(explain_set or "Selected samples"),
+            prediction_breakdowns=_build_prediction_breakdowns(
+                preds,
+                list(models),
+                explain_samples,
+                data_options,
+                iterator_col,
+                selected_iterations,
+            ),
         )
 
 
@@ -378,42 +349,8 @@ def _tml_local_tab(
         st.info("Select at least one sample above to generate local SHAP explanations.")
         return
 
-    cols = st.columns(2)
-    with cols[0]:
-        local_plot_type = st.radio(
-            "Local plot style",
-            options=["waterfall", "force", "bar"],
-            key=TMLExplainStateKeys.LocalTMLPlotType,
-            horizontal=True,
-            help=(
-                "**Waterfall** — cumulative contribution chart.  \n"
-                "**Force** — stacked horizontal force plot.  \n"
-                "**Bar** — simple ranked horizontal bar chart."
-            ),
-        )
-    with cols[1]:
-        local_top_n = st.number_input(
-            "Features to show (top N)",
-            min_value=1,
-            max_value=100,
-            value=15,
-            step=1,
-            key=TMLExplainStateKeys.LocalTMLTopN,
-            help="Maximum number of features (by |SHAP|) to display. "
-            "Applies to the waterfall and bar plots; the force plot shows all.",
-        )
-
-    aggregation = st.radio(
-        "Models display",
-        options=[ExplanationAggregation.Average, ExplanationAggregation.Separate],
-        format_func=lambda x: {
-            ExplanationAggregation.Average: "Average across models (one plot per sample)",
-            ExplanationAggregation.Separate: "Show each model separately (one plot per model)",
-        }[x],
-        key=TMLExplainStateKeys.LocalTMLAggregation,
-        horizontal=True,
-        help="How to combine explanations from the selected models for the same sample.",
-    )
+    local_plot_type, local_top_n = "waterfall", 15
+    aggregation = ExplanationAggregation.Average
 
     # Per (descriptor, sample) breakdown: true label + each selected
     # model × bootstrap's predicted value and set membership in that bootstrap.
@@ -426,8 +363,16 @@ def _tml_local_tab(
         selected_iterations=selected_iterations,
     )
 
-    if st.button("Run Local SHAP Explanation") or st.toggle(
-        "Keep running automatically", key=TMLExplainStateKeys.LocalTMLKeepRunning
+    selection = dict(
+        models=models,
+        experiment_path=experiment_path,
+        cache_root=cache_root,
+        explain_sample_ids=local_samples,
+        problem_type=data_options.problem_type,
+        target_class=shared["target_class"],
+    )
+    if explanation_rerun_button(
+        "Run Local SHAP Explanation", "TML", selection, f"tml_local:{experiment_path}"
     ):
         explain_tml_local(
             models=models,

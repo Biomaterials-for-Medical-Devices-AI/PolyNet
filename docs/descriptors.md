@@ -17,6 +17,22 @@ representations for GNNs. This document covers three cross-cutting topics:
 
 ---
 
+## GUI descriptor defaults
+
+With advanced options locked, SMILES inputs select **all registered RDKit
+descriptors plus Morgan count fingerprints** (2,048 bins, radius 3). PSMILES
+inputs select **polyBERT plus all PolyMetriX descriptors** across repeat units,
+side chains and backbones, using mean aggregation for side chains. RDKit/Morgan
+are not part of the PSMILES default, but can be selected after unlocking.
+polyBERT and PolyMetriX are never enabled for ordinary SMILES. Switching string
+types clears incompatible descriptor selections. The selections and fingerprint
+settings are saved with each representation for prediction/explanation reuse.
+
+Unlock the Representation page to customise families, feature lists or PMX
+aggregation. Expanded defaults take more computation than the former five
+RDKit descriptors; polyBERT needs its model available locally or downloaded.
+No existing representation is rebuilt just by opening the page.
+
 ## Count fingerprints (Morgan, RDKit)
 
 `morgan` and `rdkitfp` compute RDKit **count** fingerprints for each monomer (via

@@ -28,7 +28,7 @@ import pandas as pd
 import ray
 from ray import tune
 from ray.air import session
-from ray.tune import CLIReporter
+from ray.tune import Callback, CLIReporter
 from ray.tune.schedulers import ASHAScheduler
 from sklearn.model_selection import train_test_split
 import torch
@@ -57,6 +57,46 @@ from polynet.training.gnn import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class TrainingProgressCallback(Callback):
+    """Report Ray trial activity from the driver to both GUI and CLI handlers."""
+
+    def __init__(self, architecture, bootstrap, total):
+        self.context = f"HPO {architecture} | split/bootstrap {bootstrap}"
+        self.total = total
+        self.completed = 0
+
+    def on_trial_start(self, iteration, trials, trial, **info):
+        logger.info(
+            "%s | trial %s started (%d/%d completed)",
+            self.context,
+            trial.trial_id,
+            self.completed,
+            self.total,
+        )
+
+    def on_trial_result(self, iteration, trials, trial, result, **info):
+        logger.info(
+            "%s | trial %s | report %s | validation loss=%s",
+            self.context,
+            trial.trial_id,
+            result.get("training_iteration", "?"),
+            result.get("val_loss", "pending"),
+        )
+
+    def on_trial_complete(self, iteration, trials, trial, **info):
+        self.completed += 1
+        logger.info(
+            "%s | trial %s completed (%d/%d)",
+            self.context,
+            trial.trial_id,
+            self.completed,
+            self.total,
+        )
+
+    def on_trial_error(self, iteration, trials, trial, **info):
+        logger.error("%s | trial %s failed; see Ray trial logs", self.context, trial.trial_id)
 
 
 # ---------------------------------------------------------------------------
@@ -304,6 +344,7 @@ def gnn_hyp_opt(
         num_samples=num_samples,
         scheduler=asha,
         progress_reporter=reporter,
+        callbacks=[TrainingProgressCallback(gnn_arch.value, iteration, num_samples)],
         storage_path=hop_results_path.resolve(),
         name=run_name,
         resources_per_trial={"cpu": 0.5, "gpu": 0.5 if torch.cuda.is_available() else 0},

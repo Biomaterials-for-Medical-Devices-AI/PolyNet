@@ -27,6 +27,11 @@ python -m pytest tests/ --co -q
 
 | Module | What it covers |
 |---|---|
+| `test_fragment_figures.py` | Stable SME F tags and generated SMARTS, ridge/bar/strip labels and observation-count positions through top/bottom selection without score changes, custom and distribution-matched tag colours without recolouring data or molecules, vector SVG and physical layout, PNG resolution metadata, invalid/oversized exports, and page 6 CSV/structure exports without inference or cache writes |
+| `test_explanation_exports.py` | Every SME/SHAP/results plot style exported as SVG/PDF/PNG, embedded fonts and vector artist preservation, restoration of rasterisation flags, PNG DPI metadata/resolution, native RDKit heatmap redraws, per-descriptor/molecule/model export buttons, independent simultaneous prediction/metric matrix controls, original training PNG bytes and invalid/oversized export settings |
+| `test_explanation_results.py` | Saved GNN/TML replay without inference, exact class/split populations, external roots, numeric IDs, native plot styles, population/molecule views, architecture/bootstrap/exact-combination selection, each bootstrap's own set membership in plots and prediction panels, additive SHAP baselines, stable PerModel scaling after set filtering, unique population counts and page 5/6 Streamlit interactions |
+| `test_gui_reruns.py` | GUI rerun warnings/acknowledgement, dependency cleanup, source/config preservation, selected explanation replacement, classes/fragmentations/bootstrap populations, external isolation, floating-point preservation, numeric-ID cache merges preserving other GNN scores, and invalid splits leaving old results intact |
+| `test_gui_feedback.py` | GUI defaults by string type, preprocessing defaults, cache freshness, session log isolation, workload warnings, external results layouts, parity legend styling and training PNG exports, and repeat-training predictions |
 | `test_merging.py` | Descriptor merging strategies (`merge_weighted`, `_merge_concatenate`, `_single_smiles`, `_merge` dispatch) |
 | `test_compute_rdkit.py` | RDKit descriptor computation across all merging strategies |
 | `test_descriptors_regression.py` | Numerical regression against reference CSVs in `tests/fixtures/` |

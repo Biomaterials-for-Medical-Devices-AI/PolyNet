@@ -10,6 +10,10 @@ import torch
 from torch.nn import Module
 from torch_geometric.loader import DataLoader
 
+from polynet.app.components.figure_export import display_exportable_figure
+from polynet.app.services.explanation_results import capture_analysis
+from polynet.app.services.progress import run_progress
+from polynet.app.services.reruns import clear_explanation_results
 from polynet.config.enums import (
     AttributionPlotType,
     DimensionalityReduction,
@@ -100,6 +104,7 @@ def get_graph_embeddings(dataset: CustomPolymerGraph, model) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
+@run_progress("Computing global explanations")
 def explain_model_global(
     models: dict,
     experiment_path: Path,
@@ -115,12 +120,20 @@ def explain_model_global(
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     cache_root: Path | None = None,
     mols_per_model: dict[str, set[str]] | None = None,
+    selection_label: str | None = None,
+    prediction_breakdowns: dict | None = None,
 ) -> None:
     """Compute and render the population-level fragment attribution plot.
 
     ``mols_per_model`` restricts each model to its own molecules (e.g. the
     test set of its split); ``None`` explains every molecule with every model.
     """
+    try:
+        clear_explanation_results("GNN", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     result: GlobalAttributionResult = compute_global_attribution(
         models=models,
         experiment_path=experiment_path,
@@ -138,8 +151,18 @@ def explain_model_global(
         mols_per_model=mols_per_model,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("GNN", "global", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_gnn_global(result)
+
+
+def display_gnn_global(result, prediction_breakdowns=None, *, export_options=None) -> None:
+    """Display computed or loaded results using the same panels."""
     st.info(
-        f"Distribution over **{result.n_mols}** molecule(s) × **{result.n_models}** model(s) — "
+        f"Distribution over **{result.n_mols}** molecule(s), using **{result.n_models}** model/bootstrap combination(s) — "
         f"**{result.n_frags_total}** unique fragments found, "
         f"showing top/bottom **{result.n_shown // 2}** each."
         + (f" | class `{result.target_class}`" if result.target_class is not None else "")
@@ -150,7 +173,9 @@ def explain_model_global(
         st.warning(result.warning)
         return
 
-    st.pyplot(result.figure, use_container_width=True)
+    display_exportable_figure(
+        result.figure, export_options=export_options, plot_id=("sme", "population")
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -158,6 +183,7 @@ def explain_model_global(
 # ---------------------------------------------------------------------------
 
 
+@run_progress("Computing local explanations")
 def explain_model_local(
     models: dict,
     experiment_path: Path,
@@ -186,6 +212,12 @@ def explain_model_local(
     one row per selected model × bootstrap with that bootstrap's predicted value
     and set membership. When provided it replaces the single true/predicted lines.
     """
+    try:
+        clear_explanation_results("GNN", locals())
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        st.error(f"Could not replace previous explanation results: {exc}")
+        st.stop()
+
     mol_results: list[MolAttributionResult] = compute_local_attribution(
         models=models,
         experiment_path=experiment_path,
@@ -204,6 +236,16 @@ def explain_model_local(
         aggregation=aggregation,
     )
 
+    # Save raw scores, selection and labels before displaying the default preview.
+    try:
+        capture_analysis("GNN", "local", locals())
+    except (OSError, ValueError, TypeError) as exc:
+        st.warning(f"The analysis completed, but its plot snapshot could not be saved: {exc}")
+    display_gnn_local(mol_results, prediction_breakdowns)
+
+
+def display_gnn_local(mol_results, prediction_breakdowns=None, *, export_options=None) -> None:
+    """Display computed or loaded results using the same panels."""
     # Group by molecule (preserving order). In Average mode each molecule has one
     # result (model_label is None); in Separate mode it has one per model.
     by_mol: dict[str, list[MolAttributionResult]] = {}
@@ -232,4 +274,9 @@ def explain_model_local(
                 container.warning(result.warning)
                 continue
             container.dataframe(result.attribution_df, use_container_width=True)
-            container.pyplot(result.mol_figure, use_container_width=True)
+            display_exportable_figure(
+                result.mol_figure,
+                container=container,
+                export_options=export_options,
+                plot_id=("sme", mid, result.model_label or "ensemble"),
+            )

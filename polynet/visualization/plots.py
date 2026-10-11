@@ -150,8 +150,8 @@ def plot_parity(
         [min_val, max_val],
         [min_val, max_val],
         ls="--",
-        color="black",
-        lw=2,
+        color="#777777",
+        lw=1.5,
         label="Parity Line (y=x)",
     )
 
@@ -164,7 +164,7 @@ def plot_parity(
         s=point_size,
         hue=hue,
         style=style_by,
-        palette=palette or sns.color_palette(),
+        palette=(palette or sns.color_palette()) if hue is not None else None,
     )
 
     ax.set_xlabel(x_label, fontsize=x_label_fontsize, fontweight="bold")
@@ -172,7 +172,19 @@ def plot_parity(
     ax.tick_params(axis="both", which="major", labelsize=tick_size)
 
     if legend:
-        ax.legend(fontsize=legend_fontsize)
+        # Explicit styling prevents transparent/theme-inherited backgrounds
+        # from showing the plot through the legend on GUI reruns.
+        parity_legend = ax.legend(
+            fontsize=legend_fontsize,
+            frameon=True,
+            shadow=False,
+            facecolor="white",
+            edgecolor="#d0d0d0",
+            framealpha=1.0,
+            labelcolor="#444444",
+        )
+        for text in parity_legend.get_texts():
+            text.set_fontweight("normal")
     elif ax.get_legend():
         ax.get_legend().remove()
 
