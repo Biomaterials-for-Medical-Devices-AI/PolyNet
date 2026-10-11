@@ -225,6 +225,7 @@ These helpers belong to the optional Streamlit layer, not the core pipeline:
 | `services.progress` | `run_progress`, `RunLogHandler` | Context manager/decorator for session-thread logging, an 80-message tail, throttled epoch rendering, and handler/level cleanup on success or failure. |
 | `services.explanation_results` | `capture_analysis`, `list_saved_analyses`, `load_analysis`, `analysis_summary`, `analysis_label`, `attribution_coverage`, `attribution_set_membership`, `select_attribution_coverage`, `local_prediction_breakdowns` | Atomic JSON snapshots of completed explanations; population and molecule views share saved scores. Cached selection summaries omit dates; coverage, per-bootstrap set membership and prediction filters identify the actual selected model/sample pairs. No fitted-model loading or inference. |
 | `components.forms.explanation_plots` | `explanation_plots_form` | Page 6 saved-analysis selection and all GNN/TML plot controls; both views select architectures/models, bootstraps, sets and exact combinations. Renders saved scores and matching prediction panels. |
+| `components.forms.fragment_plots` | `saved_fragment_table`, `fragment_exports` | Page 6 SME F tags fixed across the entire saved analysis; CSV mapping and a separate configurable RDKit SVG/PNG structure key. Bounded drawing caches avoid repeated exports on unrelated widget changes. |
 | `services.workload` | `estimate_workload`, `Workload` | Pure calculation of final fits, tuning-inclusive fit/epoch budgets and advisory warning reasons. No training, timing prediction or device allocation. |
 | `components.forms.representation` | `default_molecular_descriptors`, `basic_representation`, `cached_graph_feature_analysis` | Input-type-aware GUI descriptor defaults, locked representation controls and cached legacy graph analysis. |
 | `components.forms.train_models` | `default_feature_preprocessing` | GUI MinMax/variance/correlation baseline; GNN descriptors receive scaling only. |
@@ -251,3 +252,16 @@ signatures and delegate rendering to these helpers.
 Local GNN rendering accepts optional `mols_per_model`; local SHAP rendering accepts
 optional `samples_per_model`. These restrict displayed pairs to each model/bootstrap's
 chosen samples while retaining the full saved population for PerModel normalisation.
+
+SME `render_cached_global_attribution` and the ridge/bar/strip plotting functions accept
+optional `fragment_labels={original_identifier: display_label}`. Display labels never
+replace raw keys or affect numerical values and filtering.
+
+`polynet.explainability.fragment_figures` (also exported from `polynet.explainability`)
+provides `fragment_label_table`, `FragmentGridOptions`, `fragment_structure_svg` and
+`fragment_structure_png`. Supply all saved fragment identifiers to `fragment_label_table`
+for stable tags. Structure renderers take a selected mapping DataFrame in plot order.
+`FragmentGridOptions` defines columns, panel width/height and gaps in mm, atom/tag fonts
+and bond width in pt, and bond length in mm. PNG defaults to 600 DPI and embeds resolution
+metadata; SVG is vector. `ordered_attribution_fragments` returns the shared descending
+mean/top-bottom selection used by the distribution and its exports.

@@ -246,6 +246,7 @@ def plot_attribution_distribution(
     pos_color: str = "#ff7f0e",
     kde_bandwidth: float = 0.5,
     top_n: int | None = None,
+    fragment_labels: dict[str, str] | None = None,
 ) -> plt.Figure:
     """
     Plot per-fragment attribution distributions as an overlapping ridge (joy) plot.
@@ -274,6 +275,9 @@ def plot_attribution_distribution(
         If set, only the ``top_n`` fragments with the highest mean attribution
         and the ``top_n`` with the lowest mean attribution are shown.
         Pass ``None`` to show all fragments.
+    fragment_labels:
+        Optional display-only labels keyed by original fragment identifiers.
+        Scores, fragment ordering and top/bottom selection are unchanged.
 
     Returns
     -------
@@ -329,7 +333,7 @@ def plot_attribution_distribution(
         ax.text(
             0,
             0.2,
-            label,
+            (fragment_labels or {}).get(label, label),
             fontweight="bold",
             color=color,
             ha="left",
@@ -381,6 +385,15 @@ def _prepare_attribution_df(
     return df, ordered_frags, means
 
 
+def ordered_attribution_fragments(
+    attribution_dict: dict[str, list[float]], top_n: int | None = None
+) -> list[str]:
+    """Fragments in distribution-plot order, including the identical top/bottom filter."""
+    if not attribution_dict:
+        return []
+    return _prepare_attribution_df(attribution_dict, top_n)[1]
+
+
 def _build_fragment_palette(
     ordered_frags: list[str], means: pd.Series, neg_color: str, pos_color: str
 ) -> dict:
@@ -400,13 +413,15 @@ def plot_attribution_bar(
     neg_color: str = "#1f77b4",
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
+    fragment_labels: dict[str, str] | None = None,
 ) -> plt.Figure:
     """
     Horizontal bar chart of mean fragment attributions with 95 % CI error bars.
 
     Bars are coloured by the same neg→pos interpolation used in the ridge plot,
     sorted from most positive (top) to most negative (bottom).  Error bars show
-    the 95 % bootstrap confidence interval across all scores for that fragment.
+    a 95 % normal-approximation interval (1.96 × SEM) across that fragment's
+    scores. This is not a resampled bootstrap interval.
 
     Parameters
     ----------
@@ -419,6 +434,8 @@ def plot_attribution_bar(
     top_n:
         Show only the ``top_n`` highest and ``top_n`` lowest mean-attribution
         fragments. Pass ``None`` to show all.
+    fragment_labels:
+        Optional display labels; raw identifiers and statistics remain unchanged.
 
     Returns
     -------
@@ -455,7 +472,7 @@ def plot_attribution_bar(
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(y_pos)
-    ax.set_yticklabels(plot_frags, fontsize=9)
+    ax.set_yticklabels([(fragment_labels or {}).get(f, f) for f in plot_frags], fontsize=9)
     ax.set_xlabel("Mean Attribution (Y − Y_masked)", fontsize=11)
     ax.set_title("Fragment Mean Attribution", fontsize=13, pad=10)
     sns.despine(ax=ax, left=True)
@@ -471,6 +488,7 @@ def plot_attribution_strip(
     pos_color: str = "#ff7f0e",
     top_n: int | None = None,
     feature_values_dict: dict[str, list[float]] | None = None,
+    fragment_labels: dict[str, str] | None = None,
 ) -> plt.Figure:
     """
     Horizontal strip / swarm-style plot showing every individual attribution score.
@@ -496,6 +514,8 @@ def plot_attribution_strip(
         attribution value.  Each list must be parallel (same length and order)
         to the corresponding list in ``attribution_dict``.  Pass ``None``
         (default) to retain attribution-based colouring (GNN behaviour).
+    fragment_labels:
+        Optional display labels; raw identifiers, colours and scores are unchanged.
 
     Returns
     -------
@@ -583,11 +603,15 @@ def plot_attribution_strip(
 
     ax.axvline(0, color="black", linewidth=0.8, linestyle="-")
     ax.set_yticks(np.arange(n))
-    ax.set_yticklabels(list(reversed(ordered_frags)), fontsize=9)
+    ax.set_yticklabels(
+        [(fragment_labels or {}).get(f, f) for f in reversed(ordered_frags)], fontsize=9
+    )
     ax.set_xlabel("Attribution (SHAP value)", fontsize=11)
     title_suffix = "coloured by feature value" if colour_by_feature else "coloured by attribution"
     ax.set_title(
-        f"Feature Attribution — Individual Scores + Mean (◆) — {title_suffix}", fontsize=11, pad=10
+        f"Feature Attribution — Individual Scores + Mean (diamond) — {title_suffix}",
+        fontsize=11,
+        pad=10,
     )
     sns.despine(ax=ax, left=True)
     ax.grid(axis="x", linestyle="--", alpha=0.4)

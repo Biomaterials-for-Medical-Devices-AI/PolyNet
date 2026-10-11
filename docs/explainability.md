@@ -37,6 +37,42 @@ attributions are aggregated per fragment.
 - **Local** — one per-molecule atom heatmap (the per-fragment scores mapped back to
   atom weights) plus a per-fragment attribution table.
 
+### SME fragment labels and publication structure key (GUI)
+
+On **Analyse Results → Feature importance plots → Population**, GNN SME ridge,
+bar and strip plots offer **Fragment labels: SMARTS / F tags**. This is presentation
+only: raw attribution values, normalisation, ranking and top/bottom selection are
+unchanged. Page 5 previews and CLI defaults are unchanged.
+
+The masking cache stores canonical fragment **SMILES**, rather than SMARTS queries.
+The SMARTS labels are generated from these structures with RDKit `MolToSmarts`.
+With F tags, `F1`, `F2`, … are assigned by sorted original fragment identifiers across
+the **entire saved analysis**, not just the selected models or molecules. Changing
+models, bootstraps, set, normalisation or top-N preserves the fragment's tag. Tags
+are scoped to one analysis; different saved analyses can have different mappings.
+
+**Download F-to-SMARTS CSV** exports `Tag`, `SMARTS` and `Fragment` (the original
+cache identifier). It contains exactly the displayed fragments, in descending
+plot order. Gaps in the F numbering after filtering are expected.
+
+**Create separate fragment structure figure** draws each fragment with its F tag
+beneath it. It is a separate structure key, not an overlay on the distribution.
+Controls include molecule panel width/height, horizontal/vertical spacing, structures
+per row, atom/tag fonts, bond length and line width. Physical sizes are millimetres;
+fonts and line widths are points. Molecule height excludes the tag strip below it.
+RDKit may shorten bonds to fit a large fragment inside the chosen panel.
+
+The **SVG** export contains vector bonds and glyphs and remains sharp at any size.
+Structures are drawn with [RDKit's MolDraw2D SVG/Cairo drawers](https://www.rdkit.org/docs/source/rdkit.Chem.Draw.rdMolDraw2D.html).
+**Prepare publication PNG** redraws the molecules at 300, 600 (default) or 1200 DPI
+and records DPI metadata, rather than enlarging the preview. Choose an appropriate
+physical size for the publication. To avoid excessive raster memory use, PNG canvases
+above 40 million pixels are rejected; SVG remains available. Structure exports retain
+stereochemistry and charges, use black atom labels/bonds, and introduce no new
+dependency or attribution calculation. Invalid structures produce an explicit error.
+
+### Selecting models and samples
+
 `explain_set` selects which molecules go into the global distribution;
 `local_explain_mol_ids` selects which molecules get per-molecule heatmaps/CSVs (the
 local step is skipped entirely when `null`).

@@ -53,6 +53,12 @@ from polynet.explainability.explain import (
     render_cached_global_attribution,
     render_cached_local_attribution,
 )
+from polynet.explainability.fragment_figures import (
+    FragmentGridOptions,
+    fragment_label_table,
+    fragment_structure_png,
+    fragment_structure_svg,
+)
 from polynet.explainability.masking import (
     calculate_masking_attributions,
     fragment_attributions_to_distribution,
@@ -67,6 +73,7 @@ from polynet.explainability.shap_explain import (
 )
 from polynet.explainability.visualization import (
     get_cmap,
+    ordered_attribution_fragments,
     plot_attribution_bar,
     plot_attribution_distribution,
     plot_attribution_strip,
@@ -108,5 +115,10 @@ __all__ = [
     "plot_attribution_distribution",
     "plot_attribution_bar",
     "plot_attribution_strip",
+    "ordered_attribution_fragments",
+    "FragmentGridOptions",
+    "fragment_label_table",
+    "fragment_structure_svg",
+    "fragment_structure_png",
     "plot_projection_embeddings",
 ]

@@ -9,6 +9,7 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import streamlit as st
 
+from polynet.app.components.forms.fragment_plots import fragment_exports, saved_fragment_table
 from polynet.app.services.cache import file_version
 from polynet.app.services.explain_model import display_gnn_global, display_gnn_local
 from polynet.app.services.explain_source import list_external_datasets, resolve_explain_source
@@ -175,6 +176,12 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         ("TML", "local"): (render_cached_local_shap_attribution, display_tml_local),
     }[family, scope]
     try:
+        if family == "GNN" and scope == "global":
+            fragment_table = saved_fragment_table(analysis)
+            labels_column = "Tag" if args["fragment_label_mode"] == "F tags" else "SMARTS"
+            args["fragment_labels"] = dict(
+                zip(fragment_table["Fragment"], fragment_table[labels_column])
+            )
         parameters = inspect.signature(renderer).parameters
         results = renderer(**{k: v for k, v in args.items() if k in parameters})
         if scope == "local":
@@ -184,6 +191,8 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
             )
         else:
             display(results)
+            if family == "GNN" and args["fragment_label_mode"] == "F tags" and not results.warning:
+                fragment_exports(results, fragment_table, args["top_n"], prefix + "_fragments")
     except (ValueError, KeyError, TypeError) as exc:
         st.error(f"Unable to plot the saved analysis: {exc}")
     finally:
@@ -282,6 +291,13 @@ def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
         )
         if scope == "global":
             if family == "GNN":
+                args["fragment_label_mode"] = st.radio(
+                    "Fragment labels",
+                    ["SMARTS", "F tags"],
+                    horizontal=True,
+                    key=f"{prefix}_fragment_labels",
+                    help="Display RDKit SMARTS or fixed F1, F2, … tags. Labels never change cached identities or attribution scores.",
+                )
                 args["plot_type"] = st.radio(
                     "Plot type",
                     [AttributionPlotType.Ridge, AttributionPlotType.Bar, AttributionPlotType.Strip],

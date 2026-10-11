@@ -494,6 +494,7 @@ def render_cached_global_attribution(
     top_n: int | None = None,
     plot_type: AttributionPlotType = AttributionPlotType.Ridge,
     mols_per_model: dict[str, set[str]] | None = None,
+    fragment_labels: dict[str, str] | None = None,
 ) -> GlobalAttributionResult:
     """Render saved raw attributions without models, inference or cache writes."""
     models = dict.fromkeys(model_names)
@@ -550,7 +551,11 @@ def render_cached_global_attribution(
         )
 
     shared_kwargs = dict(
-        attribution_dict=attribution_dict, neg_color=neg_color, pos_color=pos_color, top_n=top_n
+        attribution_dict=attribution_dict,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        top_n=top_n,
+        fragment_labels=fragment_labels,
     )
 
     if plot_type == AttributionPlotType.Bar:
