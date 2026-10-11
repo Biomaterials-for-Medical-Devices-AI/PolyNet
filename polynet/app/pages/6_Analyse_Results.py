@@ -8,6 +8,7 @@ from polynet.app.components.forms.analyse_results import (
     confusion_matrix_plot_form,
     parity_plot_form,
 )
+from polynet.app.components.forms.explanation_plots import explanation_plots_form
 from polynet.app.components.plots import display_model_results
 from polynet.app.options.file_paths import (
     data_options_path,
@@ -163,3 +164,6 @@ if experiment_name:
 
     if compare_metrics_plot:
         st.pyplot(compare_metrics_plot)
+
+    st.divider()
+    explanation_plots_form(experiment_path, data_options)
