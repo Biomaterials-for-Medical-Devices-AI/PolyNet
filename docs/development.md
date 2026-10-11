@@ -27,6 +27,7 @@ python -m pytest tests/ --co -q
 
 | Module | What it covers |
 |---|---|
+| `test_explanation_results.py` | Saved GNN/TML replay without inference, exact class/split populations, external roots, numeric IDs, native plot styles, legacy caches and page 5/6 Streamlit interactions |
 | `test_gui_feedback.py` | GUI defaults by string type, preprocessing defaults, cache freshness, session log isolation, workload warnings, external results layouts, parity legend styling and repeat-training predictions |
 | `test_merging.py` | Descriptor merging strategies (`merge_weighted`, `_merge_concatenate`, `_single_smiles`, `_merge` dispatch) |
 | `test_compute_rdkit.py` | RDKit descriptor computation across all merging strategies |

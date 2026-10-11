@@ -35,29 +35,38 @@ entirely — the core pipeline works without Streamlit.
 
 ### Explain Models (page 5)
 
-Both the GNN and TML sections share architecture / bootstrap / representation selectors
-consistent with the training UI, and offer the same options:
-
-- **Global tab** — GNN fragment-attribution distribution (ridge / bar / strip); TML
-  native SHAP summary (beeswarm / bar / violin).
-- **Local tab** — per-molecule / per-sample explanations with a *Models display*
-  toggle: **Average across models** (one plot per molecule) or **Show each model
-  separately** (one plot per model × molecule). Each panel shows the molecule's true
-  label and a per-(model × bootstrap) table of predicted value and set membership. TML
-  local plots are native SHAP waterfall / force / bar, honour the chosen positive /
-  negative colours, and have a "top N features" selector.
-
-See [Explainability](explainability.md) for the underlying behaviour and the
-normalisation options.
+Choose models, bootstrap repetitions, representations, target class, fragmentation
+(GNN), and samples here. The **Global** and **Local** tabs calculate raw importances,
+save a completed-analysis snapshot, and show default previews. Defaults are PerModel
+normalisation, cyan/red colours, ridge/top-and-bottom 10 for GNN global,
+beeswarm/top 10 for TML global, averaged local explanations, and waterfall/top 15
+for TML local. Plot customisation belongs to page 6.
 
 ### Analyse Results (page 6)
 
-Works for TML-only, GNN-only, and hybrid experiments — model lists are derived from the
-predictions table. Beyond parity plots and confusion matrices, the page offers pairwise
-statistical comparison of models (predictions and metrics) with a selectable
-multiple-comparison correction (Holm-Bonferroni by default). Model and metric names are
-shown with clean display labels (with an optional abbreviated mode). See
-[Statistical model comparison](explainability.md#statistical-model-comparison-analyse-results).
+Works for TML-only, GNN-only, and hybrid experiments. Alongside parity plots,
+confusion matrices and statistical comparisons, **Feature importance plots** detects
+completed explanations for the experiment and external datasets. Enable
+**Customise feature importance plots**, select a completed analysis, and click
+**Load selected analysis**.
+
+All existing presentation controls are available here: Local/PerModel/Global/no
+normalisation; positive/negative colours; GNN ridge/bar/strip and top/bottom N;
+TML beeswarm/bar/violin and top N; local Average/Separate model display; TML
+waterfall/force/bar and feature limit; and custom GNN monomer names. Predictions,
+per-bootstrap set membership and attribution tables remain in the local panels.
+Changing a control redraws saved scores without loading models or running inference.
+
+New snapshots retain the exact selected samples and each model's own split population.
+The **Load an older GUI / CLI attribution cache** option also opens compatible raw
+caches. Older caches do not record the original analysis selection: this view explicitly
+uses all cached models/samples for the selected target class and fragmentation. The
+Global/Local choice changes only how existing scores are plotted. Run page 5 again
+if the cache is outdated or if additional scores are required.
+
+See [Explainability](explainability.md) for attribution and normalisation behaviour,
+and [Statistical model comparison](explainability.md#statistical-model-comparison-analyse-results)
+for the model comparison options.
 
 ## Architecture: core vs GUI
 

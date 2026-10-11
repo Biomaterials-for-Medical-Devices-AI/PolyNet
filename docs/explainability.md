@@ -1,7 +1,8 @@
 # Explainability
 
 PolyNet provides two attribution pipelines that share the same configuration shape and
-the same options on the Streamlit **Explain Models** page:
+a Streamlit workflow: **Explain Models** calculates importances and shows default
+previews; **Analyse Results** loads saved analyses for full plot customisation:
 
 - **GNN** — chemistry-masking fragment attribution (substructure masking; Wu et al., *Nat. Commun.* 14,
   2585 (2023), [doi:10.1038/s41467-023-38192-3](https://doi.org/10.1038/s41467-023-38192-3)).
@@ -128,7 +129,7 @@ When a single model is selected, `per_model` and `global` are mathematically ide
 
 ## Averaged vs per-model display (local)
 
-> **GUI option** (Explain Models → local tab). The non-GUI pipeline always uses
+> **GUI option** (Analyse Results → Feature importance plots → loaded local analysis). The non-GUI pipeline always uses
 > `Average`.
 
 When several models are selected for the same molecule, the **local** view offers two
@@ -183,6 +184,28 @@ Delete the cache files to force recomputation — for example after retraining o
 changing the target class. Normalisation is **never** written to the cache, so changing
 the normalisation strategy does not require recomputation.
 
+### Completed GUI analysis snapshots
+
+Page 5 also saves `explanations/analyses/{family}_{scope}_{selection_hash}.json`
+under the selected data source (experiment or external dataset). A versioned snapshot
+contains raw selected scores, model/sample/class/fragmentation selection, per-model
+sample restrictions, descriptor feature values or molecule SMILES, and local prediction
+breakdowns. It contains no fitted model objects and uses atomic JSON writes. Re-running
+the same selection replaces its snapshot; different selections have separate entries.
+Normalisation, colours and plot styles remain presentation settings.
+
+On page 6, load a snapshot to redraw its figures using any of the existing plot options.
+Rendering calls the core `render_cached_*_attribution` APIs and never calculates missing
+scores or writes attribution caches. Existing CLI/older GUI caches can also be loaded;
+because they do not store the original selected sets, their view uses all cached
+samples/models for the selected class and fragmentation. Old GNN caches reconstruct
+monomer lists from cached SMILES; new snapshots retain the original monomer order
+and repeated monomers. Re-run page 5 for an exact saved selection and molecular context.
+
+Snapshots remain a record of their completed analysis after retraining. To explain newly
+trained models, remove outdated raw caches and run page 5 again; old snapshots can be
+kept for comparison or removed separately.
+
 ## Statistical model comparison (Analyse Results)
 
 > **GUI feature** (Analyse Results page). Works for TML-only, GNN-only, and hybrid
@@ -222,3 +245,13 @@ the UI:
 
 The significance markers (`*`, `**`, `***`) and the displayed p-values reflect the
 corrected values.
+
+## Existing local SHAP display limitations
+
+This GUI reorganisation preserves local SHAP's numerical display behaviour.
+In local TML plots, `PerModel` currently leaves scores unscaled, whereas the global
+view scales each trained model before averaging. Local waterfall and force plots
+currently use a zero base value rather than the explainer's expected value; their
+endpoint therefore represents summed contributions, not necessarily the model's
+prediction. Correcting these behaviours requires a separate change to local SHAP
+normalisation and baseline storage.

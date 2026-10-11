@@ -222,6 +222,8 @@ These helpers belong to the optional Streamlit layer, not the core pipeline:
 |---|---|---|
 | `services.cache` | `file_version`, `read_csv`, `read_json` | Bounded copy-on-read caches keyed by resolved path, size and nanosecond modification/change timestamps. Missing files raise; rewritten files refresh. CSV keyword arguments participate in the key. |
 | `services.progress` | `run_progress`, `RunLogHandler` | Context manager/decorator for session-thread logging, an 80-message tail, throttled epoch rendering, and handler/level cleanup on success or failure. |
+| `services.explanation_results` | `capture_analysis`, `list_saved_analyses`, `load_analysis`, `list_cached_analyses`, `load_cached_analysis` | Atomic JSON snapshots of completed explanations, exact split/sample selection and plotting inputs; read-only imports of older attribution caches. No fitted-model loading or inference. |
+| `components.forms.explanation_plots` | `explanation_plots_form` | Page 6 saved-analysis selection and all GNN/TML plot controls; renders saved scores and prediction panels. |
 | `services.workload` | `estimate_workload`, `Workload` | Pure calculation of final fits, tuning-inclusive fit/epoch budgets and advisory warning reasons. No training, timing prediction or device allocation. |
 | `components.forms.representation` | `default_molecular_descriptors`, `basic_representation`, `cached_graph_feature_analysis` | Input-type-aware GUI descriptor defaults, locked representation controls and cached legacy graph analysis. |
 | `components.forms.train_models` | `default_feature_preprocessing` | GUI MinMax/variance/correlation baseline; GNN descriptors receive scaling only. |
@@ -237,3 +239,11 @@ The focused regression coverage is in `tests/test_gui_feedback.py`: cache
 freshness/copy isolation, session log isolation/cleanup, workload boundaries,
 locked/unlocked defaults, external result layouts, parity legend styling and
 GUI training reproducibility.
+
+The core explainability package also exports `render_cached_global_attribution`,
+`render_cached_local_attribution`, `render_cached_global_shap_attribution` and
+`render_cached_local_shap_attribution`. These accept raw attribution dictionaries/frames,
+model names and plotting inputs, and return the same result dataclasses as the existing
+`compute_*` functions. They have no Streamlit dependency, load no fitted models, never
+perform inference, and do not update caches. The existing computation APIs retain their
+signatures and delegate rendering to these helpers.
