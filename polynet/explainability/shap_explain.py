@@ -987,6 +987,45 @@ def compute_global_shap_attribution(
         for descriptor, dfs in parts.items()
     }
 
+    return render_cached_global_shap_attribution(
+        cache_by_descriptor=cache_by_descriptor,
+        model_names=list(models),
+        descriptor_dfs=descriptor_dfs,
+        explain_sample_ids=explain_sample_ids,
+        problem_type=problem_type,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        target_class=target_class,
+        top_n=top_n,
+        plot_type=plot_type,
+        target_col=target_col,
+        samples_per_model=samples_per_model,
+    )
+
+
+def render_cached_global_shap_attribution(
+    cache_by_descriptor: dict,
+    model_names: list[str],
+    descriptor_dfs: dict,
+    explain_sample_ids: list[str],
+    problem_type: ProblemType,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    target_class: int | None = None,
+    top_n: int | None = 10,
+    plot_type: ShapGlobalPlotType = ShapGlobalPlotType.Beeswarm,
+    target_col: str | None = None,
+    samples_per_model: dict[str, set[str]] | None = None,
+) -> dict[str, GlobalAttributionResult]:
+    """Render saved raw attributions without models, inference or cache writes."""
+    models = dict.fromkeys(model_names)
+    class_key = _class_key(problem_type, target_class)
+    cache_by_descriptor = {
+        descriptor: frame.loc[frame["class_idx"].astype(str) == class_key].copy()
+        for descriptor, frame in cache_by_descriptor.items()
+    }
     # Normalise descriptor_dfs keys to strings for lookup
     str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
 
@@ -1266,6 +1305,47 @@ def compute_local_shap_attribution(
         target_col=target_col,
     )
 
+    return render_cached_local_shap_attribution(
+        cache_by_descriptor=cache_by_descriptor,
+        model_names=list(models),
+        descriptor_dfs=descriptor_dfs,
+        explain_sample_ids=explain_sample_ids,
+        problem_type=problem_type,
+        neg_color=neg_color,
+        pos_color=pos_color,
+        normalisation_type=normalisation_type,
+        target_class=target_class,
+        local_plot_type=local_plot_type,
+        max_display=max_display,
+        predictions=predictions,
+        target_col=target_col,
+        aggregation=aggregation,
+    )
+
+
+def render_cached_local_shap_attribution(
+    cache_by_descriptor: dict,
+    model_names: list[str],
+    descriptor_dfs: dict,
+    explain_sample_ids: list[str],
+    problem_type: ProblemType,
+    neg_color: str = "#40bcde",
+    pos_color: str = "#e64747",
+    normalisation_type: ImportanceNormalisationMethod = ImportanceNormalisationMethod.PerModel,
+    target_class: int | None = None,
+    local_plot_type: str = "waterfall",
+    max_display: int = 15,
+    predictions: dict | None = None,
+    target_col: str | None = None,
+    aggregation: ExplanationAggregation = ExplanationAggregation.Average,
+) -> dict[str, list[InstanceAttributionResult]]:
+    """Render saved raw attributions without models, inference or cache writes."""
+    models = dict.fromkeys(model_names)
+    class_key = _class_key(problem_type, target_class)
+    cache_by_descriptor = {
+        descriptor: frame.loc[frame["class_idx"].astype(str) == class_key].copy()
+        for descriptor, frame in cache_by_descriptor.items()
+    }
     # Raw descriptor values (per instance) are used to label native SHAP plots.
     str_dfs: dict[str, pd.DataFrame] = {str(k): v for k, v in descriptor_dfs.items()}
 
@@ -1273,6 +1353,7 @@ def compute_local_shap_attribution(
 
     for descriptor, cache_df in cache_by_descriptor.items():
         model_log_names = [k for k in models if _parse_model_log_name(k)[1] == descriptor]
+        cache_df = _rows_of_models(cache_df, model_log_names, explain_sample_ids)
         descriptor_df = str_dfs.get(descriptor)
 
         # Separate aggregation: one explanation per model × sample (no merge).
