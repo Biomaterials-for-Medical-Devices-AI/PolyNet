@@ -95,14 +95,15 @@ waterfall/force/bar and feature limit; and custom GNN monomer names. Predictions
 per-bootstrap set membership and attribution tables remain in the local panels.
 Changing a control redraws saved scores without loading models or running inference.
 
-GNN population plots also select **SMARTS** or fixed **F tags** as fragment labels.
+GNN population plots also select original **Fragment SMILES** (atom-letter labels,
+the default) or fixed **F tags** as fragment labels.
 F tags offer a CSV mapping and a separate RDKit structure figure, with controls for
 panel size, row/column spacing, columns, fonts and bond dimensions. Tags stay fixed
 throughout the loaded analysis; both exports contain exactly the currently plotted
 fragments. Vector SVG and freshly drawn 300/600/1200-DPI PNG downloads are available.
 These controls live in `components.forms.fragment_plots`, using the Streamlit-free
 `explainability.fragment_figures` module. The original cache fragment SMILES are
-preserved, with RDKit-generated SMARTS for display/export. See
+preserved as plot labels, with an additional RDKit-generated SMARTS CSV column. See
 [SME fragment labels](explainability.md#sme-fragment-labels-and-publication-structure-key-gui).
 
 Snapshots retain the exact selected samples and each model's own split population.

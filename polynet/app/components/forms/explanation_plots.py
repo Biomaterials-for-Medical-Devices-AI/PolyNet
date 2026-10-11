@@ -176,12 +176,9 @@ def explanation_plots_form(experiment_path: Path, data_options) -> None:
         ("TML", "local"): (render_cached_local_shap_attribution, display_tml_local),
     }[family, scope]
     try:
-        if family == "GNN" and scope == "global":
+        if family == "GNN" and scope == "global" and args["fragment_label_mode"] == "F tags":
             fragment_table = saved_fragment_table(analysis)
-            labels_column = "Tag" if args["fragment_label_mode"] == "F tags" else "SMARTS"
-            args["fragment_labels"] = dict(
-                zip(fragment_table["Fragment"], fragment_table[labels_column])
-            )
+            args["fragment_labels"] = dict(zip(fragment_table["Fragment"], fragment_table["Tag"]))
         parameters = inspect.signature(renderer).parameters
         results = renderer(**{k: v for k, v in args.items() if k in parameters})
         if scope == "local":
@@ -291,12 +288,15 @@ def _plot_controls(args: dict, family: str, scope: str, prefix: str) -> None:
         )
         if scope == "global":
             if family == "GNN":
+                label_key = f"{prefix}_fragment_labels"
+                if st.session_state.get(label_key) == "SMARTS":
+                    st.session_state[label_key] = "Fragment SMILES"
                 args["fragment_label_mode"] = st.radio(
                     "Fragment labels",
-                    ["SMARTS", "F tags"],
+                    ["Fragment SMILES", "F tags"],
                     horizontal=True,
-                    key=f"{prefix}_fragment_labels",
-                    help="Display RDKit SMARTS or fixed F1, F2, … tags. Labels never change cached identities or attribution scores.",
+                    key=label_key,
+                    help="Display the original fragment strings with atom letters (e.g. CO or c1ccccc1), or fixed F1, F2, … tags. Labels never change cached identities or attribution scores.",
                 )
                 args["plot_type"] = st.radio(
                     "Plot type",

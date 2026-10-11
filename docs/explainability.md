@@ -40,12 +40,15 @@ attributions are aggregated per fragment.
 ### SME fragment labels and publication structure key (GUI)
 
 On **Analyse Results → Feature importance plots → Population**, GNN SME ridge,
-bar and strip plots offer **Fragment labels: SMARTS / F tags**. This is presentation
+bar and strip plots offer **Fragment labels: Fragment SMILES / F tags**. The default
+uses the original atom-letter fragment labels (for example `CO` or `c1ccccc1`),
+rather than atomic-number SMARTS such as `[#6]-[#8]`. This is presentation
 only: raw attribution values, normalisation, ranking and top/bottom selection are
 unchanged. Page 5 previews and CLI defaults are unchanged.
 
 The masking cache stores canonical fragment **SMILES**, rather than SMARTS queries.
-The SMARTS labels are generated from these structures with RDKit `MolToSmarts`.
+The CSV's additional SMARTS column is generated with RDKit `MolToSmarts`; it is
+not used as the distribution plot label.
 With F tags, `F1`, `F2`, … are assigned by sorted original fragment identifiers across
 the **entire saved analysis**, not just the selected models or molecules. Changing
 models, bootstraps, set, normalisation or top-N preserves the fragment's tag. Tags

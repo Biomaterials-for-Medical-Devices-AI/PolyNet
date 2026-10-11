@@ -242,8 +242,9 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
     _widget(app.radio, "Plot type").set_value(AttributionPlotType.Bar).run()
     _widget(app.multiselect, "GNN architectures to include").set_value(["GCN"]).run()
     scores = app.session_state["scores"]
-    smarts_labels = app.session_state["labels"]
-    assert set(smarts_labels) == set(before.SMARTS)
+    original_labels = app.session_state["labels"]
+    assert _widget(app.radio, "Fragment labels").value == "Fragment SMILES"
+    assert set(original_labels) == set(before.Fragment)
     _widget(app.radio, "Fragment labels").set_value("F tags").run()
     assert app.session_state["scores"] == scores
     assert set(app.session_state["labels"]) == set(before.Tag)
@@ -268,4 +269,8 @@ def test_page6_f_tags_exports_and_layout_never_compute_or_rewrite_scores(tmp_pat
     assert [cell.attrib["data-fragment-tag"] for cell in cells] == ["F3", "F1"]
     with Image.open(BytesIO(exported["downloads"]["sme_fragment_structures.png"])) as image:
         assert image.info["dpi"] == pytest.approx((600, 600), abs=0.02)
+    _widget(app.radio, "Fragment labels").set_value("Fragment SMILES").run()
+    assert app.session_state["scores"]["CO"] == [-1.0 / 3]
+    assert set(app.session_state["labels"]) == {"CO", "CCO"}
+    assert not app.get("download_button")
     assert path.read_bytes() == snapshot_bytes and cache.read_bytes() == cache_bytes
