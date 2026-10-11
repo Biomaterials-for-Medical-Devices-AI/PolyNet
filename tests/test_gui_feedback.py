@@ -370,12 +370,16 @@ def test_parity_legend_has_readable_background():
             "axes.facecolor": (0, 0, 0, 0),
             "legend.facecolor": "black",
             "legend.framealpha": 0.2,
+            "legend.frameon": False,
+            "legend.shadow": True,
             "font.weight": "bold",
         }
     ):
         fig = plot_parity([1, 2, 3], [1.1, 1.9, 3.1])
     ax = fig.axes[0]
     legend = ax.get_legend()
+    assert legend.get_frame_on()
+    assert not legend.shadow
     assert legend.get_frame().get_facecolor() == to_rgba("white")
     assert legend.get_texts()[0].get_fontweight() == "normal"
     assert ax.lines[0].get_color() == "#777777"
@@ -445,3 +449,54 @@ def test_switching_to_smiles_clears_polymer_only_selections():
     assert set(app.session_state["descriptors"]) == {"rdkit", "morgan"}
     assert not app.checkbox(key="polyBERTfp").value
     assert app.checkbox(key="polyBERTfp").disabled
+
+
+def test_training_exports_readable_parity_legend(tmp_path, monkeypatch):
+    from PIL import Image
+    from matplotlib.colors import to_rgba
+    import matplotlib.pyplot as plt
+    import pandas as pd
+
+    from polynet.config.column_names import get_iterator_name
+    from polynet.config.constants import DataSet, ResultColumn
+    from polynet.config.enums import ProblemType, SplitType
+    from polynet.training.evaluate import plot_results
+    from polynet.visualization import utils
+
+    save_original = utils.save_plot
+    captured = []
+
+    def save(fig, path):
+        legend = fig.axes[0].get_legend()
+        captured.append((legend.get_frame_on(), legend.get_frame().get_facecolor(), legend.shadow))
+        save_original(fig, path)
+
+    monkeypatch.setattr(utils, "save_plot", save)
+    predictions = pd.DataFrame(
+        {
+            get_iterator_name(SplitType.TrainValTest): ["1"] * 3,
+            ResultColumn.SET: [DataSet.Test] * 3,
+            "True target": [1.0, 2.0, 3.0],
+            "GCN Predicted target": [1.1, 1.9, 3.2],
+        }
+    )
+    with plt.rc_context(
+        {
+            "legend.facecolor": "black",
+            "legend.framealpha": 0.2,
+            "legend.frameon": False,
+            "legend.shadow": True,
+        }
+    ):
+        plot_results(
+            predictions,
+            SplitType.TrainValTest,
+            "target",
+            ["GCN_1"],
+            ProblemType.Regression,
+            tmp_path,
+        )
+    assert captured == [(True, to_rgba("white"), False)]
+    with Image.open(tmp_path / "GCN_1_parity_plot.png") as image:
+        assert image.width > 100 and image.height > 100
+        assert len(image.getcolors(image.width * image.height)) > 10
