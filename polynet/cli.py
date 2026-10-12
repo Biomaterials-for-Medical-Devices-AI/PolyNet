@@ -14,6 +14,7 @@ the YAML pipeline can be run from any working directory:
     polynet check                    # check that the installation works
     polynet install-psmiles          # install the PSMILES canonicaliser (once)
     polynet --version
+    polynet --help                   # list the commands
 """
 
 import os
@@ -23,6 +24,43 @@ import sys
 from polynet import __version__
 
 APP_ENTRYPOINT = Path(__file__).parent / "app" / "Welcome_to_PolyNet.py"
+
+HELP_FLAGS = ("-h", "--help", "help")
+
+USAGE = f"""\
+usage: polynet [command] [options]
+
+PolyNet {__version__}: polymer property prediction with graph neural networks and
+traditional machine learning.
+
+commands:
+  (none), gui        Open the GUI in your browser. Options are passed to
+                     `streamlit run`, e.g. `polynet --server.port 8502`
+                     (`polynet gui --help` lists them).
+  run                Run the pipeline from a YAML config
+                     (`polynet run --help` lists its options).
+  check              Check that the installation works on synthetic data
+                     (`polynet check --help`).
+  install-psmiles    Install the PSMILES canonicaliser, needed for PSMILES data
+                     (non-commercial licence; `polynet install-psmiles --help`).
+
+options:
+  -h, --help         Show this message and exit.
+  --version          Show the PolyNet version and exit.
+
+Documentation: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/tree/main/docs
+"""
+
+INSTALL_PSMILES_USAGE = """\
+usage: polynet install-psmiles [--yes]
+
+Install canonicalize-psmiles, which PolyNet needs for PSMILES data. It is not on
+PyPI and has a non-commercial licence, which is shown before installing.
+
+options:
+  --yes              Accept the licence and install without asking.
+  -h, --help         Show this message and exit.
+"""
 
 FILE_WATCHER_OPTION = "--server.fileWatcherType"
 FILE_WATCHER_ENV = "STREAMLIT_SERVER_FILE_WATCHER_TYPE"
@@ -86,6 +124,10 @@ def install_psmiles(args: list[str]) -> int:
     Returns:
         int: 0 if the package is installed, otherwise 1.
     """
+    if any(a in HELP_FLAGS for a in args):
+        print(INSTALL_PSMILES_USAGE)
+        return 0
+
     from polynet.utils.optional_dependencies import (
         PSMILES_CANONICALISER_LICENCE_NOTICE,
         install_psmiles_canonicaliser,
@@ -117,6 +159,10 @@ def main() -> int:
         int: The process exit code.
     """
     args = sys.argv[1:]
+
+    if args[:1] and args[0] in HELP_FLAGS:
+        print(USAGE)
+        return 0
 
     if args[:1] == ["--version"]:
         print(f"polynet {__version__}")
