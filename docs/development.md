@@ -84,10 +84,17 @@ Read the last line of the traceback:
   reached yet.
 
 The development environment uses the versions pinned in `poetry.lock`, while
-`pip install polynet` takes the newest versions allowed by `pyproject.toml`. Before a
-release, check the GUI and `polynet check` in a fresh environment installed from the built
-wheel (`python -m build`, then `pip install dist/polynet-<version>-py3-none-any.whl`), with
-the watcher on, to catch problems that only appear with newer dependencies.
+`pip install polynet` takes the newest versions allowed by `pyproject.toml`. The
+**pip install** CI workflow (`.github/workflows/pip-install.yml`) tests exactly that: it
+installs the built wheel with plain pip on Linux and Apple-silicon macOS and runs the tests
+and `polynet check` against it, on every pull request and weekly. Before a release, also
+check the GUI in such an environment, with the watcher on. To reproduce the CI run locally:
+
+```bash
+python -m build --wheel
+python -m venv /tmp/pipcheck && /tmp/pipcheck/bin/pip install dist/*.whl pytest
+/tmp/pipcheck/bin/pytest tests/   # `pytest`, not `python -m pytest`: tests the installed package
+```
 
 ## Extending PolyNet
 

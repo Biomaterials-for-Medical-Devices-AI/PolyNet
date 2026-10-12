@@ -5,6 +5,7 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors
 import streamlit as st
 
+from polynet.app.components.select_all import multiselect_with_select_all
 from polynet.app.options.allowable_sets import atom_properties, bond_features
 from polynet.app.options.state_keys import DescriptorCalculationStateKeys
 from polynet.app.utils import keep_only_numerical_columns
@@ -277,23 +278,16 @@ def molecular_descriptor_representation(
 
         st.markdown("### Calculate RDKit Molecular Descriptors")
 
-        select_all = st.checkbox(
-            "Select all descriptors",
-            value=not is_psmiles,
-            key=DescriptorCalculationStateKeys.SelectAllRDKitDescriptors,
-            help="If checked, all RDKit molecular descriptors will be selected by default. Uncheck to select specific descriptors.",
-        )
-
-        if select_all:
-            default_descriptors = all_descriptors
-        else:
-            default_descriptors = defaults.get(MolecularDescriptor.RDKit, [])
-
-        selected_descriptors = st.multiselect(
+        selected_descriptors = multiselect_with_select_all(
             "Select descriptors to calculate:",
             options=all_descriptors,
-            default=default_descriptors,  # Preselect common ones
             key=DescriptorCalculationStateKeys.DescriptorsRDKit,
+            select_all_label="Select all descriptors",
+            select_all_key=DescriptorCalculationStateKeys.SelectAllRDKitDescriptors,
+            select_all_default=not is_psmiles,
+            partial_selection=defaults.get(MolecularDescriptor.RDKit, []),
+            use_checkbox=True,
+            select_all_help="If checked, all RDKit molecular descriptors will be selected by default. Uncheck to select specific descriptors.",
             help="Choose which RDKit descriptors to compute for the molecules.",
         )
         st.info(f"You have selected {len((selected_descriptors))} RDKit descriptors.")
@@ -380,43 +374,37 @@ def molecular_descriptor_representation(
                 BACKBONE_TOPOLOGICAL_FEATURIZER_REGISTRY.keys()
             )
 
-            select_all_repeat_unit = st.checkbox(
-                "Select all repeat-unit descriptors",
-                value=True,
-                key=DescriptorCalculationStateKeys.SelectAllPMXRepeatUnit,
-                help="If checked, every repeat-unit descriptor is selected by default. Uncheck to choose specific descriptors.",
-            )
-            polymer_descriptors = st.multiselect(
+            polymer_descriptors = multiselect_with_select_all(
                 "Select the descriptors to calculate for the monomer repeat unit.",
                 options=repeat_unit_options,
-                default=repeat_unit_options if select_all_repeat_unit else None,
                 key=DescriptorCalculationStateKeys.PMXRepeatUnit,
+                select_all_label="Select all repeat-unit descriptors",
+                select_all_key=DescriptorCalculationStateKeys.SelectAllPMXRepeatUnit,
+                select_all_default=True,
+                use_checkbox=True,
+                select_all_help="If checked, every repeat-unit descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
 
-            select_all_side_chain = st.checkbox(
-                "Select all side-chain descriptors",
-                value=True,
-                key=DescriptorCalculationStateKeys.SelectAllPMXSideChainDescriptors,
-                help="If checked, every side-chain descriptor is selected by default. Uncheck to choose specific descriptors.",
-            )
-            side_chain_descriptors = st.multiselect(
+            side_chain_descriptors = multiselect_with_select_all(
                 "Select the descriptors to calculate for the side chain of the polymers",
                 options=side_chain_options,
-                default=side_chain_options if select_all_side_chain else None,
                 key=DescriptorCalculationStateKeys.PMXSideChainDescriptors,
+                select_all_label="Select all side-chain descriptors",
+                select_all_key=DescriptorCalculationStateKeys.SelectAllPMXSideChainDescriptors,
+                select_all_default=True,
+                use_checkbox=True,
+                select_all_help="If checked, every side-chain descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
 
-            select_all_backbone = st.checkbox(
-                "Select all backbone descriptors",
-                value=True,
-                key=DescriptorCalculationStateKeys.SelectAllPMXBackboneDescriptors,
-                help="If checked, every backbone descriptor is selected by default. Uncheck to choose specific descriptors.",
-            )
-            backbone_descriptors = st.multiselect(
+            backbone_descriptors = multiselect_with_select_all(
                 "Select the descriptors to calculate for the backbone of the polymers",
                 options=backbone_options,
-                default=backbone_options if select_all_backbone else None,
                 key=DescriptorCalculationStateKeys.PMXBackboneDescriptors,
+                select_all_label="Select all backbone descriptors",
+                select_all_key=DescriptorCalculationStateKeys.SelectAllPMXBackboneDescriptors,
+                select_all_default=True,
+                use_checkbox=True,
+                select_all_help="If checked, every backbone descriptor is selected by default. Uncheck to choose specific descriptors.",
             )
 
             agg_method = st.multiselect(
@@ -558,24 +546,20 @@ def graph_representation(
                 "removed from the options below."
             )
 
-        select_all_atomic = st.checkbox("Select all atomic properties")
-
-        if select_all_atomic:
-            default_atomic_properties = atomic_properties
-        else:
-            default_atomic_properties = [
+        selected_atomic_properties = multiselect_with_select_all(
+            "Select atomic properties to compute:",
+            options=atomic_properties,
+            key=DescriptorCalculationStateKeys.AtomProperties,
+            select_all_label="Select all atomic properties",
+            select_all_key=DescriptorCalculationStateKeys.SelectAllAtomProperties,
+            partial_selection=[
                 AtomFeature.GetAtomicNum,
                 AtomFeature.GetTotalNumHs,
                 AtomFeature.GetTotalDegree,
                 AtomFeature.GetImplicitValence,
                 AtomFeature.GetIsAromatic,
-            ]
-
-        selected_atomic_properties = st.multiselect(
-            "Select atomic properties to compute:",
-            options=atomic_properties,
-            default=default_atomic_properties,
-            key=DescriptorCalculationStateKeys.AtomProperties,
+            ],
+            use_checkbox=True,
             help="Choose which RDKit Atom-level properties to extract.",
         )
 
@@ -673,23 +657,17 @@ def graph_representation(
 
         st.markdown("#### Bond Properties")
 
-        select_all_bond = st.toggle("Select all bond properties")
-
-        if select_all_bond:
-            default_bond_properties = bond_properties
-
-        else:
-            default_bond_properties = [
+        selected_bond_properties = multiselect_with_select_all(
+            "Select bond properties to compute:",
+            options=bond_properties,
+            key=DescriptorCalculationStateKeys.BondProperties,
+            select_all_label="Select all bond properties",
+            select_all_key=DescriptorCalculationStateKeys.SelectAllBondProperties,
+            partial_selection=[
                 BondFeature.GetBondTypeAsDouble,
                 BondFeature.GetIsAromatic,
                 BondFeature.GetStereo,
-            ]
-
-        selected_bond_properties = st.multiselect(
-            "Select bond properties to compute:",
-            options=bond_properties,
-            default=default_bond_properties,
-            key=DescriptorCalculationStateKeys.BondProperties,
+            ],
             help="Choose which RDKit Bond-level properties to extract.",
         )
 

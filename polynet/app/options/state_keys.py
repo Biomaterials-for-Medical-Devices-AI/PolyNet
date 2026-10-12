@@ -58,6 +58,8 @@ class DescriptorCalculationStateKeys(StrEnum):
     SelectAllPMXBackboneDescriptors = "SelectAllPMXBackboneDescriptors"
     AtomProperties = "AtomProperties"
     BondProperties = "BondProperties"
+    SelectAllAtomProperties = "SelectAllAtomProperties"
+    SelectAllBondProperties = "SelectAllBondProperties"
     ShowFrequency = "ShowFrequency"
 
 

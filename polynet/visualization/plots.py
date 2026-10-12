@@ -458,7 +458,7 @@ def plot_bootstrap_boxplots(
     fig, ax = plt.subplots(figsize=(height, width), dpi=dpi)
     ax.boxplot(
         data,
-        labels=model_names,
+        tick_labels=model_names,  # `labels` was removed in Matplotlib 3.11
         patch_artist=True,
         boxprops=dict(facecolor=fill_colour, color=border_colour),
         medianprops=dict(color=median_colour, linewidth=2),

@@ -1,0 +1,57 @@
+name: pip install
+
+# Tests what `pip install polynet` gives users: the built wheel installed with
+# plain pip, so dependencies resolve to the newest versions pyproject.toml
+# allows (not the poetry.lock versions the Tests workflow uses). Runs weekly
+# too, because new dependency releases can break PolyNet without any change here.
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  pip_install:
+    name: pip install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14]  # macos-14: Apple silicon
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install OpenMP (macOS; needed by XGBoost)
+        if: runner.os == 'macOS'
+        run: brew install libomp
+
+      - name: Build the wheel
+        run: |
+          pip install build
+          python -m build --wheel
+
+      - name: Install the wheel with pip
+        run: |
+          pip install dist/*.whl pytest
+          polynet install-psmiles --yes
+          pip list
+
+      - name: Check the tests use the installed package
+        run: |
+          python -I -c "import polynet, sys; print(polynet.__file__); sys.exit('site-packages' not in polynet.__file__)"
+
+      - name: Run tests against the installed package
+        # `pytest`, not `python -m pytest`: the latter puts the source tree first on sys.path.
+        run: pytest tests/ --tb=short
+
+      - name: Run polynet check
+        run: polynet check

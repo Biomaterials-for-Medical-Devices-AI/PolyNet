@@ -16,6 +16,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.forms.explain_model import explain_mols_widget
+from polynet.app.components.select_all import multiselect_with_select_all
 from polynet.app.options.state_keys import TMLExplainStateKeys
 from polynet.app.services.explain_tml import explain_tml_global, explain_tml_local
 from polynet.app.services.reruns import explanation_rerun_button
@@ -58,14 +59,12 @@ def _tml_shared_params_section(
     )
     all_iterations = sorted({int(key.rsplit("_", 1)[1]) for key in tml_model_log_names})
 
-    select_all = st.toggle(
-        "Select all TML models", key=TMLExplainStateKeys.SelectAllTMLModels, value=False
-    )
-    selected_model_types = st.multiselect(
+    selected_model_types = multiselect_with_select_all(
         "Select TML model types to explain",
         options=all_model_types,
-        default=all_model_types if select_all else None,
         key=TMLExplainStateKeys.TMLModelSelector,
+        select_all_label="Select all TML models",
+        select_all_key=TMLExplainStateKeys.SelectAllTMLModels,
     )
 
     selected_reprs = st.multiselect(
