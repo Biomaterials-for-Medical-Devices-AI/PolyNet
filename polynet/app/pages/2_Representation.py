@@ -12,6 +12,7 @@ from polynet.app.components.forms.representation import (
     select_weight_factor,
 )
 from polynet.app.components.graph_display import show_graph_visualization
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     graph_feature_analysis_path,
@@ -30,6 +31,8 @@ from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.representation import RepresentationConfig
 from polynet.pipeline import build_graph_dataset, compute_descriptors
 from polynet.utils.graph_analysis import load_graph_feature_analysis
+
+version_footer()
 
 
 @run_progress("Building representations")

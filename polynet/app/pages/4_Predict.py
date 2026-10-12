@@ -11,6 +11,7 @@ from polynet.app.components.plots import (
     display_model_results,
     display_unseen_predictions,
 )
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -37,6 +38,8 @@ from polynet.config.schemas import (
 from polynet.pipeline import predict_external
 from polynet.plotting.data_analysis import show_continuous_distribution, show_label_distribution
 from polynet.utils.chem_utils import check_smiles_cols, determine_string_representation
+
+version_footer()
 
 st.header("Predict on New Data")
 

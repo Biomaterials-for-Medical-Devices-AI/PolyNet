@@ -12,6 +12,7 @@ from polynet.app.components.forms.analyse_results import (
 )
 from polynet.app.components.forms.explanation_plots import explanation_plots_form
 from polynet.app.components.plots import display_model_results
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -36,6 +37,8 @@ from polynet.config.schemas import (
     TrainTMLConfig,
 )
 from polynet.utils.statistical_analysis import mean_split_sizes
+
+version_footer()
 
 st.header("Analyse Results")
 

@@ -16,6 +16,7 @@ from polynet.app.components.forms.train_models import (
     train_TML_models,
 )
 from polynet.app.components.plots import display_model_results
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     data_spliting_options_path,
@@ -76,6 +77,8 @@ from polynet.pipeline import (
     train_tml,
 )
 from polynet.utils.validation import validate_hpo_folds
+
+version_footer()
 
 
 @run_progress("Training")
