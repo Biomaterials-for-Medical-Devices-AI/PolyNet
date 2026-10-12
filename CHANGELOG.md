@@ -4,6 +4,18 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-10-12
+
+### Fixed
+
+- The GUI (`polynet`, `polynet gui`) starts with Streamlit's file watcher off.
+  With the dependency versions a fresh `pip install` resolves, the watcher's
+  module scan logged a `No module named 'torchvision'` traceback for every
+  `transformers` module on each rerun once polyBERT was used. Pass
+  `--server.fileWatcherType auto` to reload the app on source changes when
+  developing (see `docs/development.md`).
+- README logo and links use full GitHub URLs, so they work on the PyPI page.
+
 ## [1.0.0] — 2026-10-12
 
 First tagged release. Earlier development versions were labelled `0.1.0` but
@@ -82,4 +94,5 @@ Compared with unreleased development versions before October 2026
   run `polynet install-psmiles`. SMILES data does not need it.
 - Package metadata moved to the standard `[project]` table.
 
+[1.0.1]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.0

@@ -13,7 +13,7 @@ Launch with:
 polynet
 ```
 
-This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
+This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. Streamlit's file watcher is off unless you set `--server.fileWatcherType`; to reload the app when its source changes (development), see [Running the GUI while developing](development.md#running-the-gui-while-developing). From the repository root, the explicit command also works (with the watcher on):
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py
