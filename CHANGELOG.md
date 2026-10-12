@@ -4,6 +4,18 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- `polynet --help` (also `-h` and `polynet help`) lists PolyNet's commands
+  instead of Streamlit's options; `polynet install-psmiles --help` shows its
+  options instead of starting the installation.
+- The GUI welcome page shows how to cite PolyNet (reference and BibTeX with the
+  Zenodo DOI).
+- README: installation from PyPI (`pip install polynet`), with Poetry for
+  development; PyPI badge; the Zenodo DOI badge loads on the PyPI page.
+
 ## [1.0.1] — 2026-10-12
 
 ### Added

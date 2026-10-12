@@ -2,6 +2,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from polynet import __version__
+
 # Set page title and layout
 st.set_page_config(page_title="PolyNet", page_icon="🧪")
 
@@ -78,5 +80,21 @@ st.markdown(
 If you encounter any issues or have suggestions, please reach out to: eduardo.aguilar-bejarano@nottingham.ac.uk
 
 If you found PolyNet useful in your research, please consider citing our work:
+
+Aguilar-Bejarano, E., Alexander, M., Winkler, D. & Figueredo, G. *PolyNet: A Python Package
+for Polymer Informatics* (software). Zenodo.
+[doi:10.5281/zenodo.23302984](https://doi.org/10.5281/zenodo.23302984)
 """
+)
+# The DOI always resolves to the latest release; the version is the one running.
+st.code(
+    f"""@software{{polynet,
+  author  = {{Aguilar-Bejarano, Eduardo and Alexander, Morgan and Winkler, David and Figueredo, Grazziela}},
+  title   = {{PolyNet: A Python Package for Polymer Informatics}},
+  version = {{{__version__}}},
+  year    = {{2026}},
+  doi     = {{10.5281/zenodo.23302984}},
+  url     = {{https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}}
+}}""",
+    language="bibtex",
 )

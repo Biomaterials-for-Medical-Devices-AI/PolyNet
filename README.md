@@ -6,7 +6,8 @@
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
 [![RDKit](https://img.shields.io/badge/RDKit-supported-informational)](https://www.rdkit.org/)
 [![Tests](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml/badge.svg)](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/actions/workflows/tests.yml)
-[![DOI](https://zenodo.org/badge/927135580.svg)](https://doi.org/10.5281/zenodo.23302984)
+[![PyPI](https://img.shields.io/pypi/v/polynet.svg)](https://pypi.org/project/polynet/)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23302984.svg)](https://doi.org/10.5281/zenodo.23302984)
 [![Black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Poetry](https://img.shields.io/badge/dependency%20management-poetry-60A5FA)](https://python-poetry.org/)
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
@@ -62,27 +63,19 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 
 ## Installation
 
-PolyNet requires **Python 3.11** and uses [Poetry](https://python-poetry.org/) for dependency management.
+PolyNet requires **Python 3.11**. Install it from PyPI to use it, or from source with
+[Poetry](https://python-poetry.org/) to develop it.
 
-### Step 1 — Clone the repository
+### Option 1 — From PyPI (recommended)
 
-```bash
-git clone https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet.git
-cd PolyNet
-```
-
-### Step 2 — Create a Python 3.11 environment
-
-Choose either option.
-
-**Option A — conda**
+Create a Python 3.11 environment with conda:
 
 ```bash
 conda create -n polynet python=3.11
 conda activate polynet
 ```
 
-**Option B — venv**
+or with venv:
 
 ```bash
 python3.11 -m venv .venv
@@ -90,7 +83,29 @@ source .venv/bin/activate      # macOS / Linux
 .venv\Scripts\activate         # Windows
 ```
 
-### Step 3 — Install Poetry
+Then install PolyNet:
+
+```bash
+pip install polynet
+```
+
+This installs the `polynet` command: `polynet` opens the GUI and `polynet run --config
+experiment.yaml` runs the pipeline (see Quick Start below).
+
+### Option 2 — From source with Poetry (development)
+
+#### Step 1 — Clone the repository
+
+```bash
+git clone https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet.git
+cd PolyNet
+```
+
+#### Step 2 — Create a Python 3.11 environment
+
+As in Option 1 (conda or venv).
+
+#### Step 3 — Install Poetry
 
 With the environment active, install Poetry via pip:
 
@@ -104,13 +119,16 @@ Then tell Poetry to use the active environment rather than creating its own:
 poetry config virtualenvs.create false --local
 ```
 
-### Step 4 — Install the project
+#### Step 4 — Install the project
 
 ```bash
 poetry install
 ```
 
-Poetry reads `pyproject.toml` and `poetry.lock` and installs all dependencies into the active environment.
+Poetry reads `pyproject.toml` and `poetry.lock` and installs the exact dependency versions
+the project is developed and tested with, plus the development tools. `pip install polynet`
+instead takes the newest versions `pyproject.toml` allows. When developing the GUI, see
+[Running the GUI while developing](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/development.md#running-the-gui-while-developing).
 
 ### PSMILES support
 
@@ -120,7 +138,7 @@ Kuenneth group. It is distributed by Georgia Tech Research Corporation under its
 licence, which allows **non-commercial use only**, and is not on PyPI, so it is installed
 separately from PolyNet's MIT-licensed code:
 
-- `poetry install` (above) installs it.
+- `poetry install` (Option 2) installs it; `pip install polynet` does not.
 - In the GUI, loading PSMILES data offers an **Install canonicalize-psmiles** button
   after you accept its licence.
 - From a terminal: `polynet install-psmiles`.
@@ -155,7 +173,8 @@ This runs the whole pipeline on a small synthetic dataset (about a minute) and p
 **1. Edit the config file** to point at your data and choose your models. The template
 `configs/experiment.yaml` runs out of the box on the built-in Tg benchmark
 (`benchmark_dataset: "curated_tg"`, downloaded on first use); to use your own data,
-replace it with `data_path`:
+replace it with `data_path`. If you installed from PyPI, download the template from
+[GitHub](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/configs/experiment.yaml):
 
 ```yaml
 # configs/experiment.yaml

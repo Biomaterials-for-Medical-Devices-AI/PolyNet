@@ -49,3 +49,31 @@ def test_a_file_watcher_set_by_the_user_is_kept(streamlit_argv, args):
 def test_the_file_watcher_environment_variable_is_respected(streamlit_argv, monkeypatch):
     monkeypatch.setenv(cli.FILE_WATCHER_ENV, "auto")
     assert streamlit_argv()[3:] == []
+
+
+@pytest.mark.parametrize("flag", ["--help", "-h", "help"])
+def test_help_lists_polynet_commands_without_starting_the_gui(streamlit_argv, capsys, flag):
+    argv = streamlit_argv(flag)
+    assert argv == ["polynet", flag]  # streamlit was not started
+    out = capsys.readouterr().out
+    assert out.startswith("usage: polynet")
+    for command in ("gui", "run", "check", "install-psmiles", "--version"):
+        assert command in out
+
+
+def test_gui_help_still_shows_the_streamlit_options(streamlit_argv):
+    # `polynet gui --help` is documented as listing the Streamlit options.
+    assert streamlit_argv("gui", "--help")[3:] == ["--server.fileWatcherType", "none", "--help"]
+
+
+def test_install_psmiles_help_does_not_install(monkeypatch, capsys):
+    import polynet.utils.optional_dependencies as optional
+
+    def fail(*_, **__):
+        raise AssertionError("install-psmiles --help must not install or prompt")
+
+    monkeypatch.setattr(optional, "install_psmiles_canonicaliser", fail)
+    monkeypatch.setattr("builtins.input", fail)
+    monkeypatch.setattr(sys, "argv", ["polynet", "install-psmiles", "--help"])
+    assert cli.main() == 0
+    assert capsys.readouterr().out.startswith("usage: polynet install-psmiles")
