@@ -4,7 +4,12 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [1.0.2] — 2026-10-12
+
+### Added
+
+- Every GUI page shows the PolyNet version in the bottom-right corner ("You are
+  using PolyNet vX.Y.Z").
 
 ### Fixed
 
@@ -137,5 +142,6 @@ Compared with unreleased development versions before October 2026
   run `polynet install-psmiles`. SMILES data does not need it.
 - Package metadata moved to the standard `[project]` table.
 
+[1.0.2]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.0

@@ -3,9 +3,11 @@ from pathlib import Path
 import streamlit as st
 
 from polynet import __version__
+from polynet.app.components.version_footer import version_footer
 
 # Set page title and layout
 st.set_page_config(page_title="PolyNet", page_icon="🧪")
+version_footer()
 
 
 # Main title

@@ -2,6 +2,7 @@ import pandas as pd
 import streamlit as st
 
 from polynet.app.components.forms.create_experiment import select_data_form
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_file_path,
     general_options_path,
@@ -16,6 +17,8 @@ from polynet.config.schemas.data import DataConfig
 from polynet.config.schemas.general import GeneralConfig
 from polynet.utils.graph_analysis import compute_graph_feature_analysis, save_graph_feature_analysis
 from polynet.utils.validation import find_duplicate_ids
+
+version_footer()
 
 
 def save_experiment(df: pd.DataFrame):

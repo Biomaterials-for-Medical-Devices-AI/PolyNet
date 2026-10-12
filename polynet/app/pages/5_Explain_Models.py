@@ -9,6 +9,7 @@ from polynet.app.components.forms.explain_model import (
 )
 from polynet.app.components.forms.explain_tml import explain_tml_form
 from polynet.app.components.plots import display_model_results, display_unseen_predictions
+from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     general_options_path,
@@ -38,6 +39,8 @@ from polynet.config.schemas import (
     TrainTMLConfig,
 )
 from polynet.featurizer.polymer_graph import CustomPolymerGraph
+
+version_footer()
 
 st.header("Explain your models")
 st.markdown(
