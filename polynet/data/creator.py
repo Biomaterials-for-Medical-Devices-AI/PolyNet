@@ -111,3 +111,32 @@ class DatasetCreator:
         """
         with files("polynet.data").joinpath("benchmarks", "fluorine_nmr_snr.csv").open() as f:
             return pd.read_csv(f)
+
+
+def subsample_dataset(df: pd.DataFrame, n_samples: int, seed: int = 0) -> pd.DataFrame:
+    """
+    A reproducible random subset of ``n_samples`` rows, in their original order.
+
+    The rows are shuffled once with ``seed`` and the first ``n_samples`` are
+    kept, so for the same seed a smaller subset is always contained in a
+    larger one.
+
+    Parameters
+    ----------
+    df:
+        The dataset.
+    n_samples:
+        Number of rows to keep; the whole dataset when at least ``len(df)``.
+    seed:
+        Seed of the shuffle.
+
+    Returns
+    -------
+    pd.DataFrame
+        The selected rows, with their original index.
+    """
+    if n_samples < 1:
+        raise ValueError(f"n_samples must be at least 1, got {n_samples}.")
+    if n_samples >= len(df):
+        return df
+    return df.sample(frac=1.0, random_state=seed).head(n_samples).sort_index()

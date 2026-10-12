@@ -6,7 +6,7 @@ from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
-from polynet.data.creator import DatasetCreator
+from polynet.data.creator import DatasetCreator, subsample_dataset
 from polynet.data.structures import (
     canonicalise_structures,
     detect_string_representation,
@@ -21,9 +21,47 @@ def _load_csv(csv_file) -> pd.DataFrame:
     return pd.read_csv(csv_file)
 
 
+# Benchmarks larger than this are subsampled by default, so that a first
+# experiment trains in minutes on a laptop.
+DEFAULT_BENCHMARK_SAMPLES = 1000
+
+
 @st.cache_data
 def _load_benchmark_dataset(dataset_name) -> pd.DataFrame:
     return DatasetCreator(dataset_name).create_dataset()
+
+
+def benchmark_sample_size_widget(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    For a large benchmark, ask how many polymers to model and return that subset.
+
+    The subset is random but reproducible (``subsample_dataset``), and the
+    experiment saves exactly the selected polymers.
+    """
+    n_total = len(df)
+    if n_total <= DEFAULT_BENCHMARK_SAMPLES:
+        return df
+
+    st.info(
+        f"This dataset has {n_total:,} polymers. Training on all of them, especially the "
+        "GNNs and their hyperparameter optimisation, can take hours on a laptop without a "
+        f"GPU. To explore PolyNet, start with a random subset of "
+        f"{DEFAULT_BENCHMARK_SAMPLES:,} polymers; set the number to {n_total:,} to use the "
+        "whole dataset."
+    )
+    n_samples = st.number_input(
+        "Number of polymers to use",
+        min_value=1,
+        max_value=n_total,
+        value=DEFAULT_BENCHMARK_SAMPLES,
+        step=100,
+        key=CreateExperimentStateKeys.BenchmarkSamples,
+        help="A random subset, the same every time for the same number (a smaller subset is "
+        "contained in a larger one). The experiment saves the selected polymers only.",
+    )
+    # Rows keep their position in the full dataset, so that without an ID column
+    # a polymer gets the same number whatever the subset size.
+    return subsample_dataset(df.reset_index(drop=True), int(n_samples))
 
 
 # Thin cached wrappers around the shared, Streamlit-free structure preparation
@@ -55,6 +93,16 @@ def _plot_label_distribution(df: pd.DataFrame, target_col: str, title: str, clas
 @st.cache_data
 def _plot_continuous_distribution(df: pd.DataFrame, target_col: str, title: str):
     return show_continuous_distribution(data=df, target_variable=target_col, title=title)
+
+
+def _row_numbering(df: pd.DataFrame) -> str:
+    """How polymers are numbered when they have no (unique) ID column."""
+    if df.index.equals(pd.RangeIndex(len(df))):
+        return f"numbered from 0 to {len(df) - 1} in row order"
+    return (
+        "numbered by their row in the full benchmark dataset (0 is its first row), so each "
+        "polymer keeps the same number whatever the subset size"
+    )
 
 
 def select_data_form():
@@ -105,7 +153,7 @@ def select_data_form():
             key=CreateExperimentStateKeys.DatasetNameLoad,
         )
 
-        df = _load_benchmark_dataset(dataset_name)
+        df = benchmark_sample_size_widget(_load_benchmark_dataset(dataset_name))
 
     if df is not None and experiment_name != "":
         st.markdown("**Preview Data**")
@@ -183,16 +231,14 @@ def select_data_form():
             st.warning(
                 f"The ID column '{id_col}' has {len(duplicate_ids)} duplicated value(s), e.g. "
                 f"{', '.join(map(str, duplicate_ids[:5]))}. IDs must be unique, so the samples "
-                f"will be numbered from 0 to {len(df) - 1} in row order instead "
+                f"will be {_row_numbering(df)} instead "
                 f"('{id_col}' is kept as a regular column)."
             )
             df.index.name = ResultColumn.INDEX
             df = df.reset_index()
         elif id_col is None:
             st.warning("An ID column to identify your polymers is highly recommended.")
-            st.info(
-                f"To differentiate the instances, we will number your instances in from 0 to {len(df)-1} in order of appereance"
-            )
+            st.info(f"To differentiate the polymers, they will be {_row_numbering(df)}.")
             df.index.name = ResultColumn.INDEX
             df = df.reset_index()
             # st.session_state[CreateExperimentStateKeys.IDCol] = ResultColumn.INDEX

@@ -60,3 +60,82 @@ def test_bundled_fluorine_nmr_snr_dataset_loads_and_validates():
     assert ratios.round(6).eq(1).all()
     # Missing measurements are empty (NaN), not placeholder strings.
     assert df["MolWt"].dtype.kind == "f" and df["MolWt"].notna().sum() == 159
+
+
+# --- subsets of large benchmarks (GUI) -------------------------------------------
+
+
+def _numbered(n):
+    return pd.DataFrame({"ID": range(n), "y": range(n)}, index=range(10, 10 + n))
+
+
+def test_subsample_is_reproducible_nested_and_keeps_row_order():
+    from polynet.data.creator import subsample_dataset
+
+    df = _numbered(500)
+    small, large = subsample_dataset(df, 50), subsample_dataset(df, 200)
+    assert len(small) == 50 and len(large) == 200
+    assert small.equals(subsample_dataset(df, 50))
+    assert set(small.index) <= set(large.index)
+    assert small.index.is_monotonic_increasing
+    assert subsample_dataset(df, 500) is df and subsample_dataset(df, 900) is df
+    with pytest.raises(ValueError):
+        subsample_dataset(df, 0)
+
+
+def _sample_size_app(n_rows: int):
+    import pandas as pd
+    import streamlit as st
+
+    from polynet.app.components.forms.create_experiment import benchmark_sample_size_widget
+
+    df = pd.DataFrame({"ID": range(n_rows)})
+    st.session_state["n_used"] = len(benchmark_sample_size_widget(df))
+
+
+def test_large_benchmark_defaults_to_a_subset_and_can_use_all():
+    from streamlit.testing.v1 import AppTest
+
+    from polynet.app.components.forms.create_experiment import DEFAULT_BENCHMARK_SAMPLES
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
+    assert app.session_state["n_used"] == DEFAULT_BENCHMARK_SAMPLES
+    assert "7,367 polymers" in app.info[0].value
+
+    app.number_input[0].set_value(7367).run()
+    assert app.session_state["n_used"] == 7367
+
+
+def test_small_benchmark_is_used_whole_without_a_widget():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 418}).run()
+    assert app.session_state["n_used"] == 418
+    assert not app.number_input and not app.info
+
+
+def _row_numbers_app():
+    import pandas as pd
+    import streamlit as st
+
+    from polynet.app.components.forms.create_experiment import benchmark_sample_size_widget
+
+    # "ID" holds each polymer's row in the full dataset; the index is not 0 … n − 1,
+    # as a loader might return.
+    full = pd.DataFrame({"ID": range(5000)}, index=range(100, 5100))
+    subset = benchmark_sample_size_widget(full)
+    st.session_state["rows"] = dict(zip(subset.index, subset["ID"]))
+
+
+def test_subset_rows_keep_their_number_in_the_full_dataset():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_row_numbers_app).run()
+    small = app.session_state["rows"]
+    assert all(row == polymer for row, polymer in small.items())
+    assert max(small) >= 1000  # not renumbered 0 … 999
+
+    app.number_input[0].set_value(3000).run()
+    large = app.session_state["rows"]
+    assert all(row == polymer for row, polymer in large.items())
+    assert set(small) <= set(large)

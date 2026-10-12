@@ -6,6 +6,17 @@ All notable changes to PolyNet are listed here. The format follows
 
 ## [1.0.1] — 2026-10-12
 
+### Added
+
+- GUI, Create Experiment: built-in benchmarks with more than 1,000 polymers
+  (`curated_tg`, 7,367) show how long training on all of them can take and
+  default to a random subset of 1,000 polymers; any size up to the full
+  dataset can be chosen. The subset is reproducible (the same polymers for the
+  same size, and a smaller subset is contained in a larger one), and the
+  experiment saves the selected polymers only. Without an ID column, polymers
+  are numbered by their row in the full dataset, so a polymer keeps its number
+  whatever the subset size.
+
 ### Fixed
 
 - The GUI (`polynet`, `polynet gui`) starts with Streamlit's file watcher off.
