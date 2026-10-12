@@ -5,6 +5,7 @@ from rdkit.Chem import Descriptors
 import streamlit as st
 from torch_geometric.data import Dataset
 
+from polynet.app.components.select_all import multiselect_with_select_all
 from polynet.app.options.state_keys import ExplainModelStateKeys, ProjectionPlotStateKeys
 from polynet.app.services.explain_model import (
     analyse_graph_embeddings,
@@ -252,14 +253,12 @@ def _shared_params_section(
     all_archs = sorted({_parse_gnn_filename(f)[0] for f in gnn_models})
     all_iterations = sorted({_parse_gnn_filename(f)[1] for f in gnn_models})
 
-    select_all = st.toggle(
-        "Select all GNN models", key=ExplainModelStateKeys.SelectAllModels, value=False
-    )
-    selected_archs = st.multiselect(
+    selected_archs = multiselect_with_select_all(
         "Select GNN architectures to explain",
         options=all_archs,
-        default=all_archs if select_all else None,
         key=ExplainModelStateKeys.GNNArchSelector,
+        select_all_label="Select all GNN models",
+        select_all_key=ExplainModelStateKeys.SelectAllModels,
     )
     selected_iterations = st.multiselect(
         "Select bootstrap iterations",

@@ -18,6 +18,19 @@ All notable changes to PolyNet are listed here. The format follows
   PyTorch loaded, and reports a crash there with the fix instead of crashing
   itself.
 - README: on macOS, XGBoost needs `brew install libomp`.
+- Box plots of metrics crashed with Matplotlib 3.11 (`boxplot(labels=...)` was
+  removed; now `tick_labels`).
+- GUI "Select all" switches did nothing with recent Streamlit versions (which a
+  pip install gets): the explain-page model selectors, and the RDKit,
+  PolyMetriX, atomic and bond property selectors on the Representation page.
+  The switch now sets the selection itself.
+- polyBERT embeddings run on CUDA or the CPU, like GNN training, instead of
+  Apple's MPS: MPS results differ slightly from the CPU ones (so they depended
+  on the machine) and were NaN on GitHub's macOS runners. polyBERT features
+  computed on Apple-silicon Macs change in about the sixth decimal.
+- New `pip install` CI workflow: builds the wheel, installs it with plain pip
+  on Linux and Apple-silicon macOS, and runs the tests and `polynet check`
+  against it, on every pull request and weekly.
 
 ## [1.0.2] — 2026-10-12
 

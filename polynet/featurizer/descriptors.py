@@ -531,7 +531,13 @@ def get_polybert_fingerprints(
 
     canonicalize = import_psmiles_canonicaliser()
 
-    model = SentenceTransformer(POLYBERT_MODEL)
+    import torch
+
+    # Same device rule as GNN training (CUDA or CPU). sentence-transformers would
+    # otherwise use Apple's MPS, whose embeddings differ slightly from the CPU ones
+    # (so results would depend on the machine) and are NaN on some virtual Macs.
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = SentenceTransformer(POLYBERT_MODEL, device=device)
 
     # 1) Canonicalize (keep a mapping from original -> canonical)
     orig_to_canon: dict[str, str] = {}
