@@ -216,3 +216,70 @@ def test_held_out_rows_are_reproducible_and_never_in_the_subset():
         assert held_out.equals(held_out_dataset(df, n, 100))
     assert len(held_out_dataset(df, 450, 100)) == 50  # only 50 left
     assert held_out_dataset(df, 500, 100).empty
+
+
+# --- benchmark columns (GUI) ------------------------------------------------------
+
+
+@pytest.mark.parametrize("name", ["curated_tg", "fluorine_nmr_snr"])
+def test_benchmark_columns_match_and_validate_the_dataset(name):
+    from polynet.config.enums import DatasetName
+    from polynet.data.creator import BENCHMARK_COLUMNS, DatasetCreator
+
+    try:
+        df = DatasetCreator(name).create_dataset()
+    except Exception as exc:  # curated_tg is downloaded on first use
+        pytest.skip(f"{name} not available: {exc}")
+    columns = BENCHMARK_COLUMNS[DatasetName(name)]
+    loader.validate_dataset(
+        df, columns.smiles_cols, columns.target_col, columns.id_col, columns.problem_type
+    )
+
+
+def _form_app():
+    import pandas as pd
+    import streamlit as st
+
+    from polynet.app.components.forms.create_experiment import select_data_form
+
+    result = select_data_form()
+    st.session_state["form_rows"] = len(result) if isinstance(result, pd.DataFrame) else None
+
+
+def _column_widgets(app):
+    smiles = next(w for w in app.multiselect if w.label == "Select SMILES columns")
+    selects = {w.label: w for w in app.selectbox}
+    return (
+        smiles,
+        selects["Select column with the ID of each molecule"],
+        selects["Select target column"],
+        selects["Select the problem type"],
+    )
+
+
+def test_benchmark_columns_are_set_and_locked_and_cleared_on_upload():
+    from streamlit.testing.v1 import AppTest
+
+    from polynet.utils.optional_dependencies import psmiles_canonicaliser_available
+
+    if not psmiles_canonicaliser_available():
+        pytest.skip("the benchmarks are PSMILES; the form stops without canonicalize-psmiles")
+
+    app = AppTest.from_function(_form_app, default_timeout=60).run()
+    app.text_input(key="ExperimentName").set_value("never_saved_benchmark_check").run()
+    app.radio[0].set_value("Load benchmarking dataset").run()
+    app.selectbox(key="DatasetNameLoad").set_value("fluorine_nmr_snr").run()
+
+    smiles, id_col, target, problem = _column_widgets(app)
+    assert smiles.value == [f"smiles_{i}" for i in range(1, 7)]
+    assert (id_col.value, target.value, problem.value) == ("ID", "SNR", "regression")
+    assert all(w.disabled for w in (smiles, id_col, target, problem))
+    assert app.text_input(key="TargetVariableName").value == "19F NMR SNR"
+    assert not app.text_input(key="TargetVariableName").disabled
+    assert app.session_state["form_rows"] == 368  # the form completes with the defaults
+
+    # Back to uploading: the benchmark's columns must not carry over.
+    keys = ("SmilesCols", "IDCol", "TargetVariableCol", "ProblemType", "TargetVariableName")
+    assert all(key in app.session_state for key in keys)
+    app.radio[0].set_value("Upload dataset").run()
+    assert not any(key in app.session_state for key in keys)

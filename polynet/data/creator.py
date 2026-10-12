@@ -1,12 +1,44 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.resources import files
 from typing import Callable
 
 import pandas as pd
 from polymetrix.datasets import CuratedGlassTempDataset
 
-from polynet.config.enums import DatasetName
+from polynet.config.enums import DatasetName, ProblemType
+
+
+@dataclass(frozen=True)
+class BenchmarkColumns:
+    """The columns of a built-in benchmark and how its target is modelled."""
+
+    smiles_cols: list[str]
+    id_col: str
+    target_col: str
+    problem_type: ProblemType
+    target_name: str
+    target_units: str = ""
+
+
+BENCHMARK_COLUMNS: dict[DatasetName, BenchmarkColumns] = {
+    DatasetName.CuratedTg: BenchmarkColumns(
+        smiles_cols=["PSMILES"],
+        id_col="ID",
+        target_col="Tg(K)",
+        problem_type=ProblemType.Regression,
+        target_name="Tg",
+        target_units="K",
+    ),
+    DatasetName.FluorineNMRSNR: BenchmarkColumns(
+        smiles_cols=[f"smiles_{i}" for i in range(1, 7)],
+        id_col="ID",
+        target_col="SNR",
+        problem_type=ProblemType.Regression,
+        target_name="19F NMR SNR",
+    ),
+}
 
 
 class DatasetCreator:

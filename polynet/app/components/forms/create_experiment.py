@@ -6,7 +6,13 @@ from polynet.app.options.file_paths import polynet_experiments_base_dir
 from polynet.app.options.state_keys import CreateExperimentStateKeys
 from polynet.config.constants import ResultColumn
 from polynet.config.enums import DatasetName, ProblemType, StringRepresentation
-from polynet.data.creator import DatasetCreator, held_out_dataset, subsample_dataset
+from polynet.data.creator import (
+    BENCHMARK_COLUMNS,
+    BenchmarkColumns,
+    DatasetCreator,
+    held_out_dataset,
+    subsample_dataset,
+)
 from polynet.data.structures import (
     canonicalise_structures,
     detect_string_representation,
@@ -184,6 +190,50 @@ def _row_numbering(df: pd.DataFrame) -> str:
     )
 
 
+# Column choices fixed for a built-in benchmark (and cleared when leaving it, as
+# the uploaded file will not have these columns).
+_LOCKED_BENCHMARK_KEYS = (
+    CreateExperimentStateKeys.SmilesCols,
+    CreateExperimentStateKeys.IDCol,
+    CreateExperimentStateKeys.TargetVariableCol,
+    CreateExperimentStateKeys.ProblemType,
+)
+# Plot labels: defaults for a benchmark, still editable.
+_BENCHMARK_LABEL_KEYS = (
+    CreateExperimentStateKeys.TargetVariableName,
+    CreateExperimentStateKeys.TargetVariableUnits,
+)
+_BENCHMARK_DEFAULTS_FOR = "benchmark_defaults_for"
+
+
+def _sync_benchmark_columns(dataset_name: str | None) -> BenchmarkColumns | None:
+    """
+    Set the column choices of the selected benchmark (``None``: uploaded data).
+
+    Runs before the column widgets: the locked choices are set on every run;
+    the plot labels only when the benchmark is first selected, so that edits
+    are kept. Leaving a benchmark clears both.
+    """
+    previous = st.session_state.get(_BENCHMARK_DEFAULTS_FOR)
+    columns = BENCHMARK_COLUMNS.get(dataset_name) if dataset_name else None
+    if columns is None:
+        if previous is not None:
+            for key in (*_LOCKED_BENCHMARK_KEYS, *_BENCHMARK_LABEL_KEYS):
+                st.session_state.pop(key, None)
+            del st.session_state[_BENCHMARK_DEFAULTS_FOR]
+        return None
+
+    st.session_state[CreateExperimentStateKeys.SmilesCols] = list(columns.smiles_cols)
+    st.session_state[CreateExperimentStateKeys.IDCol] = columns.id_col
+    st.session_state[CreateExperimentStateKeys.TargetVariableCol] = columns.target_col
+    st.session_state[CreateExperimentStateKeys.ProblemType] = columns.problem_type
+    if previous != dataset_name:
+        st.session_state[CreateExperimentStateKeys.TargetVariableName] = columns.target_name
+        st.session_state[CreateExperimentStateKeys.TargetVariableUnits] = columns.target_units
+        st.session_state[_BENCHMARK_DEFAULTS_FOR] = dataset_name
+    return columns
+
+
 def select_data_form():
 
     class_names = {}
@@ -209,8 +259,10 @@ def select_data_form():
     )
 
     df = None
+    benchmark = None
 
     if dataset_source == "Upload dataset":
+        _sync_benchmark_columns(None)
 
         csv_file = st.file_uploader(
             "Choose a CSV file",
@@ -233,6 +285,13 @@ def select_data_form():
         )
 
         df = benchmark_sample_size_widget(_load_benchmark_dataset(dataset_name), dataset_name)
+        benchmark = _sync_benchmark_columns(dataset_name)
+        if benchmark is not None:
+            st.info(
+                "The SMILES, ID and target columns and the problem type of this benchmark are "
+                "set for you and locked. You can still change the target name and units used "
+                "in the plots (Extra options)."
+            )
 
     if df is not None and experiment_name != "":
         st.markdown("**Preview Data**")
@@ -243,6 +302,7 @@ def select_data_form():
             "Select SMILES columns",
             options=df.columns.tolist(),
             key=CreateExperimentStateKeys.SmilesCols,
+            disabled=benchmark is not None,
         )
 
         if not smiles_cols:
@@ -303,6 +363,7 @@ def select_data_form():
             options=remaining_after_smiles,
             index=None,
             key=CreateExperimentStateKeys.IDCol,
+            disabled=benchmark is not None,
         )
 
         duplicate_ids = find_duplicate_ids(df[id_col]) if id_col is not None else []
@@ -335,6 +396,7 @@ def select_data_form():
             index=None,
             key=CreateExperimentStateKeys.TargetVariableCol,
             help="This column should contain the target variable you want to model.",
+            disabled=benchmark is not None,
         )
 
         if target_col and pd.api.types.is_numeric_dtype(df[target_col]):
@@ -344,7 +406,8 @@ def select_data_form():
                 suggested_problem_type = ProblemType.Classification
             else:
                 suggested_problem_type = ProblemType.Regression
-            st.warning(f"It looks like a {suggested_problem_type} problem is to be modeled.")
+            if benchmark is None:
+                st.warning(f"It looks like a {suggested_problem_type} problem is to be modeled.")
         elif target_col is None:
             st.error("Please select a target variable.")
             return False
@@ -360,12 +423,14 @@ def select_data_form():
             problem_type = st.selectbox(
                 "Select the problem type",
                 problems,
+                # A benchmark's problem type is already in the session state.
                 index=(
                     problems.index(suggested_problem_type)
-                    if suggested_problem_type in problems
+                    if suggested_problem_type in problems and benchmark is None
                     else None
                 ),
                 key=CreateExperimentStateKeys.ProblemType,
+                disabled=benchmark is not None,
             )
 
             if problem_type == ProblemType.Classification:
@@ -384,7 +449,8 @@ def select_data_form():
             with st.expander("Extra options"):
                 target_name = st.text_input(
                     "Target variable name",
-                    value=target_col,
+                    # A benchmark's name is already in the session state.
+                    value=target_col if benchmark is None else None,
                     key=CreateExperimentStateKeys.TargetVariableName,
                     help="This name will be used to create the plots and log information.",
                 )

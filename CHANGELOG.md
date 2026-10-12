@@ -8,6 +8,11 @@ All notable changes to PolyNet are listed here. The format follows
 
 ### Added
 
+- GUI, Create Experiment: selecting a built-in benchmark sets its SMILES, ID
+  and target columns and problem type, and locks them (`curated_tg`:
+  `PSMILES`, `ID`, `Tg(K)`; `fluorine_nmr_snr`: `smiles_1`–`smiles_6`, `ID`,
+  `SNR`; both regression). The target name and units used in plots get
+  defaults and stay editable. Switching back to uploading a file clears them.
 - GUI, Create Experiment: choose how many polymers of a built-in benchmark to
   model. `curated_tg` (7,367 polymers) explains how long training on all of
   them can take and defaults to a random subset of 1,000; smaller benchmarks
