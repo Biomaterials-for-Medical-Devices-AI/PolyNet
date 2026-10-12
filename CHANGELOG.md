@@ -16,6 +16,9 @@ All notable changes to PolyNet are listed here. The format follows
   experiment saves the selected polymers only. Without an ID column, polymers
   are numbered by their row in the full dataset, so a polymer keeps its number
   whatever the subset size.
+- With a subset, a button downloads 100 polymers from the rest of the dataset
+  (with their measured values) as a CSV to upload on the Predict page, to try
+  predictions on polymers the models have never seen.
 
 ### Fixed
 

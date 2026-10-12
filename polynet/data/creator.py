@@ -140,3 +140,22 @@ def subsample_dataset(df: pd.DataFrame, n_samples: int, seed: int = 0) -> pd.Dat
     if n_samples >= len(df):
         return df
     return df.sample(frac=1.0, random_state=seed).head(n_samples).sort_index()
+
+
+def held_out_dataset(
+    df: pd.DataFrame, n_samples: int, n_held_out: int, seed: int = 0
+) -> pd.DataFrame:
+    """
+    Up to ``n_held_out`` rows that are not in ``subsample_dataset(df, n_samples, seed)``.
+
+    They follow the subset in the same shuffle, so they are reproducible and,
+    used as external data, never overlap with the modelled polymers.
+
+    Returns
+    -------
+    pd.DataFrame
+        The held-out rows in their original order (empty when the subset is
+        the whole dataset).
+    """
+    shuffled = df.sample(frac=1.0, random_state=seed)
+    return shuffled.iloc[n_samples : n_samples + n_held_out].sort_index()
