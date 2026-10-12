@@ -11,6 +11,7 @@ class CreateExperimentStateKeys(StrEnum):
     DatasetNameLoad = "DatasetNameLoad"
     BenchmarkSamples = "BenchmarkSamples"
     BenchmarkHeldOut = "BenchmarkHeldOut"
+    BenchmarkHeldOutSamples = "BenchmarkHeldOutSamples"
     SmilesCols = "SmilesCols"
     CanonicaliseSMILES = "CanonicaliseSMILES"
     IDCol = "IDCol"

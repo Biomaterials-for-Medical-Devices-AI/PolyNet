@@ -24,7 +24,11 @@ def _load_csv(csv_file) -> pd.DataFrame:
 # Benchmarks larger than this are subsampled by default, so that a first
 # experiment trains in minutes on a laptop.
 DEFAULT_BENCHMARK_SAMPLES = 1000
-# Polymers outside the subset offered for download, to try the Predict page.
+# Smaller benchmarks use all polymers but this many by default, kept aside as
+# an external set.
+DEFAULT_SMALL_BENCHMARK_HELD_OUT = 50
+# Default number of polymers outside the subset offered for download (all of
+# them when fewer are left).
 BENCHMARK_HELD_OUT_SAMPLES = 100
 
 
@@ -33,53 +37,94 @@ def _load_benchmark_dataset(dataset_name) -> pd.DataFrame:
     return DatasetCreator(dataset_name).create_dataset()
 
 
+def _default_benchmark_samples(n_total: int) -> int:
+    """1,000 polymers for a large benchmark, otherwise all but 50."""
+    if n_total > DEFAULT_BENCHMARK_SAMPLES:
+        return DEFAULT_BENCHMARK_SAMPLES
+    return max(1, n_total - DEFAULT_SMALL_BENCHMARK_HELD_OUT)
+
+
 def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmark") -> pd.DataFrame:
     """
-    For a large benchmark, ask how many polymers to model and return that subset.
+    Ask how many polymers of a benchmark to model and return that subset.
 
     The subset is random but reproducible (``subsample_dataset``), and the
-    experiment saves exactly the selected polymers. Polymers left out can be
-    downloaded as a CSV to try the Predict page (``held_out_dataset``).
+    experiment saves exactly the selected polymers. Any number of the polymers
+    left out (``BENCHMARK_HELD_OUT_SAMPLES`` by default) can be downloaded as a
+    CSV to try the Predict page (``held_out_dataset``).
     """
     n_total = len(df)
-    if n_total <= DEFAULT_BENCHMARK_SAMPLES:
-        return df
+    default = _default_benchmark_samples(n_total)
 
-    st.info(
-        f"This dataset has {n_total:,} polymers. Training on all of them, especially the "
-        "GNNs and their hyperparameter optimisation, can take hours on a laptop without a "
-        f"GPU. To explore PolyNet, start with a random subset of "
-        f"{DEFAULT_BENCHMARK_SAMPLES:,} polymers; set the number to {n_total:,} to use the "
-        "whole dataset."
-    )
-    n_samples = st.number_input(
-        "Number of polymers to use",
-        min_value=1,
-        max_value=n_total,
-        value=DEFAULT_BENCHMARK_SAMPLES,
-        step=100,
-        key=CreateExperimentStateKeys.BenchmarkSamples,
-        help="A random subset, the same every time for the same number (a smaller subset is "
-        "contained in a larger one). The experiment saves the selected polymers only.",
+    if n_total > DEFAULT_BENCHMARK_SAMPLES:
+        st.info(
+            f"This dataset has {n_total:,} polymers. Training on all of them, especially the "
+            "GNNs and their hyperparameter optimisation, can take hours on a laptop without a "
+            f"GPU. To explore PolyNet, start with a random subset of {default:,} polymers; "
+            f"set the number to {n_total:,} to use the whole dataset."
+        )
+    n_samples = int(
+        st.number_input(
+            f"Number of polymers to use (of {n_total:,})",
+            min_value=1,
+            max_value=n_total,
+            value=default,
+            step=100 if n_total > DEFAULT_BENCHMARK_SAMPLES else 10,
+            # One key per dataset: a value kept from a larger dataset could exceed
+            # this one's maximum.
+            key=f"{CreateExperimentStateKeys.BenchmarkSamples}_{dataset_name}",
+            help="A random subset, the same every time for the same number (a smaller subset "
+            "is contained in a larger one). The experiment saves the selected polymers only.",
+        )
     )
     # Rows keep their position in the full dataset, so that without an ID column
     # a polymer gets the same number whatever the subset size.
     df = df.reset_index(drop=True)
 
-    held_out = held_out_dataset(df, int(n_samples), BENCHMARK_HELD_OUT_SAMPLES)
-    if not held_out.empty:
+    n_left = n_total - n_samples
+    if n_left == 0:
+        st.caption(
+            f"All {n_total:,} polymers are used in this experiment, so none are left to try "
+            "predictions on polymers the models have never seen. To keep some aside as an "
+            "external test set, lower the number of polymers."
+        )
+    else:
+        st.markdown(
+            f"**Try predictions on new polymers.** The {n_left:,} polymers left out are from "
+            "the same dataset but are **not** used in this experiment, so the models never "
+            "see them in training, validation or testing. Download as many as you like below "
+            "and, after training, upload the file on the **Predict** page: PolyNet predicts "
+            "them and, because the file includes their measured values, compares the "
+            "predictions with the measurements and shows whether each polymer is inside the "
+            "models' applicability domain. This is how well the models do on polymers they "
+            "have never seen."
+        )
+        held_out_key = f"{CreateExperimentStateKeys.BenchmarkHeldOutSamples}_{dataset_name}"
+        # A number chosen before the subset grew may exceed the polymers now left.
+        if st.session_state.get(held_out_key, 0) > n_left:
+            st.session_state[held_out_key] = n_left
+        n_held_out = int(
+            st.number_input(
+                f"Number of polymers to download (of {n_left:,} left out)",
+                min_value=1,
+                max_value=n_left,
+                value=min(BENCHMARK_HELD_OUT_SAMPLES, n_left),
+                step=10,
+                key=held_out_key,
+                help="A random selection of the polymers left out, the same every time for "
+                "the same numbers.",
+            )
+        )
+        held_out = held_out_dataset(df, n_samples, n_held_out)
         st.download_button(
-            f"Download {len(held_out)} polymers not used in this experiment",
+            f"Download {len(held_out):,} polymers not used in this experiment (CSV)",
             data=held_out.to_csv(index=False),
             file_name=f"{dataset_name}_external_{len(held_out)}.csv",
             mime="text/csv",
-            key=CreateExperimentStateKeys.BenchmarkHeldOut,
-            help="Polymers from the same dataset that are not in the subset above, with their "
-            "measured target values. After training, upload this file on the Predict page to "
-            "try predictions on new polymers and compare them with the measured values.",
+            key=f"{CreateExperimentStateKeys.BenchmarkHeldOut}_{dataset_name}",
         )
 
-    return subsample_dataset(df, int(n_samples))
+    return subsample_dataset(df, n_samples)
 
 
 # Thin cached wrappers around the shared, Streamlit-free structure preparation

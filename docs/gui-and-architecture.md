@@ -23,7 +23,7 @@ The app is organised into six sequential pages:
 
 | Page | Purpose |
 |---|---|
-| **1 — Create Experiment** | Name the experiment, upload data or load a built-in benchmark, configure target and SMILES columns. Benchmarks with more than 1,000 polymers (`curated_tg`) default to a reproducible random subset of 1,000; choose any size up to the full dataset. Without an ID column, polymers are numbered by their row in the full dataset, so a polymer keeps its number whatever the subset size. With a subset, **Download 100 polymers not used in this experiment** gives a CSV to upload on the Predict page |
+| **1 — Create Experiment** | Name the experiment, upload data or load a built-in benchmark, configure target and SMILES columns. For a benchmark, choose how many polymers to model: `curated_tg` (7,367) defaults to a reproducible random subset of 1,000 (training on all of them can take hours without a GPU), smaller benchmarks to all but 50. Without an ID column, polymers are numbered by their row in the full dataset, so a polymer keeps its number whatever the subset size. Any number of the polymers left out (100 by default) can be downloaded as a CSV to upload on the Predict page, as an external test set the models have never seen |
 | **2 — Representation** | Select molecular descriptors (RDKit, Morgan, PolyBERT, PolyMetriX) and GNN featurisation options |
 | **3 — Train Models** | Configure GNN architectures and TML models, set data splits, optionally apply target-variable scaling (regression), start training |
 | **4 — Predict** | Upload an unseen CSV and run prediction using a trained experiment |

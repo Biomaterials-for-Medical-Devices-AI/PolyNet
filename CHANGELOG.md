@@ -8,17 +8,20 @@ All notable changes to PolyNet are listed here. The format follows
 
 ### Added
 
-- GUI, Create Experiment: built-in benchmarks with more than 1,000 polymers
-  (`curated_tg`, 7,367) show how long training on all of them can take and
-  default to a random subset of 1,000 polymers; any size up to the full
-  dataset can be chosen. The subset is reproducible (the same polymers for the
-  same size, and a smaller subset is contained in a larger one), and the
+- GUI, Create Experiment: choose how many polymers of a built-in benchmark to
+  model. `curated_tg` (7,367 polymers) explains how long training on all of
+  them can take and defaults to a random subset of 1,000; smaller benchmarks
+  (`fluorine_nmr_snr`, 418) default to all polymers but 50. Any size up to the
+  full dataset can be chosen. The subset is reproducible (the same polymers for
+  the same size, and a smaller subset is contained in a larger one), and the
   experiment saves the selected polymers only. Without an ID column, polymers
   are numbered by their row in the full dataset, so a polymer keeps its number
   whatever the subset size.
-- With a subset, a button downloads 100 polymers from the rest of the dataset
-  (with their measured values) as a CSV to upload on the Predict page, to try
-  predictions on polymers the models have never seen.
+- When polymers are left out, any number of them (100 by default, or all of
+  them when fewer are left), with their measured values, can be downloaded as
+  a CSV, with an explanation of how to use it: upload it on the Predict page to
+  compare predictions with measurements on polymers the models have never seen. When every polymer is used, the page says that none
+  are left and how to keep some aside.
 
 ### Fixed
 

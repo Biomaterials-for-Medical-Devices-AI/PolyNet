@@ -62,7 +62,7 @@ def test_bundled_fluorine_nmr_snr_dataset_loads_and_validates():
     assert df["MolWt"].dtype.kind == "f" and df["MolWt"].notna().sum() == 159
 
 
-# --- subsets of large benchmarks (GUI) -------------------------------------------
+# --- benchmark subsets and external sets (GUI) -----------------------------------
 
 
 def _numbered(n):
@@ -90,28 +90,52 @@ def _sample_size_app(n_rows: int):
     from polynet.app.components.forms.create_experiment import benchmark_sample_size_widget
 
     df = pd.DataFrame({"ID": range(n_rows)})
-    st.session_state["n_used"] = len(benchmark_sample_size_widget(df))
+    st.session_state["n_used"] = len(benchmark_sample_size_widget(df, "bench"))
 
 
-def test_large_benchmark_defaults_to_a_subset_and_can_use_all():
+def test_large_benchmark_defaults_to_1000_with_a_note_on_training_time():
     from streamlit.testing.v1 import AppTest
 
-    from polynet.app.components.forms.create_experiment import DEFAULT_BENCHMARK_SAMPLES
-
     app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
-    assert app.session_state["n_used"] == DEFAULT_BENCHMARK_SAMPLES
-    assert "7,367 polymers" in app.info[0].value
-
-    app.number_input[0].set_value(7367).run()
-    assert app.session_state["n_used"] == 7367
+    assert app.session_state["n_used"] == 1000
+    assert "7,367 polymers" in app.info[0].value and "hours" in app.info[0].value
+    assert "100 polymers not used" in app.get("download_button")[0].proto.label
 
 
-def test_small_benchmark_is_used_whole_without_a_widget():
+def test_small_benchmark_defaults_to_all_but_50_without_a_note():
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 418}).run()
-    assert app.session_state["n_used"] == 418
-    assert not app.number_input and not app.info
+    assert app.session_state["n_used"] == 368
+    assert not app.info
+    assert "50 polymers not used" in app.get("download_button")[0].proto.label
+
+
+@pytest.mark.parametrize("n_rows", [418, 7367])
+def test_using_every_polymer_leaves_no_external_set(n_rows):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": n_rows}).run()
+    app.number_input[0].set_value(n_rows).run()
+    assert app.session_state["n_used"] == n_rows
+    assert not app.get("download_button")
+    assert "none are left" in app.caption[0].value
+
+
+def test_number_of_external_polymers_can_be_chosen():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
+    subset_input, external_input = app.number_input
+    assert external_input.value == 100 and "of 6,367 left out" in external_input.label
+
+    external_input.set_value(250).run()
+    assert "250 polymers not used" in app.get("download_button")[0].proto.label
+
+    # Growing the subset so that fewer polymers are left lowers the number to fit.
+    app.number_input[0].set_value(7300).run()
+    assert app.number_input[1].value == 67
+    assert "67 polymers not used" in app.get("download_button")[0].proto.label
 
 
 def _row_numbers_app():
@@ -151,25 +175,3 @@ def test_held_out_rows_are_reproducible_and_never_in_the_subset():
         assert held_out.equals(held_out_dataset(df, n, 100))
     assert len(held_out_dataset(df, 450, 100)) == 50  # only 50 left
     assert held_out_dataset(df, 500, 100).empty
-
-
-def _download_app():
-    import pandas as pd
-    import streamlit as st
-
-    from polynet.app.components.forms.create_experiment import benchmark_sample_size_widget
-
-    subset = benchmark_sample_size_widget(pd.DataFrame({"ID": range(5000)}), "curated_tg")
-    st.session_state["subset_ids"] = set(subset["ID"])
-
-
-def test_large_benchmark_offers_unused_polymers_for_prediction():
-    from streamlit.testing.v1 import AppTest
-
-    app = AppTest.from_function(_download_app).run()
-    (button,) = app.get("download_button")
-    assert "100 polymers not used" in button.proto.label
-    assert button.proto.url  # the CSV itself is served by the media manager
-
-    app.number_input[0].set_value(5000).run()
-    assert not app.get("download_button")  # nothing left to hold out
