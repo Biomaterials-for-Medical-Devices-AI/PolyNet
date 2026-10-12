@@ -284,7 +284,7 @@ If you use PolyNet, please cite the software (GitHub's "Cite this repository" bu
 @software{polynet,
   author  = {Aguilar-Bejarano, Eduardo and Alexander, Morgan and Winkler, David and Figueredo, Grazziela},
   title   = {PolyNet: A Python Package for Polymer Informatics},
-  version = {1.0.1},
+  version = {1.0.2},
   year    = {2026},
   doi     = {10.5281/zenodo.23302984},
   url     = {https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}
