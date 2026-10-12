@@ -69,19 +69,19 @@ data:
 | `benchmark_dataset` | Content |
 |---|---|
 | `curated_tg` | 7,367 homopolymers (`PSMILES`) with experimental glass transition temperatures `Tg(K)` from the curated polymetrix dataset (Zenodo record 15210035); IDs in `ID`. |
-| `fluorine_nmr_snr` | 418 fluorinated copolymers with their ¹⁹F NMR signal-to-noise ratio `SNR`. Every polymer combines the same six acrylate monomers (`smiles_1` … `smiles_6`, PSMILES) in different molar ratios (`ratio_1` … `ratio_6`, each row sums to 1); IDs in `ID`. `MolWt` and `Dispersity` are measured for 159 polymers only (empty otherwise). From Reis et al., *J. Am. Chem. Soc.* 2021, 143, 17677–17689, as used by Tao et al., *STAR Protocols* 2022, 3. |
+| `fluorine_mri_snr` | 418 fluorinated copolymers with their ¹⁹F MRI signal-to-noise ratio `SNR`. Every polymer combines the same six acrylate monomers (`smiles_1` … `smiles_6`, PSMILES) in different molar ratios (`ratio_1` … `ratio_6`, each row sums to 1); IDs in `ID`. `MolWt` and `Dispersity` are measured for 159 polymers only (empty otherwise). From Reis et al., *J. Am. Chem. Soc.* 2021, 143, 17677–17689, as used by Tao et al., *STAR Protocols* 2022, 3. |
 
 `curated_tg` is downloaded on first use (internet access needed once) and cached by
-polymetrix; `fluorine_nmr_snr` ships with PolyNet. Both are validated like a CSV file
+polymetrix; `fluorine_mri_snr` ships with PolyNet. Both are validated like a CSV file
 (columns, structures, unique IDs, target), and a copy is saved as `data_name` in the
 experiment's output directory. `curated_tg` holds homopolymers: use
-`smiles_merge_approach: "no_merging"` and `weights_col: null`. For `fluorine_nmr_snr`,
+`smiles_merge_approach: "no_merging"` and `weights_col: null`. For `fluorine_mri_snr`,
 weight each monomer by its ratio:
 
 ```yaml
 data:
-  data_name: "fluorine_nmr_snr.csv"
-  benchmark_dataset: "fluorine_nmr_snr"
+  data_name: "fluorine_mri_snr.csv"
+  benchmark_dataset: "fluorine_mri_snr"
   smiles_cols: ["smiles_1", "smiles_2", "smiles_3", "smiles_4", "smiles_5", "smiles_6"]
   target_variable_col: "SNR"
   id_col: "ID"

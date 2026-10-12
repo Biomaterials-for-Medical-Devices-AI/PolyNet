@@ -10,13 +10,13 @@ All notable changes to PolyNet are listed here. The format follows
 
 - GUI, Create Experiment: selecting a built-in benchmark sets its SMILES, ID
   and target columns and problem type, and locks them (`curated_tg`:
-  `PSMILES`, `ID`, `Tg(K)`; `fluorine_nmr_snr`: `smiles_1`–`smiles_6`, `ID`,
+  `PSMILES`, `ID`, `Tg(K)`; `fluorine_mri_snr`: `smiles_1`–`smiles_6`, `ID`,
   `SNR`; both regression). The target name and units used in plots get
   defaults and stay editable. Switching back to uploading a file clears them.
 - GUI, Create Experiment: choose how many polymers of a built-in benchmark to
   model. `curated_tg` (7,367 polymers) explains how long training on all of
   them can take and defaults to a random subset of 1,000; smaller benchmarks
-  (`fluorine_nmr_snr`, 418) default to all polymers but 50. Any size up to the
+  (`fluorine_mri_snr`, 418) default to all polymers but 50. Any size up to the
   full dataset can be chosen. The subset is reproducible (the same polymers for
   the same size, and a smaller subset is contained in a larger one), and the
   experiment saves the selected polymers only. Without an ID column, polymers
@@ -30,6 +30,12 @@ All notable changes to PolyNet are listed here. The format follows
   invalid download size, and the experiment cannot be saved with an invalid
   number of polymers. When every polymer is used, the page says that none
   are left and how to keep some aside.
+
+### Changed
+
+- The `fluorine_nmr_snr` benchmark is renamed `fluorine_mri_snr`: its `SNR` is
+  the ¹⁹F MRI signal-to-noise ratio (Reis et al. 2021), not NMR. Configs that
+  use `fluorine_nmr_snr` still load.
 
 ### Fixed
 

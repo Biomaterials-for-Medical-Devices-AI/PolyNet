@@ -51,9 +51,9 @@ def test_benchmark_dataset_is_validated_like_a_csv():
         loader.load_benchmark_dataset("curated_tg", ["SMILES"], "Tg(K)", "ID", "regression")
 
 
-def test_bundled_fluorine_nmr_snr_dataset_loads_and_validates():
+def test_bundled_fluorine_mri_snr_dataset_loads_and_validates():
     smiles_cols = [f"smiles_{i}" for i in range(1, 7)]
-    df = loader.load_benchmark_dataset("fluorine_nmr_snr", smiles_cols, "SNR", "ID", "regression")
+    df = loader.load_benchmark_dataset("fluorine_mri_snr", smiles_cols, "SNR", "ID", "regression")
     assert len(df) == 418 and df.index.is_unique
     # Copolymers: the six molar ratios of every polymer sum to 1.
     ratios = df[[f"ratio_{i}" for i in range(1, 7)]].sum(axis=1)
@@ -221,7 +221,7 @@ def test_held_out_rows_are_reproducible_and_never_in_the_subset():
 # --- benchmark columns (GUI) ------------------------------------------------------
 
 
-@pytest.mark.parametrize("name", ["curated_tg", "fluorine_nmr_snr"])
+@pytest.mark.parametrize("name", ["curated_tg", "fluorine_mri_snr"])
 def test_benchmark_columns_match_and_validate_the_dataset(name):
     from polynet.config.enums import DatasetName
     from polynet.data.creator import BENCHMARK_COLUMNS, DatasetCreator
@@ -268,13 +268,13 @@ def test_benchmark_columns_are_set_and_locked_and_cleared_on_upload():
     app = AppTest.from_function(_form_app, default_timeout=60).run()
     app.text_input(key="ExperimentName").set_value("never_saved_benchmark_check").run()
     app.radio[0].set_value("Load benchmarking dataset").run()
-    app.selectbox(key="DatasetNameLoad").set_value("fluorine_nmr_snr").run()
+    app.selectbox(key="DatasetNameLoad").set_value("fluorine_mri_snr").run()
 
     smiles, id_col, target, problem = _column_widgets(app)
     assert smiles.value == [f"smiles_{i}" for i in range(1, 7)]
     assert (id_col.value, target.value, problem.value) == ("ID", "SNR", "regression")
     assert all(w.disabled for w in (smiles, id_col, target, problem))
-    assert app.text_input(key="TargetVariableName").value == "19F NMR SNR"
+    assert app.text_input(key="TargetVariableName").value == "19F MRI SNR"
     assert not app.text_input(key="TargetVariableName").disabled
     assert app.session_state["form_rows"] == 368  # the form completes with the defaults
 
@@ -283,3 +283,10 @@ def test_benchmark_columns_are_set_and_locked_and_cleared_on_upload():
     assert all(key in app.session_state for key in keys)
     app.radio[0].set_value("Upload dataset").run()
     assert not any(key in app.session_state for key in keys)
+
+
+def test_old_fluorine_benchmark_name_still_loads():
+    """``fluorine_mri_snr`` was called ``fluorine_nmr_snr`` in 1.0.0."""
+    assert DataConfig(**_BASE, benchmark_dataset="fluorine_nmr_snr").benchmark_dataset == (
+        "fluorine_mri_snr"
+    )

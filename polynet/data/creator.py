@@ -31,12 +31,12 @@ BENCHMARK_COLUMNS: dict[DatasetName, BenchmarkColumns] = {
         target_name="Tg",
         target_units="K",
     ),
-    DatasetName.FluorineNMRSNR: BenchmarkColumns(
+    DatasetName.FluorineMRISNR: BenchmarkColumns(
         smiles_cols=[f"smiles_{i}" for i in range(1, 7)],
         id_col="ID",
         target_col="SNR",
         problem_type=ProblemType.Regression,
-        target_name="19F NMR SNR",
+        target_name="19F MRI SNR",
     ),
 }
 
@@ -84,7 +84,7 @@ class DatasetCreator:
         """
         dataset_loaders: dict[DatasetName, Callable[[], pd.DataFrame]] = {
             DatasetName.CuratedTg: self._load_curated_tg,
-            DatasetName.FluorineNMRSNR: self._load_fluorine_nmr_snr,
+            DatasetName.FluorineMRISNR: self._load_fluorine_mri_snr,
         }
 
         try:
@@ -116,11 +116,11 @@ class DatasetCreator:
         return dataset
 
     @staticmethod
-    def _load_fluorine_nmr_snr() -> pd.DataFrame:
+    def _load_fluorine_mri_snr() -> pd.DataFrame:
         """
-        Load the 19F NMR signal-to-noise ratio dataset of fluorinated copolymers.
+        Load the 19F MRI signal-to-noise ratio dataset of fluorinated copolymers.
 
-        Bundled with PolyNet (``polynet/data/benchmarks/fluorine_nmr_snr.csv``).
+        Bundled with PolyNet (``polynet/data/benchmarks/fluorine_mri_snr.csv``).
         Every polymer is a copolymer of the same six acrylate monomers; only
         their molar ratios change.
 
@@ -137,11 +137,11 @@ class DatasetCreator:
             - ``ID``: polymer identifier
             - ``smiles_1`` … ``smiles_6``: monomer PSMILES
             - ``ratio_1`` … ``ratio_6``: molar ratios (each row sums to 1)
-            - ``SNR``: 19F NMR signal-to-noise ratio
+            - ``SNR``: 19F MRI signal-to-noise ratio
             - ``MolWt``, ``Dispersity``: measured molecular weight and
               dispersity, missing (NaN) for most polymers
         """
-        with files("polynet.data").joinpath("benchmarks", "fluorine_nmr_snr.csv").open() as f:
+        with files("polynet.data").joinpath("benchmarks", "fluorine_mri_snr.csv").open() as f:
             return pd.read_csv(f)
 
 
