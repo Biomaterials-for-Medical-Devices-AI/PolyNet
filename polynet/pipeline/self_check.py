@@ -9,6 +9,10 @@ dataset, once for regression and once for classification, in a temporary
 folder, and prints a PASS / FAIL table that can be pasted into a bug report.
 The regression run also explains the models and predicts on new data.
 
+XGBoost is first trained in a separate process with PyTorch loaded: on macOS
+two OpenMP runtimes in one process crash it, which would end the check before
+its report. The pipeline runs train XGBoost only if that passes.
+
 Usage
 -----
     polynet check                 # about a minute on a laptop
@@ -25,6 +29,8 @@ import logging
 from pathlib import Path
 import platform
 import shutil
+import subprocess
+import sys
 import tempfile
 import time
 import warnings
@@ -108,11 +114,16 @@ def synthetic_copolymers(n_samples: int, problem_type: str, seed: int = 42) -> p
 
 
 def check_config(
-    problem_type: str, data_path: Path, out_dir: Path, epochs: int, predict_path: Path | None
+    problem_type: str,
+    data_path: Path,
+    out_dir: Path,
+    epochs: int,
+    predict_path: Path | None,
+    xgboost: bool = True,
 ) -> dict:
     """
-    Return a small but complete pipeline config: GCN and random forest on
-    Morgan fingerprints, two repeated splits.
+    Return a small but complete pipeline config: GCN, random forest and
+    XGBoost on Morgan fingerprints, two repeated splits.
 
     Args:
         problem_type (str): ``"regression"`` or ``"classification"``.
@@ -121,6 +132,7 @@ def check_config(
         epochs (int): GNN training epochs.
         predict_path (Path | None): CSV to predict after training; when given,
             the models are also explained.
+        xgboost (bool): Also train XGBoost.
 
     Returns:
         dict: The config, as ``polynet run`` reads it from YAML.
@@ -175,7 +187,10 @@ def check_config(
         "feature_preprocessing": {"scaler": "standard_scaler"},
         "tml_models": {
             "train_tml": True,
-            "selected_models": {"random_forest": {"n_estimators": 20, "max_depth": 3}},
+            "selected_models": {
+                "random_forest": {"n_estimators": 20, "max_depth": 3},
+                **({"xgboost": {"n_estimators": 20, "max_depth": 3}} if xgboost else {}),
+            },
         },
         "explainability": {"enabled": explain, "fragmentation": "brics", "top_n": 5},
         "tml_explainability": {"enabled": explain, "top_n": 5},
@@ -223,8 +238,47 @@ def _check_psmiles() -> CheckResult:
     return CheckResult("PSMILES canonicaliser", "PASS", "installed and working")
 
 
+# Trains XGBoost the way the pipeline does: after PyTorch has been imported.
+_XGBOOST_WITH_TORCH = """
+import numpy as np
+import torch  # noqa: F401
+import xgboost
+X = np.random.default_rng(0).normal(size=(200, 10))
+xgboost.XGBRegressor(n_estimators=10).fit(X, X[:, 0])
+"""
+
+
+def _check_xgboost_with_torch() -> CheckResult:
+    """Train XGBoost with PyTorch loaded, in a separate process that may crash."""
+    name = "XGBoost with PyTorch loaded"
+    try:
+        run = subprocess.run(
+            [sys.executable, "-c", _XGBOOST_WITH_TORCH], capture_output=True, text=True, timeout=300
+        )
+    except subprocess.TimeoutExpired:
+        return CheckResult(name, "FAIL", "did not finish within 5 minutes")
+    if run.returncode == 0:
+        return CheckResult(name, "PASS")
+    if run.returncode < 0:  # killed by a signal, e.g. a segmentation fault
+        detail = f"crashed (signal {-run.returncode})"
+        if platform.system() == "Darwin":
+            detail += (
+                "; on macOS this is usually two OpenMP runtimes (PyTorch's and XGBoost's). "
+                'Install a compatible PyTorch: pip install "torch<2.11"'
+            )
+    else:
+        detail = (run.stderr.strip().splitlines() or [f"exit code {run.returncode}"])[-1]
+    return CheckResult(name, "FAIL", detail + ". XGBoost is left out of the runs below.")
+
+
 def _check_pipeline(
-    name: str, problem_type: str, work_dir: Path, epochs: int, n_samples: int, predict: bool
+    name: str,
+    problem_type: str,
+    work_dir: Path,
+    epochs: int,
+    n_samples: int,
+    predict: bool,
+    xgboost: bool = True,
 ) -> CheckResult:
     from polynet.pipeline.runner import main as run_pipeline
 
@@ -243,7 +297,9 @@ def _check_pipeline(
     out_dir = run_dir / "results"
     config_path = run_dir / "config.yaml"
     with open(config_path, "w") as f:
-        yaml.safe_dump(check_config(problem_type, data_path, out_dir, epochs, predict_path), f)
+        yaml.safe_dump(
+            check_config(problem_type, data_path, out_dir, epochs, predict_path, xgboost), f
+        )
 
     collector = _ErrorCollector()
     polynet_logger = logging.getLogger("polynet")
@@ -325,7 +381,8 @@ def main(argv: list[str] | None = None) -> int:
 
     results = [_check_packages()]
     if results[0].status == "PASS":
-        results += [_check_device(), _check_psmiles()]
+        results += [_check_device(), _check_psmiles(), _check_xgboost_with_torch()]
+        xgboost = results[-1].status == "PASS"
 
         work_dir = Path(tempfile.mkdtemp(prefix="polynet_check_"))
         pipeline_checks = [
@@ -335,7 +392,9 @@ def main(argv: list[str] | None = None) -> int:
         for name, problem_type, predict in pipeline_checks:
             print(f"  running {name.lower()}…")
             results.append(
-                _check_pipeline(name, problem_type, work_dir, args.epochs, args.samples, predict)
+                _check_pipeline(
+                    name, problem_type, work_dir, args.epochs, args.samples, predict, xgboost
+                )
             )
 
         failed = any(r.status == "FAIL" for r in results)

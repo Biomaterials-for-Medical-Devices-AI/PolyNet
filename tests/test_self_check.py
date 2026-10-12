@@ -46,3 +46,21 @@ def test_full_check_passes(tmp_path):
     out = tmp_path / "regression" / "results"
     assert (out / "explanations").is_dir()
     assert any((out / "unseen_predictions").rglob("predictions.csv"))
+
+
+def test_xgboost_crash_is_reported_with_the_fix(monkeypatch):
+    """A crash (e.g. two OpenMP runtimes on macOS) must not end the check."""
+    import subprocess
+
+    crashed = subprocess.CompletedProcess(args=[], returncode=-11, stdout="", stderr="")
+    monkeypatch.setattr(self_check.subprocess, "run", lambda *a, **k: crashed)
+    monkeypatch.setattr(self_check.platform, "system", lambda: "Darwin")
+    result = self_check._check_xgboost_with_torch()
+    assert result.status == "FAIL"
+    assert "signal 11" in result.detail and 'torch<2.11' in result.detail
+
+
+def test_xgboost_trains_with_torch_loaded():
+    # The real check, in a separate process with this environment's packages.
+    result = self_check._check_xgboost_with_torch()
+    assert result.status == "PASS", result.detail
