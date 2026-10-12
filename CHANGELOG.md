@@ -4,6 +4,21 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.3] — 2026-10-12
+
+### Fixed
+
+- XGBoost crashed (segmentation fault) on Apple-silicon Macs when installed
+  with pip: from PyTorch 2.11 its bundled OpenMP library is no longer named
+  like Homebrew's, so XGBoost loaded a second OpenMP runtime once PyTorch was
+  imported. PolyNet now requires `torch<2.11` on Apple silicon (Linux,
+  Windows and Intel Macs are unchanged). Fix an existing environment with
+  `pip install "torch<2.11"`.
+- `polynet check` now also trains XGBoost, first in a separate process with
+  PyTorch loaded, and reports a crash there with the fix instead of crashing
+  itself.
+- README: on macOS, XGBoost needs `brew install libomp`.
+
 ## [1.0.2] — 2026-10-12
 
 ### Added
@@ -142,6 +157,7 @@ Compared with unreleased development versions before October 2026
   run `polynet install-psmiles`. SMILES data does not need it.
 - Package metadata moved to the standard `[project]` table.
 
+[1.0.3]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.3
 [1.0.2]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.2
 [1.0.1]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.0
