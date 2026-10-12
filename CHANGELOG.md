@@ -20,7 +20,10 @@ All notable changes to PolyNet are listed here. The format follows
 - When polymers are left out, any number of them (100 by default, or all of
   them when fewer are left), with their measured values, can be downloaded as
   a CSV, with an explanation of how to use it: upload it on the Predict page to
-  compare predictions with measurements on polymers the models have never seen. When every polymer is used, the page says that none
+  compare predictions with measurements on polymers the models have never seen.
+  Numbers outside the valid range are reported: the download is disabled for an
+  invalid download size, and the experiment cannot be saved with an invalid
+  number of polymers. When every polymer is used, the page says that none
   are left and how to keep some aside.
 
 ### Fixed

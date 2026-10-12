@@ -89,6 +89,7 @@ def _sample_size_app(n_rows: int):
 
     from polynet.app.components.forms.create_experiment import benchmark_sample_size_widget
 
+    st.session_state.pop("n_used", None)  # set again only if the widget returns
     df = pd.DataFrame({"ID": range(n_rows)})
     st.session_state["n_used"] = len(benchmark_sample_size_widget(df, "bench"))
 
@@ -126,16 +127,56 @@ def test_number_of_external_polymers_can_be_chosen():
     from streamlit.testing.v1 import AppTest
 
     app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
-    subset_input, external_input = app.number_input
+    external_input = app.number_input[1]
     assert external_input.value == 100 and "of 6,367 left out" in external_input.label
 
     external_input.set_value(250).run()
-    assert "250 polymers not used" in app.get("download_button")[0].proto.label
+    (button,) = app.get("download_button")
+    assert "250 polymers not used" in button.proto.label and not button.proto.disabled
+    assert not app.error
 
-    # Growing the subset so that fewer polymers are left lowers the number to fit.
-    app.number_input[0].set_value(7300).run()
-    assert app.number_input[1].value == 67
-    assert "67 polymers not used" in app.get("download_button")[0].proto.label
+
+@pytest.mark.parametrize("n_external", [400, 0])
+def test_out_of_range_external_number_disables_the_download(n_external):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
+    app.number_input[0].set_value(7000).run()  # 367 left out
+    app.number_input[1].set_value(n_external).run()
+
+    assert "between 1 and 367" in app.error[0].value
+    (button,) = app.get("download_button")
+    assert button.proto.disabled and "400" not in button.proto.label
+    assert app.session_state["n_used"] == 7000  # the experiment itself is unaffected
+
+
+def test_growing_the_subset_never_offers_more_polymers_than_are_left():
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
+    app.number_input[1].set_value(250).run()
+    app.number_input[0].set_value(7300).run()  # 67 left out
+
+    # Depending on the Streamlit version, the number is either reset to its default
+    # (the label changed) or kept and reported; never a download of 250.
+    (button,) = app.get("download_button")
+    if app.error:
+        assert "between 1 and 67" in app.error[0].value and button.proto.disabled
+    else:
+        assert app.number_input[1].value <= 67
+        assert f"{app.number_input[1].value} polymers not used" in button.proto.label
+
+
+@pytest.mark.parametrize("n_used", [8000, 0])
+def test_out_of_range_number_of_polymers_stops_the_form(n_used):
+    from streamlit.testing.v1 import AppTest
+
+    app = AppTest.from_function(_sample_size_app, kwargs={"n_rows": 7367}).run()
+    app.number_input[0].set_value(n_used).run()
+
+    assert "between 1 and 7,367" in app.error[0].value
+    assert "n_used" not in app.session_state  # nothing after the field ran
+    assert not app.get("download_button")
 
 
 def _row_numbers_app():

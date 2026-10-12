@@ -44,6 +44,13 @@ def _default_benchmark_samples(n_total: int) -> int:
     return max(1, n_total - DEFAULT_SMALL_BENCHMARK_HELD_OUT)
 
 
+def _out_of_range(value: int, high: int, what: str) -> str | None:
+    """Error message when ``value`` is not between 1 and ``high``, else ``None``."""
+    if 1 <= value <= high:
+        return None
+    return f"The number of {what} must be between 1 and {high:,}; {value:,} was entered."
+
+
 def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmark") -> pd.DataFrame:
     """
     Ask how many polymers of a benchmark to model and return that subset.
@@ -52,6 +59,10 @@ def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmar
     experiment saves exactly the selected polymers. Any number of the polymers
     left out (``BENCHMARK_HELD_OUT_SAMPLES`` by default) can be downloaded as a
     CSV to try the Predict page (``held_out_dataset``).
+
+    The number inputs have no browser-side bounds: the browser does not send a
+    value outside them, so the page would silently keep using the previous
+    number. Out-of-range numbers are reported here instead.
     """
     n_total = len(df)
     default = _default_benchmark_samples(n_total)
@@ -66,8 +77,6 @@ def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmar
     n_samples = int(
         st.number_input(
             f"Number of polymers to use (of {n_total:,})",
-            min_value=1,
-            max_value=n_total,
             value=default,
             step=100 if n_total > DEFAULT_BENCHMARK_SAMPLES else 10,
             # One key per dataset: a value kept from a larger dataset could exceed
@@ -77,6 +86,9 @@ def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmar
             "is contained in a larger one). The experiment saves the selected polymers only.",
         )
     )
+    if error := _out_of_range(n_samples, n_total, "polymers to use"):
+        st.error(error)
+        st.stop()
     # Rows keep their position in the full dataset, so that without an ID column
     # a polymer gets the same number whatever the subset size.
     df = df.reset_index(drop=True)
@@ -99,29 +111,33 @@ def benchmark_sample_size_widget(df: pd.DataFrame, dataset_name: str = "benchmar
             "models' applicability domain. This is how well the models do on polymers they "
             "have never seen."
         )
-        held_out_key = f"{CreateExperimentStateKeys.BenchmarkHeldOutSamples}_{dataset_name}"
-        # A number chosen before the subset grew may exceed the polymers now left.
-        if st.session_state.get(held_out_key, 0) > n_left:
-            st.session_state[held_out_key] = n_left
         n_held_out = int(
             st.number_input(
                 f"Number of polymers to download (of {n_left:,} left out)",
-                min_value=1,
-                max_value=n_left,
                 value=min(BENCHMARK_HELD_OUT_SAMPLES, n_left),
                 step=10,
-                key=held_out_key,
+                key=f"{CreateExperimentStateKeys.BenchmarkHeldOutSamples}_{dataset_name}",
                 help="A random selection of the polymers left out, the same every time for "
                 "the same numbers.",
             )
         )
-        held_out = held_out_dataset(df, n_samples, n_held_out)
+        # Also catches a number chosen before the subset grew. The download does not
+        # change the experiment, so only the button is disabled.
+        error = _out_of_range(n_held_out, n_left, "polymers to download")
+        if error:
+            st.error(error)
+        held_out = df.iloc[:0] if error else held_out_dataset(df, n_samples, n_held_out)
         st.download_button(
-            f"Download {len(held_out):,} polymers not used in this experiment (CSV)",
+            (
+                f"Download {len(held_out):,} polymers not used in this experiment (CSV)"
+                if not error
+                else "Download polymers not used in this experiment (CSV)"
+            ),
             data=held_out.to_csv(index=False),
             file_name=f"{dataset_name}_external_{len(held_out)}.csv",
             mime="text/csv",
             key=f"{CreateExperimentStateKeys.BenchmarkHeldOut}_{dataset_name}",
+            disabled=error is not None,
         )
 
     return subsample_dataset(df, n_samples)
