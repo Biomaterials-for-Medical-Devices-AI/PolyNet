@@ -8,6 +8,7 @@ the YAML pipeline can be run from any working directory:
 
     polynet                          # launch the GUI
     polynet --server.port 8502       # any `streamlit run` option is forwarded
+    polynet --server.fileWatcherType auto   # reload on source changes (development)
     polynet gui --server.port 8502   # same, explicit
     polynet run --config experiment.yaml   # run the pipeline from a YAML config
     polynet check                    # check that the installation works
@@ -15,6 +16,7 @@ the YAML pipeline can be run from any working directory:
     polynet --version
 """
 
+import os
 from pathlib import Path
 import sys
 
@@ -22,13 +24,34 @@ from polynet import __version__
 
 APP_ENTRYPOINT = Path(__file__).parent / "app" / "Welcome_to_PolyNet.py"
 
+FILE_WATCHER_OPTION = "--server.fileWatcherType"
+FILE_WATCHER_ENV = "STREAMLIT_SERVER_FILE_WATCHER_TYPE"
+
+
+def _gui_args(args: list[str]) -> list[str]:
+    """
+    ``streamlit run`` options for the GUI: the user's, with the file watcher off
+    unless they set it.
+
+    The watcher reloads the app when its source changes, which only matters when
+    developing PolyNet. It also scans every loaded module on each rerun, and
+    with recent ``transformers`` versions that scan logs a traceback for each
+    module needing a package PolyNet does not install (e.g. ``torchvision``).
+    """
+    user_set = os.environ.get(FILE_WATCHER_ENV) or any(
+        a == FILE_WATCHER_OPTION or a.startswith(f"{FILE_WATCHER_OPTION}=") for a in args
+    )
+    return list(args) if user_set else [FILE_WATCHER_OPTION, "none", *args]
+
 
 def launch_gui(args: list[str]) -> int:
     """
     Launch the PolyNet Streamlit GUI.
 
     Any arguments are forwarded to `streamlit run`, so Streamlit options such
-    as `--server.port` work unchanged.
+    as `--server.port` work unchanged. Streamlit's file watcher is off unless
+    ``--server.fileWatcherType`` (or its environment variable) is given; see
+    ``_gui_args``.
 
     Args:
         args (list[str]): Arguments forwarded to `streamlit run`.
@@ -47,7 +70,7 @@ def launch_gui(args: list[str]) -> int:
         )
         return 1
 
-    sys.argv = ["streamlit", "run", str(APP_ENTRYPOINT), *args]
+    sys.argv = ["streamlit", "run", str(APP_ENTRYPOINT), *_gui_args(args)]
     return streamlit_cli.main()
 
 

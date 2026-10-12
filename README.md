@@ -1,7 +1,7 @@
 # PolyNet
 
 [![Python](https://img.shields.io/badge/python-3.11-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/LICENSE)
 [![PyTorch](https://img.shields.io/badge/PyTorch-2.x-ee4c2c?logo=pytorch&logoColor=white)](https://pytorch.org/)
 [![PyG](https://img.shields.io/badge/PyTorch%20Geometric-enabled-3C2179)](https://pytorch-geometric.readthedocs.io/)
 [![RDKit](https://img.shields.io/badge/RDKit-supported-informational)](https://www.rdkit.org/)
@@ -12,7 +12,7 @@
 [![Status](https://img.shields.io/badge/status-active%20development-brightgreen)]()
 
 <p align="center">
-  <img src="polynet/app/static/polynet.png" alt="PolyNet logo" width="400"/>
+  <img src="https://raw.githubusercontent.com/Biomaterials-for-Medical-Devices-AI/PolyNet/main/polynet/app/static/polynet.png" alt="PolyNet logo" width="400"/>
 </p>
 
 **PolyNet** is a Python library for polymer property prediction using graph neural networks (GNNs) and traditional machine learning (TML). It provides a complete, configurable pipeline — from raw SMILES strings to trained models, evaluation metrics, result plots, and atom-level explainability — designed for polymer informatics research.
@@ -189,7 +189,7 @@ All outputs are written to the directory specified by `experiment.output_dir` in
 polynet
 ```
 
-This works from any directory once the package is installed (`polynet gui` is the same). Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
+This works from any directory once the package is installed (`polynet gui` is the same). Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. When developing PolyNet, run `polynet --server.fileWatcherType auto` so the app reloads on save (see [Development](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/development.md#running-the-gui-while-developing)). From the repository root, the explicit command also works:
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py
@@ -239,15 +239,15 @@ Copolymers with any number of monomers are supported by adding one SMILES column
 
 ## Documentation
 
-Full documentation lives in [`docs/`](docs/README.md):
+Full documentation lives in [`docs/`](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/README.md):
 
-- **[Configuration reference](docs/configuration.md)** — every YAML section, including automatic HPO
-- **[Descriptors](docs/descriptors.md)** — polymer descriptor fusion and the PolyMetriX integration
-- **[Explainability](docs/explainability.md)** — GNN masking & TML SHAP attribution, normalisation, averaged vs per-model display, and statistical model comparison
-- **[Running the pipeline & outputs](docs/running-and-outputs.md)** — CLI flags, predicting on external data, target scaling, and the output directory layout
-- **[API reference](docs/api-reference.md)** — project structure and the public Python API
-- **[GUI & architecture](docs/gui-and-architecture.md)** — the Streamlit application and the core-vs-GUI design
-- **[Development](docs/development.md)** — running the test suite and extending PolyNet
+- **[Configuration reference](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/configuration.md)** — every YAML section, including automatic HPO
+- **[Descriptors](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/descriptors.md)** — polymer descriptor fusion and the PolyMetriX integration
+- **[Explainability](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/explainability.md)** — GNN masking & TML SHAP attribution, normalisation, averaged vs per-model display, and statistical model comparison
+- **[Running the pipeline & outputs](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/running-and-outputs.md)** — CLI flags, predicting on external data, target scaling, and the output directory layout
+- **[API reference](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/api-reference.md)** — project structure and the public Python API
+- **[GUI & architecture](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/gui-and-architecture.md)** — the Streamlit application and the core-vs-GUI design
+- **[Development](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/docs/development.md)** — running the test suite and extending PolyNet
 
 ---
 
@@ -259,13 +259,13 @@ Full documentation lives in [`docs/`](docs/README.md):
 
 ## Citing PolyNet
 
-If you use PolyNet, please cite the software (GitHub's "Cite this repository" button reads [`CITATION.cff`](CITATION.cff)):
+If you use PolyNet, please cite the software (GitHub's "Cite this repository" button reads [`CITATION.cff`](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/CITATION.cff)):
 
 ```bibtex
 @software{polynet,
   author  = {Aguilar-Bejarano, Eduardo and Alexander, Morgan and Winkler, David and Figueredo, Grazziela},
   title   = {PolyNet: A Python Package for Polymer Informatics},
-  version = {1.0.0},
+  version = {1.0.1},
   year    = {2026},
   doi     = {10.5281/zenodo.23302984},
   url     = {https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet}
@@ -276,4 +276,4 @@ This DOI always resolves to the latest release. To cite the exact version you us
 take its DOI from the [Zenodo record](https://doi.org/10.5281/zenodo.23302984)
 (1.0.0: [10.5281/zenodo.23302985](https://doi.org/10.5281/zenodo.23302985)).
 
-Changes between versions are listed in [`CHANGELOG.md`](CHANGELOG.md).
+Changes between versions are listed in [`CHANGELOG.md`](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/CHANGELOG.md).

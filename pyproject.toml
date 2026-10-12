@@ -1,6 +1,6 @@
 [project]
 name = "polynet"
-version = "1.0.0"
+version = "1.0.1"
 description = "A Python package for polymer informatics: property prediction with graph neural networks and traditional machine learning"
 authors = [
   { name = "Eduardo Aguilar-Bejarano", email = "eduardo.aguilar-bejarano@nottingham.ac.uk" },

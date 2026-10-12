@@ -13,7 +13,7 @@ Launch with:
 polynet
 ```
 
-This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. The equivalent explicit command still works:
+This works from any directory once the package is installed. Any `streamlit run` option is forwarded, so `polynet --server.port 8502` changes the port. Streamlit's file watcher is off unless you set `--server.fileWatcherType`; to reload the app when its source changes (development), see [Running the GUI while developing](development.md#running-the-gui-while-developing). From the repository root, the explicit command also works (with the watcher on):
 
 ```bash
 streamlit run polynet/app/Welcome_to_PolyNet.py
@@ -23,7 +23,7 @@ The app is organised into six sequential pages:
 
 | Page | Purpose |
 |---|---|
-| **1 — Create Experiment** | Name the experiment, upload data, configure target and SMILES columns |
+| **1 — Create Experiment** | Name the experiment, upload data or load a built-in benchmark, configure target and SMILES columns. For a benchmark, the SMILES, ID and target columns and the problem type are set and locked (the target name and units stay editable); choose how many polymers to model: `curated_tg` (7,367) defaults to a reproducible random subset of 1,000 (training on all of them can take hours without a GPU), smaller benchmarks to all but 50. Without an ID column, polymers are numbered by their row in the full dataset, so a polymer keeps its number whatever the subset size. Any number of the polymers left out (100 by default) can be downloaded as a CSV to upload on the Predict page, as an external test set the models have never seen |
 | **2 — Representation** | Select molecular descriptors (RDKit, Morgan, PolyBERT, PolyMetriX) and GNN featurisation options |
 | **3 — Train Models** | Configure GNN architectures and TML models, set data splits, optionally apply target-variable scaling (regression), start training |
 | **4 — Predict** | Upload an unseen CSV and run prediction using a trained experiment |

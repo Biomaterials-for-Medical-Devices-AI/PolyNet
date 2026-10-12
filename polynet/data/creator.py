@@ -1,12 +1,44 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from importlib.resources import files
 from typing import Callable
 
 import pandas as pd
 from polymetrix.datasets import CuratedGlassTempDataset
 
-from polynet.config.enums import DatasetName
+from polynet.config.enums import DatasetName, ProblemType
+
+
+@dataclass(frozen=True)
+class BenchmarkColumns:
+    """The columns of a built-in benchmark and how its target is modelled."""
+
+    smiles_cols: list[str]
+    id_col: str
+    target_col: str
+    problem_type: ProblemType
+    target_name: str
+    target_units: str = ""
+
+
+BENCHMARK_COLUMNS: dict[DatasetName, BenchmarkColumns] = {
+    DatasetName.CuratedTg: BenchmarkColumns(
+        smiles_cols=["PSMILES"],
+        id_col="ID",
+        target_col="Tg(K)",
+        problem_type=ProblemType.Regression,
+        target_name="Tg",
+        target_units="K",
+    ),
+    DatasetName.FluorineMRISNR: BenchmarkColumns(
+        smiles_cols=[f"smiles_{i}" for i in range(1, 7)],
+        id_col="ID",
+        target_col="SNR",
+        problem_type=ProblemType.Regression,
+        target_name="19F MRI SNR",
+    ),
+}
 
 
 class DatasetCreator:
@@ -52,7 +84,7 @@ class DatasetCreator:
         """
         dataset_loaders: dict[DatasetName, Callable[[], pd.DataFrame]] = {
             DatasetName.CuratedTg: self._load_curated_tg,
-            DatasetName.FluorineNMRSNR: self._load_fluorine_nmr_snr,
+            DatasetName.FluorineMRISNR: self._load_fluorine_mri_snr,
         }
 
         try:
@@ -84,11 +116,11 @@ class DatasetCreator:
         return dataset
 
     @staticmethod
-    def _load_fluorine_nmr_snr() -> pd.DataFrame:
+    def _load_fluorine_mri_snr() -> pd.DataFrame:
         """
-        Load the 19F NMR signal-to-noise ratio dataset of fluorinated copolymers.
+        Load the 19F MRI signal-to-noise ratio dataset of fluorinated copolymers.
 
-        Bundled with PolyNet (``polynet/data/benchmarks/fluorine_nmr_snr.csv``).
+        Bundled with PolyNet (``polynet/data/benchmarks/fluorine_mri_snr.csv``).
         Every polymer is a copolymer of the same six acrylate monomers; only
         their molar ratios change.
 
@@ -105,9 +137,57 @@ class DatasetCreator:
             - ``ID``: polymer identifier
             - ``smiles_1`` … ``smiles_6``: monomer PSMILES
             - ``ratio_1`` … ``ratio_6``: molar ratios (each row sums to 1)
-            - ``SNR``: 19F NMR signal-to-noise ratio
+            - ``SNR``: 19F MRI signal-to-noise ratio
             - ``MolWt``, ``Dispersity``: measured molecular weight and
               dispersity, missing (NaN) for most polymers
         """
-        with files("polynet.data").joinpath("benchmarks", "fluorine_nmr_snr.csv").open() as f:
+        with files("polynet.data").joinpath("benchmarks", "fluorine_mri_snr.csv").open() as f:
             return pd.read_csv(f)
+
+
+def subsample_dataset(df: pd.DataFrame, n_samples: int, seed: int = 0) -> pd.DataFrame:
+    """
+    A reproducible random subset of ``n_samples`` rows, in their original order.
+
+    The rows are shuffled once with ``seed`` and the first ``n_samples`` are
+    kept, so for the same seed a smaller subset is always contained in a
+    larger one.
+
+    Parameters
+    ----------
+    df:
+        The dataset.
+    n_samples:
+        Number of rows to keep; the whole dataset when at least ``len(df)``.
+    seed:
+        Seed of the shuffle.
+
+    Returns
+    -------
+    pd.DataFrame
+        The selected rows, with their original index.
+    """
+    if n_samples < 1:
+        raise ValueError(f"n_samples must be at least 1, got {n_samples}.")
+    if n_samples >= len(df):
+        return df
+    return df.sample(frac=1.0, random_state=seed).head(n_samples).sort_index()
+
+
+def held_out_dataset(
+    df: pd.DataFrame, n_samples: int, n_held_out: int, seed: int = 0
+) -> pd.DataFrame:
+    """
+    Up to ``n_held_out`` rows that are not in ``subsample_dataset(df, n_samples, seed)``.
+
+    They follow the subset in the same shuffle, so they are reproducible and,
+    used as external data, never overlap with the modelled polymers.
+
+    Returns
+    -------
+    pd.DataFrame
+        The held-out rows in their original order (empty when the subset is
+        the whole dataset).
+    """
+    shuffled = df.sample(frac=1.0, random_state=seed)
+    return shuffled.iloc[n_samples : n_samples + n_held_out].sort_index()

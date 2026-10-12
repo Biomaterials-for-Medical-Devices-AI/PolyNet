@@ -4,6 +4,49 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [1.0.1] — 2026-10-12
+
+### Added
+
+- GUI, Create Experiment: selecting a built-in benchmark sets its SMILES, ID
+  and target columns and problem type, and locks them (`curated_tg`:
+  `PSMILES`, `ID`, `Tg(K)`; `fluorine_mri_snr`: `smiles_1`–`smiles_6`, `ID`,
+  `SNR`; both regression). The target name and units used in plots get
+  defaults and stay editable. Switching back to uploading a file clears them.
+- GUI, Create Experiment: choose how many polymers of a built-in benchmark to
+  model. `curated_tg` (7,367 polymers) explains how long training on all of
+  them can take and defaults to a random subset of 1,000; smaller benchmarks
+  (`fluorine_mri_snr`, 418) default to all polymers but 50. Any size up to the
+  full dataset can be chosen. The subset is reproducible (the same polymers for
+  the same size, and a smaller subset is contained in a larger one), and the
+  experiment saves the selected polymers only. Without an ID column, polymers
+  are numbered by their row in the full dataset, so a polymer keeps its number
+  whatever the subset size.
+- When polymers are left out, any number of them (100 by default, or all of
+  them when fewer are left), with their measured values, can be downloaded as
+  a CSV, with an explanation of how to use it: upload it on the Predict page to
+  compare predictions with measurements on polymers the models have never seen.
+  Numbers outside the valid range are reported: the download is disabled for an
+  invalid download size, and the experiment cannot be saved with an invalid
+  number of polymers. When every polymer is used, the page says that none
+  are left and how to keep some aside.
+
+### Changed
+
+- The `fluorine_nmr_snr` benchmark is renamed `fluorine_mri_snr`: its `SNR` is
+  the ¹⁹F MRI signal-to-noise ratio (Reis et al. 2021), not NMR. Configs that
+  use `fluorine_nmr_snr` still load.
+
+### Fixed
+
+- The GUI (`polynet`, `polynet gui`) starts with Streamlit's file watcher off.
+  With the dependency versions a fresh `pip install` resolves, the watcher's
+  module scan logged a `No module named 'torchvision'` traceback for every
+  `transformers` module on each rerun once polyBERT was used. Pass
+  `--server.fileWatcherType auto` to reload the app on source changes when
+  developing (see `docs/development.md`).
+- README logo and links use full GitHub URLs, so they work on the PyPI page.
+
 ## [1.0.0] — 2026-10-12
 
 First tagged release. Earlier development versions were labelled `0.1.0` but
@@ -82,4 +125,5 @@ Compared with unreleased development versions before October 2026
   run `polynet install-psmiles`. SMILES data does not need it.
 - Package metadata moved to the standard `[project]` table.
 
+[1.0.1]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.1
 [1.0.0]: https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/releases/tag/v1.0.0

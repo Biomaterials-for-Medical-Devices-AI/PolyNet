@@ -23,7 +23,12 @@ class DatasetName(StrEnum):
     """Benchmarking datasets"""
 
     CuratedTg = "curated_tg"
-    FluorineNMRSNR = "fluorine_nmr_snr"
+    FluorineMRISNR = "fluorine_mri_snr"
+
+    @classmethod
+    def _missing_(cls, value: object) -> "DatasetName | None":
+        # Called fluorine_nmr_snr in 1.0.0 (the SNR is measured by 19F MRI).
+        return cls.FluorineMRISNR if value == "fluorine_nmr_snr" else None
 
 
 class ProblemType(StrEnum):

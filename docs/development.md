@@ -1,6 +1,7 @@
 # Development
 
 - [Testing](#testing)
+- [Running the GUI while developing](#running-the-gui-while-developing)
 - [Extending PolyNet](#extending-polynet)
 
 ---
@@ -43,6 +44,7 @@ python -m pytest tests/ --co -q
 | `test_explain_source.py` | Explainability source/experiment resolution |
 | `test_shap_class_selection.py` | SHAP per-class value selection for classification |
 | `test_pipeline_regression.py` | End-to-end pipeline regression (GNN + TML) against fixtures |
+| `test_cli.py` | Streamlit options passed by `polynet` / `polynet gui` (file watcher off unless set) |
 
 Shared fixtures live in `tests/conftest.py` (e.g. `two_monomer_df`, `single_monomer_df`,
 `known_df_dict`). Reference CSVs for the descriptor regression tests live in
@@ -56,6 +58,36 @@ Shared fixtures live in `tests/conftest.py` (e.g. `two_monomer_df`, `single_mono
   `build_vector_representation`, the `compute_*_attribution` functions) over private
   helpers unless the private logic is complex enough to warrant direct testing.
 - Tests that require PolyBERT or a GPU should be marked and skipped in CI by default.
+
+## Running the GUI while developing
+
+`polynet` starts the GUI with Streamlit's file watcher **off**: users never edit the app's
+source, and the watcher's module scan floods the terminal with harmless tracebacks with
+recent `transformers` versions (below). When working on PolyNet, turn it back on so the app
+reloads when you save a file:
+
+```bash
+polynet --server.fileWatcherType auto
+```
+
+`streamlit run polynet/app/Welcome_to_PolyNet.py` from the repository root does the same.
+
+With the watcher on, Streamlit inspects every loaded module on each rerun and logs any
+module that fails to import as `Examining the path of <module> raised:` with a traceback.
+Read the last line of the traceback:
+
+- `No module named 'torchvision'` (or another optional package) raised from a
+  `transformers.models.…` module is expected and harmless: `transformers` (loaded for
+  polyBERT) has modules for many models PolyNet does not use.
+- A `polynet.…` module, or a package PolyNet imports directly, failing to import is a real
+  bug: a missing dependency or a broken import that the page you are testing may not have
+  reached yet.
+
+The development environment uses the versions pinned in `poetry.lock`, while
+`pip install polynet` takes the newest versions allowed by `pyproject.toml`. Before a
+release, check the GUI and `polynet check` in a fresh environment installed from the built
+wheel (`python -m build`, then `pip install dist/polynet-<version>-py3-none-any.whl`), with
+the watcher on, to catch problems that only appear with newer dependencies.
 
 ## Extending PolyNet
 
