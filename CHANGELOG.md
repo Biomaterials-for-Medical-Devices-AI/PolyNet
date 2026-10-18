@@ -8,6 +8,12 @@ All notable changes to PolyNet are listed here. The format follows
 
 ### Fixed
 
+- The target variable name and the suggested problem type now follow the
+  selected target column. On recent Streamlit versions they kept the value of
+  the target column selected before, so an experiment could be saved with the
+  name of another property (labelling all of its plots) or as a classification
+  of a continuous target. Names typed by hand are still kept while the target
+  column stays the same, and a benchmark's own label is left alone.
 - The GUI crashed when saving an experiment, with
   `class_names has 351 entries but num_classes is 1`, once the problem type or
   the target column had changed since the form was first shown. Two causes, both

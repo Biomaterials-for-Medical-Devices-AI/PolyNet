@@ -589,3 +589,101 @@ def test_class_names_are_kept_per_target_column(monkeypatch):
     assert not app.exception
     assert int(app.session_state["NumClasses"]) == 2
     assert app.session_state["ClassNames"] == {"0": "0", "1": "1"}
+
+
+def test_target_name_and_problem_type_follow_the_target_column(monkeypatch):
+    """The suggestion and the plot label belong to the selected target column.
+
+    A keyed widget keeps the value of its first run on recent Streamlit, so the
+    problem type and the target name used to stay those of the target column
+    selected before — labelling an experiment with the wrong property, and
+    keeping "classification" for a continuous target.
+    """
+    from polynet.config.enums import ProblemType
+
+    frame = pd.DataFrame(
+        {
+            "ID": range(24),
+            "smiles": _SMILES,
+            "degradable": [0, 1, 2] * 8,
+            "Tg": [float(value) for value in range(24)],
+        }
+    )
+
+    def state(app):
+        return (
+            app.session_state["TargetVariableName"],
+            app.session_state["ProblemType"],
+            int(app.session_state["NumClasses"]),
+            "ClassNames" in app.session_state,
+        )
+
+    app = _uploaded_form_app(monkeypatch, frame, "degradable")
+    assert state(app) == ("degradable", ProblemType.Classification, 3, True)
+
+    app.selectbox(key="TargetVariableCol").set_value("Tg").run()
+    assert not app.exception
+    assert state(app) == ("Tg", ProblemType.Regression, 1, False)
+
+    app.selectbox(key="TargetVariableCol").set_value("degradable").run()
+    assert not app.exception
+    assert state(app) == ("degradable", ProblemType.Classification, 3, True)
+
+
+def test_target_name_and_problem_type_edits_are_kept_for_the_same_target(monkeypatch):
+    """Only a change of target column resets them; the user's own choices stay."""
+    from polynet.config.enums import ProblemType
+
+    frame = pd.DataFrame(
+        {"ID": range(24), "smiles": _SMILES, "Tg": [float(value) for value in range(24)]}
+    )
+    app = _uploaded_form_app(monkeypatch, frame, "Tg")
+    assert app.session_state["ProblemType"] == ProblemType.Regression
+
+    app.text_input(key="TargetVariableName").set_value("Glass transition temperature").run()
+    app.text_input(key="TargetVariableUnits").set_value("K").run()
+    app.selectbox(key="ProblemType").set_value(ProblemType.Classification).run()
+    assert not app.exception
+    # A rerun that does not change the target column keeps all three.
+    app.checkbox[0].set_value(True).run()
+    assert app.session_state["TargetVariableName"] == "Glass transition temperature"
+    assert app.session_state["TargetVariableUnits"] == "K"
+    assert app.session_state["ProblemType"] == ProblemType.Classification
+    assert int(app.session_state["NumClasses"]) == 24
+
+
+def test_target_name_is_set_again_after_leaving_a_benchmark(monkeypatch):
+    """Leaving a benchmark for a CSV whose target has the same name still labels it.
+
+    The benchmark's labels are cleared when it is left, so the target column
+    they belonged to must be forgotten too, or the name would stay empty.
+    """
+    import polynet.app.components.forms.create_experiment as create_experiment
+    from polynet.utils.optional_dependencies import psmiles_canonicaliser_available
+
+    if not psmiles_canonicaliser_available():
+        pytest.skip("the benchmarks are PSMILES; the form stops without canonicalize-psmiles")
+
+    frame = pd.DataFrame({"ID": range(24), "smiles": _SMILES, "SNR": [float(v) for v in range(24)]})
+    monkeypatch.setattr(create_experiment, "_load_csv", lambda *args, **kwargs: frame)
+    monkeypatch.setattr("streamlit.file_uploader", lambda *args, **kwargs: "data.csv")
+
+    app = AppTest.from_function(
+        _create_experiment_form_app, default_timeout=60, kwargs={"target_col": "SNR"}
+    ).run()
+    app.text_input(key="ExperimentName").set_value("never_saved_benchmark_exit").run()
+    app.radio[0].set_value("Load benchmarking dataset").run()
+    app.selectbox(key="DatasetNameLoad").set_value("fluorine_mri_snr").run()
+    assert not app.exception
+    assert app.session_state["TargetVariableName"] == "19F MRI SNR"  # the benchmark's own label
+
+    # Back to the CSV: the benchmark's columns and labels are cleared, so the
+    # columns have to be chosen again.
+    app.radio[0].set_value("Upload dataset").run()
+    assert not app.exception
+    app.multiselect(key="SmilesCols").set_value(["smiles"]).run()
+    app.selectbox(key="IDCol").set_value("ID").run()
+    # The uploaded CSV uses the same target column name as the benchmark did.
+    app.selectbox(key="TargetVariableCol").set_value("SNR").run()
+    assert not app.exception
+    assert app.session_state["TargetVariableName"] == "SNR"
