@@ -8,6 +8,10 @@ All notable changes to PolyNet are listed here. The format follows
 
 ### Fixed
 
+- The GUI no longer shows Streamlit's "Passing Matplotlib `savefig` keyword
+  arguments to `st.pyplot` is deprecated" notice above the plots of the results
+  page. The preview is rendered here and shown as an image, so it looks exactly
+  as before.
 - The target variable name and the suggested problem type now follow the
   selected target column. On recent Streamlit versions they kept the value of
   the target column selected before, so an experiment could be saved with the

@@ -49,6 +49,23 @@ def figure_bytes(figure, file_format: str = "svg", dpi: int = 300) -> bytes:
     return output.getvalue()
 
 
+# Streamlit renders a figure at 200 DPI; the previews of the page 6 plots, of
+# which there are many, are lighter than that.
+_PREVIEW_DPI = 150
+
+
+def _show_preview(figure, container) -> None:
+    """Show ``figure`` at the preview resolution, as a PNG rendered here.
+
+    ``st.pyplot`` deprecated the ``savefig`` options it used to forward (and
+    warns about them in the app), so the preview is rendered and shown as an
+    image instead.
+    """
+    preview = BytesIO()
+    figure.savefig(preview, format="png", dpi=_PREVIEW_DPI, bbox_inches="tight")
+    container.image(preview.getvalue(), use_container_width=True)
+
+
 def display_exportable_figure(
     figure, *, container=st, export_options: dict | None = None, plot_id=("plot",)
 ) -> None:
@@ -60,7 +77,7 @@ def display_exportable_figure(
     if export_options is None:
         container.pyplot(figure, use_container_width=True)
         return
-    container.pyplot(figure, use_container_width=True, dpi=150)
+    _show_preview(figure, container)
     identity = hashlib.sha256(repr(plot_id).encode()).hexdigest()[:12]
     key = f"{export_options['prefix']}_{identity}"
     formats = {"svg": "SVG (vector)", "pdf": "PDF (vector)", "png": "PNG (lossless)"}
