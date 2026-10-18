@@ -204,19 +204,37 @@ _BENCHMARK_LABEL_KEYS = (
     CreateExperimentStateKeys.TargetVariableUnits,
 )
 _BENCHMARK_DEFAULTS_FOR = "benchmark_defaults_for"
-# Target column the class-name inputs belong to, so that names typed for one
-# target are not restored for another.
-_CLASS_NAMES_FOR = "class_names_for"
+# Target column the problem type, target name and class-name inputs belong to,
+# so that what was chosen for one target is not kept for another.
+_TARGET_DEFAULTS_FOR = "target_defaults_for"
 
 
-def _reset_class_name_inputs(target_col: str) -> None:
-    """Clear the class-name inputs when they belong to another target column."""
-    if st.session_state.get(_CLASS_NAMES_FOR) == target_col:
+def _reset_target_defaults(
+    target_col: str, suggested_problem_type: ProblemType | None, benchmark: BenchmarkColumns | None
+) -> None:
+    """
+    Apply the defaults of a newly selected target column to the form.
+
+    A keyed widget keeps the value of its first run, ignoring ``value`` and
+    ``index`` afterwards (Streamlit 1.5 and newer), so the suggested problem
+    type, the target name used in the plots and the class names would otherwise
+    stay those of the target column selected before. The values are written to
+    the session state rather than the keys deleted, so that the widgets also
+    *show* them: a deleted key makes the next run fall back to the default
+    server-side, but leaves the old value on screen. A benchmark sets its own
+    columns and labels (``_sync_benchmark_columns``), which are left alone.
+    """
+    if st.session_state.get(_TARGET_DEFAULTS_FOR) == target_col:
         return
+    st.session_state[_TARGET_DEFAULTS_FOR] = target_col
     prefix = f"{CreateExperimentStateKeys.ClassNames}_"
     for key in [key for key in st.session_state if str(key).startswith(prefix)]:
         del st.session_state[key]
-    st.session_state[_CLASS_NAMES_FOR] = target_col
+    if benchmark is not None:
+        return
+    st.session_state[CreateExperimentStateKeys.TargetVariableName] = target_col
+    if suggested_problem_type is not None:
+        st.session_state[CreateExperimentStateKeys.ProblemType] = suggested_problem_type
 
 
 def _sync_benchmark_columns(dataset_name: str | None) -> BenchmarkColumns | None:
@@ -234,6 +252,9 @@ def _sync_benchmark_columns(dataset_name: str | None) -> BenchmarkColumns | None
             for key in (*_LOCKED_BENCHMARK_KEYS, *_BENCHMARK_LABEL_KEYS):
                 st.session_state.pop(key, None)
             del st.session_state[_BENCHMARK_DEFAULTS_FOR]
+            # The labels of the next target column are set again, even when it
+            # happens to be the column the benchmark used.
+            st.session_state.pop(_TARGET_DEFAULTS_FOR, None)
         return None
 
     st.session_state[CreateExperimentStateKeys.SmilesCols] = list(columns.smiles_cols)
@@ -432,16 +453,20 @@ def select_data_form():
             return False
 
         if target_col:
+            _reset_target_defaults(
+                target_col=target_col,
+                suggested_problem_type=suggested_problem_type,
+                benchmark=benchmark,
+            )
+
             problems = [ProblemType.Classification, ProblemType.Regression]
             problem_type = st.selectbox(
                 "Select the problem type",
                 problems,
-                # A benchmark's problem type is already in the session state.
-                index=(
-                    problems.index(suggested_problem_type)
-                    if suggested_problem_type in problems and benchmark is None
-                    else None
-                ),
+                # The suggested problem type (and a benchmark's) is already in
+                # the session state: an index here would only compete with it,
+                # and Streamlit warns when a widget has both.
+                index=None,
                 key=CreateExperimentStateKeys.ProblemType,
                 disabled=benchmark is not None,
             )
@@ -465,8 +490,8 @@ def select_data_form():
             with st.expander("Extra options"):
                 target_name = st.text_input(
                     "Target variable name",
-                    # A benchmark's name is already in the session state.
-                    value=target_col if benchmark is None else None,
+                    # Both the benchmark's name and the target column's are put
+                    # in the session state before this runs.
                     key=CreateExperimentStateKeys.TargetVariableName,
                     help="This name will be used to create the plots and log information.",
                 )
@@ -479,7 +504,6 @@ def select_data_form():
 
                 if problem_type == ProblemType.Classification:
 
-                    _reset_class_name_inputs(target_col)
                     class_names = {}
 
                     for vals in sorted(df[target_col].unique()):
