@@ -9,6 +9,8 @@ import re
 import matplotlib as mpl
 import streamlit as st
 
+from polynet.app.components.images import show_image_full_width
+
 _MIMES = {"svg": "image/svg+xml", "pdf": "application/pdf", "png": "image/png"}
 
 
@@ -63,7 +65,7 @@ def _show_preview(figure, container) -> None:
     """
     preview = BytesIO()
     figure.savefig(preview, format="png", dpi=_PREVIEW_DPI, bbox_inches="tight")
-    container.image(preview.getvalue(), use_container_width=True)
+    show_image_full_width(preview.getvalue(), container)
 
 
 def display_exportable_figure(
@@ -75,7 +77,7 @@ def display_exportable_figure(
     Other callers omit ``export_options`` and keep their existing preview.
     """
     if export_options is None:
-        container.pyplot(figure, use_container_width=True)
+        container.pyplot(figure)
         return
     _show_preview(figure, container)
     identity = hashlib.sha256(repr(plot_id).encode()).hexdigest()[:12]

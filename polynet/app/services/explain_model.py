@@ -70,7 +70,7 @@ def analyse_graph_embeddings(
     projection_fig = plot_projection_embeddings(
         reduced_embeddings, labels=labels, cmap=colormap, style=style_by, color_by_name=label_name
     )
-    st.pyplot(projection_fig, use_container_width=True)
+    st.pyplot(projection_fig)
 
     if st.checkbox("Show embedding data table"):
         st.write(embedding_table)
@@ -260,9 +260,7 @@ def display_gnn_local(mol_results, prediction_breakdowns=None, *, export_options
         if breakdown is not None:
             container.write(f"True label: `{breakdown['true']}`")
             if breakdown["rows"]:
-                container.dataframe(
-                    pd.DataFrame(breakdown["rows"]), use_container_width=True, hide_index=True
-                )
+                container.dataframe(pd.DataFrame(breakdown["rows"]), hide_index=True)
         else:
             container.write(f"True label: `{mol_group[0].true_label}`")
             container.write(f"Predicted label: `{mol_group[0].predicted_label}`")
@@ -273,7 +271,7 @@ def display_gnn_local(mol_results, prediction_breakdowns=None, *, export_options
             if result.warning:
                 container.warning(result.warning)
                 continue
-            container.dataframe(result.attribution_df, use_container_width=True)
+            container.dataframe(result.attribution_df)
             display_exportable_figure(
                 result.mol_figure,
                 container=container,

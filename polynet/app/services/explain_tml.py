@@ -188,9 +188,7 @@ def display_tml_local(results, prediction_breakdowns=None, *, export_options=Non
             if breakdown is not None:
                 container.write(f"True label: `{breakdown['true']}`")
                 if breakdown["rows"]:
-                    container.dataframe(
-                        pd.DataFrame(breakdown["rows"]), use_container_width=True, hide_index=True
-                    )
+                    container.dataframe(pd.DataFrame(breakdown["rows"]), hide_index=True)
             else:
                 container.write(f"True label: `{insts[0].true_label}`")
                 container.write(f"Predicted label: `{insts[0].predicted_label}`")
@@ -202,7 +200,7 @@ def display_tml_local(results, prediction_breakdowns=None, *, export_options=Non
                     container.warning(inst.warning)
                     if inst.attribution_df.empty:
                         continue
-                container.dataframe(inst.attribution_df, use_container_width=True)
+                container.dataframe(inst.attribution_df)
                 if inst.figure is not None:
                     display_exportable_figure(
                         inst.figure,

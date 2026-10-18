@@ -8,6 +8,12 @@ All notable changes to PolyNet are listed here. The format follows
 
 ### Fixed
 
+- Running the GUI no longer fills the terminal with Streamlit's
+  "Please replace `use_container_width` with `width`" notice, once per plot,
+  table and image (most visible while training). Plots and tables fill the
+  width by default on every Streamlit version PolyNet supports, so they no
+  longer ask for it; images say so in whichever way the installed version
+  understands.
 - The GUI no longer shows Streamlit's "Passing Matplotlib `savefig` keyword
   arguments to `st.pyplot` is deprecated" notice above the plots of the results
   page. The preview is rendered here and shown as an image, so it looks exactly
