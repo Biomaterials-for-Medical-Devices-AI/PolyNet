@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import streamlit as st
 
+from polynet.app.components.images import show_image_full_width
 from polynet.config.enums import ImportanceNormalisationMethod
 from polynet.explainability.fragment_figures import (
     FragmentGridOptions,
@@ -63,7 +64,7 @@ def fragment_exports(
         key=f"{prefix}_csv",
     )
     if st.checkbox("Show fragment mapping table", key=f"{prefix}_table"):
-        st.dataframe(plotted, hide_index=True, use_container_width=True)
+        st.dataframe(plotted, hide_index=True)
     if not st.checkbox("Create separate fragment structure figure", key=f"{prefix}_structures"):
         return
     with st.expander("Fragment structure figure settings", expanded=True):
@@ -154,10 +155,8 @@ def fragment_exports(
     )
     try:
         svg = _structure_svg(plotted, options, tag_colors)
-        st.image(
-            svg,
-            caption="Fragment structure key — separate from the attribution plot",
-            use_container_width=True,
+        show_image_full_width(
+            svg, caption="Fragment structure key — separate from the attribution plot"
         )
         st.download_button(
             "Download structure figure (SVG)",

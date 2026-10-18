@@ -194,4 +194,4 @@ def show_graph_visualization(
         edge_feats_config=repr_cfg.edge_features,
         monomer_filter=monomer_filter,
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig)

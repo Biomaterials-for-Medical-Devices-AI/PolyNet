@@ -5,6 +5,7 @@ import re
 import pandas as pd
 import streamlit as st
 
+from polynet.app.components.images import show_image_full_width
 from polynet.app.options.file_paths import (
     ml_results_file_path,
     model_metrics_file_path,
@@ -66,7 +67,7 @@ def display_plots(plots_path: Path, *, export_plots: bool = False):
             st.markdown(f"**Iteration {iteration}**")
             for plot_type, plot_path in sorted(plot_groups[model][iteration]):
                 st.markdown(f"*{plot_type}*")
-                st.image(plot_path, use_container_width=True)
+                show_image_full_width(plot_path)
                 if export_plots:
                     st.download_button(
                         "Export plot",
