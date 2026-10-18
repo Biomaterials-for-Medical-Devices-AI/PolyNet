@@ -204,6 +204,19 @@ _BENCHMARK_LABEL_KEYS = (
     CreateExperimentStateKeys.TargetVariableUnits,
 )
 _BENCHMARK_DEFAULTS_FOR = "benchmark_defaults_for"
+# Target column the class-name inputs belong to, so that names typed for one
+# target are not restored for another.
+_CLASS_NAMES_FOR = "class_names_for"
+
+
+def _reset_class_name_inputs(target_col: str) -> None:
+    """Clear the class-name inputs when they belong to another target column."""
+    if st.session_state.get(_CLASS_NAMES_FOR) == target_col:
+        return
+    prefix = f"{CreateExperimentStateKeys.ClassNames}_"
+    for key in [key for key in st.session_state if str(key).startswith(prefix)]:
+        del st.session_state[key]
+    st.session_state[_CLASS_NAMES_FOR] = target_col
 
 
 def _sync_benchmark_columns(dataset_name: str | None) -> BenchmarkColumns | None:
@@ -438,10 +451,13 @@ def select_data_form():
             else:
                 n_classes = 1
 
+            # Written to the session state directly: a widget with a key keeps
+            # the value of its first run, so a keyed input here would still
+            # report the class count of the problem type selected before.
+            st.session_state[CreateExperimentStateKeys.NumClasses] = n_classes
             st.text_input(
                 "Number of classes",
-                value=n_classes,
-                key=CreateExperimentStateKeys.NumClasses,
+                value=str(n_classes),
                 help="This will be used to create the plots and log information.",
                 disabled=True,
             )
@@ -463,6 +479,7 @@ def select_data_form():
 
                 if problem_type == ProblemType.Classification:
 
+                    _reset_class_name_inputs(target_col)
                     class_names = {}
 
                     for vals in sorted(df[target_col].unique()):
@@ -476,6 +493,11 @@ def select_data_form():
                     st.session_state[CreateExperimentStateKeys.ClassNames] = class_names
 
                     st.markdown("**Label Distribution**")
+
+                else:
+                    # A regression target has no classes: drop any names left
+                    # from a classification target selected earlier.
+                    st.session_state.pop(CreateExperimentStateKeys.ClassNames, None)
 
             if problem_type == ProblemType.Classification:
                 title = (

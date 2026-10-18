@@ -513,3 +513,79 @@ def test_training_exports_readable_parity_legend(tmp_path, monkeypatch):
     with Image.open(tmp_path / "GCN_1_parity_plot.png") as image:
         assert image.width > 100 and image.height > 100
         assert len(image.getcolors(image.width * image.height)) > 10
+
+
+def _create_experiment_form_app(target_col: str):
+    import streamlit as st
+
+    from polynet.app.components.forms.create_experiment import select_data_form
+
+    st.session_state.setdefault("SmilesCols", ["smiles"])
+    st.session_state.setdefault("IDCol", "ID")
+    st.session_state.setdefault("TargetVariableCol", target_col)
+    select_data_form()
+
+
+def _uploaded_form_app(monkeypatch, frame: pd.DataFrame, target_col: str):
+    """Run ``select_data_form`` on ``frame`` as if its CSV had been uploaded."""
+    import polynet.app.components.forms.create_experiment as create_experiment
+
+    monkeypatch.setattr(create_experiment, "_load_csv", lambda *args, **kwargs: frame)
+    monkeypatch.setattr("streamlit.file_uploader", lambda *args, **kwargs: "data.csv")
+
+    app = AppTest.from_function(
+        _create_experiment_form_app, default_timeout=60, kwargs={"target_col": target_col}
+    ).run()
+    app.text_input(key="ExperimentName").set_value("never_saved_form_check").run()
+    assert not app.exception
+    return app
+
+
+_SMILES = ["CC", "CCC", "CCCC", "CCO", "CCN", "c1ccccc1"] * 4
+
+
+def test_problem_type_switch_keeps_class_count_and_names_in_step(monkeypatch):
+    """A regression target must not carry the classes of a classification one.
+
+    The number of classes and the class names used to be left in the session
+    state of the first problem type rendered, so saving an experiment after a
+    switch failed validation ("class_names has 351 entries but num_classes
+    is 1").
+    """
+    frame = pd.DataFrame(
+        {"ID": range(24), "smiles": _SMILES, "target": [float(value) for value in range(24)]}
+    )
+
+    def state(app):
+        names = app.session_state["ClassNames"] if "ClassNames" in app.session_state else None
+        return int(app.session_state["NumClasses"]), names
+
+    app = _uploaded_form_app(monkeypatch, frame, "target")
+    assert state(app) == (1, None)  # 24 distinct values: a regression target
+
+    app.selectbox(key="ProblemType").set_value("classification").run()
+    assert not app.exception
+    num_classes, class_names = state(app)
+    assert (num_classes, len(class_names)) == (24, 24)
+
+    app.selectbox(key="ProblemType").set_value("regression").run()
+    assert not app.exception
+    assert state(app) == (1, None)
+
+
+def test_class_names_are_kept_per_target_column(monkeypatch):
+    """Renaming a class is kept, until the names belong to another target."""
+    frame = pd.DataFrame(
+        {"ID": range(24), "smiles": _SMILES, "degradable": [0, 1, 2] * 8, "toxic": [0, 1] * 12}
+    )
+    app = _uploaded_form_app(monkeypatch, frame, "degradable")
+    assert app.session_state["ClassNames"] == {"0": "0", "1": "1", "2": "2"}
+
+    app.text_input(key="ClassNames_0").set_value("not degradable").run()
+    assert app.session_state["ClassNames"] == {"0": "not degradable", "1": "1", "2": "2"}
+
+    # Another target: the name typed for the classes of the previous one is gone.
+    app.selectbox(key="TargetVariableCol").set_value("toxic").run()
+    assert not app.exception
+    assert int(app.session_state["NumClasses"]) == 2
+    assert app.session_state["ClassNames"] == {"0": "0", "1": "1"}

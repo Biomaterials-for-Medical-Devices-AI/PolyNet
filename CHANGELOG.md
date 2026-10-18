@@ -4,6 +4,22 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Fixed
+
+- The GUI crashed when saving an experiment, with
+  `class_names has 351 entries but num_classes is 1`, once the problem type or
+  the target column had changed since the form was first shown. Two causes, both
+  in the Create Experiment form: the class names of a classification target were
+  never cleared, so they were still used for a regression target (any Streamlit
+  version, and they persisted until the page was reloaded); and the number of
+  classes kept the value of the problem type first shown, because a keyed
+  Streamlit widget ignores its `value=` on later reruns in recent Streamlit
+  versions (which a pip install gets). The number of classes and the class names
+  now follow the selected problem type and target column, and class names typed
+  for one target are no longer restored for another.
+
 ## [1.0.3] — 2026-10-12
 
 ### Fixed
