@@ -31,6 +31,19 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
+      # See the note in tests.yml: the CUDA wheels torch brings in only just fit
+      # on a hosted Linux runner. Not /opt/hostedtoolcache itself, which holds
+      # the Python set up above.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/share/swift
+          sudo docker image prune --all --force || true
+          df -h /
+
       - name: Install OpenMP (macOS; needed by XGBoost)
         if: runner.os == 'macOS'
         run: brew install libomp
