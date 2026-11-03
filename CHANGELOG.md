@@ -4,6 +4,26 @@ All notable changes to PolyNet are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- Python 3.12 is supported: `requires-python` is now `>=3.11,<3.13`, so
+  `pip install polynet` works on Google Colab, which runs 3.12. No dependency
+  pin had to change. Both versions are tested in CI, on Linux and on Apple
+  silicon.
+
+### Fixed
+
+- An experiment created with `benchmark_dataset` outside the GUI — from the
+  Python API or `polynet run --config` — could not be opened in the GUI
+  afterwards. Its `data_options.json` holds `"data_path": null`, and every page
+  after Create Experiment starts by reading that file back into a `DataConfig`,
+  which raised `AttributeError: 'NoneType' object has no attribute 'strip'`.
+  Experiments created in the GUI were unaffected, benchmark or not: the Create
+  Experiment page writes the chosen dataset to a CSV inside the experiment
+  folder and records that path.
+
 ## [1.0.4] — 2026-10-19
 
 ### Fixed
