@@ -87,8 +87,10 @@ class DataConfig(PolynetBaseModel):
 
     @field_validator("data_name", "data_path", "target_variable_col")
     @classmethod
-    def must_not_be_empty(cls, v: str) -> str:
-        if not v.strip():
+    def must_not_be_empty(cls, v: str | None) -> str | None:
+        # data_path is optional: a benchmark_dataset experiment saves it as null and has
+        # to load back unchanged, so only a supplied path is checked.
+        if v is not None and not v.strip():
             raise ValueError("Field must not be an empty string.")
         return v
 
