@@ -20,8 +20,8 @@ from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
     data_spliting_options_path,
-    general_options_path,
     experiment_data_file,
+    general_options_path,
     gnn_raw_data_path,
     hpo_search_spaces_path,
     ml_results_file_path,

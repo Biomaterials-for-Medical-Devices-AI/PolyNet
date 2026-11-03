@@ -125,8 +125,7 @@ if experiment_name:
     data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
     data = read_csv(
-        experiment_data_file(data_opts.data_name, experiment_path, data_opts.data_path),
-        index_col=0,
+        experiment_data_file(data_opts.data_name, experiment_path, data_opts.data_path), index_col=0
     )
 
     st.write(data.describe())
