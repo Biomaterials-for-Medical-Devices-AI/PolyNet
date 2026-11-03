@@ -35,8 +35,7 @@ import pandas as pd
 from polynet.config.constants import ResultColumn
 from polynet.config.io import load_options
 from polynet.config.paths import (
-    data_file_path,
-    gnn_raw_data_file,
+    experiment_data_file,
     ml_results_file_path,
     model_dir,
     representation_file,
@@ -63,16 +62,7 @@ def load_training_dataset(experiment_path: Path, data_cfg: DataConfig) -> pd.Dat
     FileNotFoundError
         If neither file exists.
     """
-    candidates = [
-        data_file_path(data_cfg.data_name, experiment_path),
-        gnn_raw_data_file(data_cfg.data_name, experiment_path),
-    ]
-    path = next((p for p in candidates if p.exists()), None)
-    if path is None:
-        raise FileNotFoundError(
-            "The training dataset of the experiment was not found (looked for "
-            f"{[str(p) for p in candidates]})."
-        )
+    path = experiment_data_file(data_cfg.data_name, experiment_path, data_cfg.data_path)
     df = pd.read_csv(path)
     if data_cfg.id_col and data_cfg.id_col in df.columns:
         df = df.set_index(data_cfg.id_col)
