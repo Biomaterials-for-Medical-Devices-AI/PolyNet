@@ -21,7 +21,7 @@ from polynet.app.options.file_paths import (
     data_options_path,
     data_spliting_options_path,
     general_options_path,
-    gnn_raw_data_file,
+    experiment_data_file,
     gnn_raw_data_path,
     hpo_search_spaces_path,
     ml_results_file_path,
@@ -121,8 +121,10 @@ def train_models(
         sampling_fingerprint=sampling_fingerprint_from_state(),
     )
     # read the data
-    raw_path = gnn_raw_data_file(file_name=data_options.data_name, experiment_path=experiment_path)
-    data = read_csv(raw_path if raw_path.exists() else data_options.data_path, index_col=0)
+    data = read_csv(
+        experiment_data_file(data_options.data_name, experiment_path, data_options.data_path),
+        index_col=0,
+    )
 
     # Compute data splits using the shared pipeline stage. Some samplers cannot
     # split some datasets (e.g. clusters larger than the validation set); show
@@ -506,8 +508,10 @@ if experiment_name:
         disabled = True
 
     if tml_models or gnn_conv_params:
-        raw_path = gnn_raw_data_file(file_name=data_opts.data_name, experiment_path=experiment_path)
-        source_data = read_csv(raw_path if raw_path.exists() else data_opts.data_path, index_col=0)
+        source_data = read_csv(
+            experiment_data_file(data_opts.data_name, experiment_path, data_opts.data_path),
+            index_col=0,
+        )
         workload = estimate_workload(
             rows=len(source_data),
             representations=len(representation_opts.molecular_descriptors),

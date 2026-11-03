@@ -15,6 +15,7 @@ from polynet.app.components.graph_display import show_graph_visualization
 from polynet.app.components.version_footer import version_footer
 from polynet.app.options.file_paths import (
     data_options_path,
+    experiment_data_file,
     graph_feature_analysis_path,
     polynet_experiment_path,
     polynet_experiments_base_dir,
@@ -123,7 +124,10 @@ if experiment_name:
 
     data_opts = load_options(path=path_to_data_opts, options_class=DataConfig)
 
-    data = read_csv(data_opts.data_path, index_col=0)
+    data = read_csv(
+        experiment_data_file(data_opts.data_name, experiment_path, data_opts.data_path),
+        index_col=0,
+    )
 
     st.write(data.describe())
 
