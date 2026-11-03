@@ -50,6 +50,45 @@ def data_file_path(file_name: str, experiment_path: Path) -> Path:
     return experiment_path / file_name
 
 
+def experiment_data_file(
+    file_name: str, experiment_path: Path, data_path: str | None = None
+) -> Path:
+    """Return the experiment's own copy of its dataset.
+
+    ``DataConfig.data_path`` is empty for an experiment built from a
+    ``benchmark_dataset``, so it cannot be the only way to find the data. Every
+    experiment keeps a copy under its own directory instead: ``{experiment}/
+    {data_name}`` (written by the GUI's Create Experiment page and by the
+    Python API), or the raw CSV of the GNN dataset once the graphs were built.
+    ``data_path`` is used last, for a CSV that lives outside the experiment and
+    has not been copied in yet.
+
+    Args:
+        file_name (str): ``DataConfig.data_name``.
+        experiment_path (Path): The path of the experiment.
+        data_path (str | None): ``DataConfig.data_path``, when it is set.
+
+    Returns:
+        Path: The first of those that exists.
+
+    Raises:
+        FileNotFoundError: If none of them exists.
+    """
+    candidates = [
+        data_file_path(file_name, experiment_path),
+        gnn_raw_data_file(file_name, experiment_path),
+    ]
+    if data_path:
+        candidates.append(Path(data_path))
+    path = next((p for p in candidates if p.exists()), None)
+    if path is None:
+        raise FileNotFoundError(
+            "The dataset of the experiment was not found (looked for "
+            f"{[str(p) for p in candidates]})."
+        )
+    return path
+
+
 def data_options_path(experiment_path: Path) -> Path:
     """Return the path to an experiment's data options JSON file.
 

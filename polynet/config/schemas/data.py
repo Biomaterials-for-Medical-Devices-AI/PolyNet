@@ -21,12 +21,14 @@ class DataConfig(PolynetBaseModel):
         and result filenames.
     data_path:
         Path to the CSV (or compatible) file containing the dataset. Give
-        either ``data_path`` or ``benchmark_dataset``.
+        ``data_path``, ``benchmark_dataset`` or both.
     benchmark_dataset:
         A built-in benchmark dataset to load instead of a file (e.g.
         ``curated_tg``, the curated glass-transition-temperature dataset,
-        downloaded once and cached). Give either ``data_path`` or
-        ``benchmark_dataset``.
+        downloaded once and cached). Once the pipeline has written the
+        prepared dataset into the experiment folder it also records that file
+        in ``data_path``, so both fields are set and every later stage reads
+        the dataset the same way whatever its origin.
     smiles_cols:
         One or more column names that contain SMILES strings. Multiple
         columns are used when modelling polymer blends or co-polymers.
@@ -122,10 +124,12 @@ class DataConfig(PolynetBaseModel):
         return self
 
     @model_validator(mode="after")
-    def one_data_source(self) -> "DataConfig":
-        if (self.data_path is None) == (self.benchmark_dataset is None):
+    def needs_a_data_source(self) -> "DataConfig":
+        # Both may be given: a benchmark that has been written into the experiment
+        # folder keeps its name as provenance and its path as the file to read.
+        if self.data_path is None and self.benchmark_dataset is None:
             raise ValueError(
-                "Give exactly one data source: data_path (a CSV file) or benchmark_dataset "
+                "Give a data source: data_path (a CSV file) or benchmark_dataset "
                 f"(one of {[d.value for d in DatasetName]})."
             )
         return self

@@ -283,6 +283,8 @@ def test_invalid_training_splits_leave_previous_files_untouched(tmp_path, monkey
 
     old = touch(tmp_path / "ml_results" / "predictions.csv")
     config = touch(tmp_path / "split_options.json")
+    # The page resolves the experiment's own copy of the dataset before training.
+    touch(tmp_path / "data.csv")
     import polynet.app.options.file_paths as paths
 
     monkeypatch.setattr(paths, "polynet_experiment_path", lambda **kw: tmp_path)

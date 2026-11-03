@@ -17,12 +17,28 @@ All notable changes to PolyNet are listed here. The format follows
 
 - An experiment created with `benchmark_dataset` outside the GUI — from the
   Python API or `polynet run --config` — could not be opened in the GUI
-  afterwards. Its `data_options.json` holds `"data_path": null`, and every page
-  after Create Experiment starts by reading that file back into a `DataConfig`,
-  which raised `AttributeError: 'NoneType' object has no attribute 'strip'`.
-  Experiments created in the GUI were unaffected, benchmark or not: the Create
-  Experiment page writes the chosen dataset to a CSV inside the experiment
-  folder and records that path.
+  afterwards. Such an experiment left `data_path` empty, and two things assumed
+  it never would be: reading `data_options.json` back into a `DataConfig` raised
+  `AttributeError: 'NoneType' object has no attribute 'strip'`, because the
+  not-empty validator was applied to the optional field; and the Representation
+  and Train Models pages then read `data_path` directly, raising
+  `TypeError: expected str, bytes or os.PathLike object, not NoneType`.
+
+  A benchmark run now records the file it writes. The prepared dataset was
+  always saved into the experiment directory; the saved options name it in
+  `data_path`, so a benchmark experiment is indistinguishable from a CSV one
+  everywhere downstream, which is what the GUI has always done for its own
+  experiments. `data_path` and `benchmark_dataset` may therefore both be set —
+  the file to read, and where it came from — and only giving neither is an
+  error.
+
+  Independently, the pages no longer depend on that field being usable: they
+  resolve the experiment's own copy of the dataset first, the way the
+  applicability domain already did, and fall back to `data_path` only for a CSV
+  outside the experiment. Experiments created before this release, whose saved
+  options have no `data_path`, therefore open without being rebuilt, as do
+  experiments moved to another machine, where an absolute `data_path` no longer
+  resolves.
 
 ## [1.0.4] — 2026-10-19
 

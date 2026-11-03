@@ -14,6 +14,7 @@ from pydantic import ValidationError
 import pytest
 
 from polynet.config.io import load_options, save_options
+from polynet.config.paths import experiment_data_file, gnn_raw_data_file
 from polynet.config.schemas import DataConfig
 from polynet.data import loader
 
@@ -26,12 +27,17 @@ _BASE = dict(
 )
 
 
-def test_exactly_one_data_source_is_required():
+def test_a_data_source_is_required():
     assert DataConfig(**_BASE, benchmark_dataset="curated_tg").data_path is None
     assert DataConfig(**_BASE, data_path="data.csv").benchmark_dataset is None
-    for sources in ({}, {"data_path": "data.csv", "benchmark_dataset": "curated_tg"}):
-        with pytest.raises(ValidationError, match="exactly one data source"):
-            DataConfig(**_BASE, **sources)
+    with pytest.raises(ValidationError, match="Give a data source"):
+        DataConfig(**_BASE)
+
+
+def test_a_benchmark_may_also_name_the_file_it_was_written_to():
+    """Both fields together: the benchmark it came from, and the copy to read."""
+    cfg = DataConfig(**_BASE, benchmark_dataset="curated_tg", data_path="experiment/tg.csv")
+    assert cfg.benchmark_dataset == "curated_tg" and cfg.data_path == "experiment/tg.csv"
 
 
 def _fake_benchmark(df):
@@ -313,3 +319,56 @@ def test_saved_benchmark_options_load_back(tmp_path):
 def test_a_blank_data_path_is_still_rejected(blank):
     with pytest.raises(ValidationError, match="empty string"):
         DataConfig(**_BASE, data_path=blank)
+
+
+def test_benchmark_experiment_data_is_found_without_a_data_path(tmp_path):
+    """A benchmark experiment has no ``data_path``; its CSV still has to be found.
+
+    The GUI pages read the dataset itself, not just the config, so loading
+    ``data_options.json`` is not enough to open such an experiment.
+    """
+    cfg = DataConfig(**_BASE, benchmark_dataset="curated_tg")
+    assert cfg.data_path is None
+
+    with pytest.raises(FileNotFoundError, match="dataset of the experiment was not found"):
+        experiment_data_file(cfg.data_name, tmp_path, cfg.data_path)
+
+    expected = tmp_path / cfg.data_name
+    expected.write_text("ID,PSMILES,Tg(K)\n")
+    assert experiment_data_file(cfg.data_name, tmp_path, cfg.data_path) == expected
+
+
+def test_the_raw_gnn_copy_is_used_when_the_experiment_has_no_other(tmp_path):
+    raw = gnn_raw_data_file("tg.csv", tmp_path)
+    raw.parent.mkdir(parents=True)
+    raw.write_text("ID,PSMILES,Tg(K)\n")
+    assert experiment_data_file("tg.csv", tmp_path) == raw
+
+
+def test_the_experiments_own_copy_wins_over_an_external_data_path(tmp_path):
+    """``data_path`` may point outside the experiment, so it is the last resort."""
+    inside = tmp_path / "tg.csv"
+    inside.write_text("ID,PSMILES,Tg(K)\n")
+    outside = tmp_path / "elsewhere.csv"
+    outside.write_text("ID,PSMILES,Tg(K)\n")
+    assert experiment_data_file("tg.csv", tmp_path, str(outside)) == inside
+
+
+def test_a_benchmark_run_records_the_file_it_writes(tmp_path):
+    """The CLI's saved options must name a file, or the GUI cannot reopen the run.
+
+    The dataset is written to ``{output_dir}/{data_name}`` in stage 1, so the
+    options saved alongside it point there instead of leaving ``data_path`` empty.
+    """
+    from polynet.pipeline.runner import _load_data
+
+    df = pd.DataFrame({"ID": [0, 1], "PSMILES": ["[*]CC[*]", "[*]CO[*]"], "Tg(K)": [300.0, 350.0]})
+    cfg = {"data": {**_BASE, "benchmark_dataset": "curated_tg"}}
+    with _fake_benchmark(df):
+        _load_data(cfg, tmp_path, tmp_path)
+
+    saved = json.loads((tmp_path / "data_options.json").read_text())
+    assert saved["data_path"] == str(tmp_path / _BASE["data_name"])
+    assert saved["benchmark_dataset"] == "curated_tg"
+    # Still a valid config, and it now names a file like any CSV experiment.
+    assert DataConfig(**saved).data_path == str(tmp_path / _BASE["data_name"])

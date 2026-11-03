@@ -2,6 +2,7 @@ from polynet.config.paths import (
     data_file_path,
     data_options_path,
     data_spliting_options_path,
+    experiment_data_file,
     explanation_json_file_path,
     explanation_parent_directory,
     explanation_plots_path,
@@ -41,6 +42,7 @@ from polynet.config.paths import *  # noqa: F401, F403
 
 __all__ = [
     "data_file_path",
+    "experiment_data_file",
     "data_options_path",
     "data_spliting_options_path",
     "explanation_json_file_path",
