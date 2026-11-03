@@ -14,12 +14,13 @@ on:
 
 jobs:
   pip_install:
-    name: pip install (${{ matrix.os }})
+    name: pip install (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-14]  # macos-14: Apple silicon
+        python-version: ['3.11', '3.12']
 
     steps:
       - name: Checkout repository
@@ -28,7 +29,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
 
       - name: Install OpenMP (macOS; needed by XGBoost)
         if: runner.os == 'macOS'
