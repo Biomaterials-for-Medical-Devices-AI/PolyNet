@@ -51,8 +51,11 @@ data:
 ### Built-in benchmark dataset (`benchmark_dataset`)
 
 Instead of `data_path`, the CLI can load a built-in benchmark dataset — the same ones the
-GUI offers under *Load benchmarking dataset*. Give exactly one of `data_path` and
-`benchmark_dataset`. The template `configs/experiment.yaml` uses it by default:
+GUI offers under *Load benchmarking dataset*. Give `data_path`, `benchmark_dataset` or
+both; only giving neither is an error. The prepared dataset is written into the experiment
+directory either way, and a benchmark run records that file in `data_path` of the saved
+`data_options.json`, so later stages and the GUI read it like any other CSV. The template
+`configs/experiment.yaml` uses a benchmark by default:
 
 ```yaml
 data:
