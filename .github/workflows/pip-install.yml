@@ -14,12 +14,13 @@ on:
 
 jobs:
   pip_install:
-    name: pip install (${{ matrix.os }})
+    name: pip install (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-14]  # macos-14: Apple silicon
+        python-version: ['3.11', '3.12']
 
     steps:
       - name: Checkout repository
@@ -28,7 +29,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+
+      # See the note in tests.yml: the CUDA wheels torch brings in only just fit
+      # on a hosted Linux runner. Not /opt/hostedtoolcache itself, which holds
+      # the Python set up above.
+      - name: Free disk space
+        if: runner.os == 'Linux'
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/share/swift
+          sudo docker image prune --all --force || true
+          df -h /
 
       - name: Install OpenMP (macOS; needed by XGBoost)
         if: runner.os == 'macOS'

@@ -7,8 +7,12 @@ on:
 
 jobs:
   run_tests:
-    name: Run test suite (Python 3.11)
+    name: Run test suite (Python ${{ matrix.python-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11', '3.12']
 
     steps:
       - name: Checkout repository
@@ -17,7 +21,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ matrix.python-version }}
+
+      # torch pulls in the CUDA wheels, several GB of them, which a cold install
+      # has to download and unpack at once. That fits on a hosted runner only
+      # just, so reclaim the preinstalled toolchains this job never touches.
+      # Not /opt/hostedtoolcache itself: the Python set up above lives there.
+      - name: Free disk space
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup /opt/hostedtoolcache/CodeQL \
+                      /usr/local/share/boost /usr/share/swift
+          sudo docker image prune --all --force || true
+          df -h /
 
       - name: Install Poetry
         run: pip install poetry
@@ -26,9 +43,9 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pypoetry/virtualenvs
-          key: poetry-${{ runner.os }}-py3.11-${{ hashFiles('poetry.lock') }}
+          key: poetry-${{ runner.os }}-py${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
           restore-keys: |
-            poetry-${{ runner.os }}-py3.11-
+            poetry-${{ runner.os }}-py${{ matrix.python-version }}-
 
       - name: Install dependencies
         run: poetry install --no-root

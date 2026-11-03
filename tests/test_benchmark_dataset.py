@@ -6,12 +6,14 @@ curated Tg dataset) instead of a CSV file; exactly one of ``data_path`` and
 ``benchmark_dataset`` must be given. The benchmark is validated like a CSV.
 """
 
+import json
 from unittest import mock
 
 import pandas as pd
 from pydantic import ValidationError
 import pytest
 
+from polynet.config.io import load_options, save_options
 from polynet.config.schemas import DataConfig
 from polynet.data import loader
 
@@ -290,3 +292,24 @@ def test_old_fluorine_benchmark_name_still_loads():
     assert DataConfig(**_BASE, benchmark_dataset="fluorine_nmr_snr").benchmark_dataset == (
         "fluorine_mri_snr"
     )
+
+
+def test_saved_benchmark_options_load_back(tmp_path):
+    """A benchmark experiment saves ``data_path`` as null and must reopen from it.
+
+    Every GUI page after Create Experiment starts by reading ``data_options.json``
+    back into a ``DataConfig``, so a config that cannot round-trip locks the
+    experiment out of the app.
+    """
+    path = tmp_path / "data_options.json"
+    saved = DataConfig(**_BASE, benchmark_dataset="curated_tg")
+    save_options(path=path, options=saved)
+
+    assert json.loads(path.read_text())["data_path"] is None
+    assert load_options(path=path, options_class=DataConfig) == saved
+
+
+@pytest.mark.parametrize("blank", ["", "   "])
+def test_a_blank_data_path_is_still_rejected(blank):
+    with pytest.raises(ValidationError, match="empty string"):
+        DataConfig(**_BASE, data_path=blank)
