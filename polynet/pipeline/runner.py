@@ -293,6 +293,7 @@ def _build_applicability_domain_config(cfg: dict) -> ApplicabilityDomainConfig:
 
 def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
     """Load and validate the dataset (a CSV file or a built-in benchmark). Script-specific stage."""
+    from polynet.config.paths import data_file_path
     from polynet.data.loader import load_benchmark_dataset, load_dataset
 
     data_cfg = cfg["data"]
@@ -305,6 +306,10 @@ def _load_data(cfg: dict, root: Path, out_dir: Path) -> pd.DataFrame:
     if data_cfg.get("benchmark_dataset"):
         source = f"benchmark dataset '{data_cfg['benchmark_dataset']}'"
         df = load_benchmark_dataset(data_cfg["benchmark_dataset"], **columns)
+        # Stage 1 writes the prepared dataset into the experiment folder, so record
+        # it here: the saved options then name a file, exactly as for a CSV run, and
+        # the GUI and every later stage read it without special-casing benchmarks.
+        data_cfg["data_path"] = str(data_file_path(data_cfg["data_name"], out_dir))
     else:
         source = resolve_path(data_cfg["data_path"], root)
         df = load_dataset(path=source, **columns)
