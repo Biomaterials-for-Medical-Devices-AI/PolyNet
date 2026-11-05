@@ -1,0 +1,293 @@
+name: Installers
+
+# The installers bootstrap a whole Python toolchain onto a machine that may
+# have none, so the only test worth anything is to run them end to end on a
+# clean one. This workflow exists because a stray "2>$null" failed a Windows
+# install that had otherwise completely succeeded, and no local check could
+# have caught it: PowerShell cannot be run on an arm64 Mac at all (there is no
+# arm64 container image, and the amd64 one aborts under emulation).
+
+on:
+  push:
+    paths:
+      - "installers/**"
+      - ".github/workflows/installers.yml"
+  pull_request:
+    paths:
+      - "installers/**"
+      - ".github/workflows/installers.yml"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "PolyNet version to install (blank = whatever is current on PyPI)"
+        required: false
+        default: ""
+      run_check:
+        description: "Also run 'polynet check' (a short training run; adds a few minutes)"
+        required: false
+        default: "false"
+
+concurrency:
+  group: installers-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # --------------------------------------------------------------- windows ---
+  windows:
+    name: Windows (PowerShell 5.1)
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Record the PowerShell the installer will actually use
+        shell: cmd
+        run: powershell -NoProfile -Command "$PSVersionTable | Out-String"
+
+      # Fails in seconds, before the install spends ten minutes downloading.
+      - name: Parse the embedded PowerShell
+        shell: pwsh
+        run: |
+          $text = [IO.File]::ReadAllText("installers/windows/Install-PolyNet.bat")
+          $i = $text.LastIndexOf("#:PS_START:#")
+          if ($i -lt 0) { throw "no #:PS_START:# marker in the installer" }
+          $body = $text.Substring($i + 12)
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseInput(
+            $body, [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors) {
+            $errors | ForEach-Object {
+              Write-Host "::error::line $($_.Extent.StartLineNumber) of the embedded PowerShell: $($_.Message)"
+            }
+            throw "the embedded PowerShell does not parse"
+          }
+          Write-Host "parses clean - $($tokens.Count) tokens"
+
+      - name: Work out the installer arguments
+        shell: pwsh
+        env:
+          IN_VERSION: ${{ github.event.inputs.version }}
+          IN_CHECK: ${{ github.event.inputs.run_check }}
+        run: |
+          $a = @()
+          if ($env:IN_VERSION) { $a += @("-Version", $env:IN_VERSION) }
+          if ($env:IN_CHECK -eq "true") { $a += "-Check" }
+          "INSTALLER_ARGS=$($a -join ' ')" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "arguments: '$($a -join ' ')'"
+
+      - name: Disk space before
+        shell: pwsh
+        run: Get-PSDrive C | Format-Table Used, Free -AutoSize
+
+      # Run it the way a user does: through cmd, so the polyglot bootstrap is
+      # exercised too. "< NUL" closes stdin, which the installer reads as
+      # "nobody is watching" and skips its closing keypress.
+      - name: Run the installer
+        shell: cmd
+        run: installers\windows\Install-PolyNet.bat %INSTALLER_ARGS% < NUL
+
+      - name: Everything the installer promised must exist
+        shell: pwsh
+        run: |
+          $root     = Join-Path $env:LOCALAPPDATA "PolyNet"
+          $polynet  = Join-Path $root "env\Scripts\polynet.exe"
+          $desktop  = [Environment]::GetFolderPath("Desktop")
+          $programs = [Environment]::GetFolderPath("Programs")
+
+          $expected = @(
+            $polynet,
+            (Join-Path $root "env\Scripts\python.exe"),
+            (Join-Path $root "PolyNet.cmd"),
+            (Join-Path $root "Uninstall-PolyNet.cmd"),
+            (Join-Path $root "polynet.ico"),
+            (Join-Path $root "install.log"),
+            (Join-Path $desktop "PolyNet.lnk"),
+            (Join-Path $programs "PolyNet\PolyNet.lnk"),
+            (Join-Path $programs "PolyNet\Uninstall PolyNet.lnk")
+          )
+          $missing = @()
+          foreach ($p in $expected) {
+            if (Test-Path -LiteralPath $p) { Write-Host "  ok       $p" }
+            else { $missing += $p; Write-Host "  MISSING  $p" }
+          }
+          if ($missing) { throw "the installer did not create: $($missing -join '; ')" }
+
+          & $polynet --version
+          if ($LASTEXITCODE -ne 0) { throw "polynet --version exited $LASTEXITCODE" }
+
+      - name: The log must show success, and show the import check
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:LOCALAPPDATA "PolyNet\install.log"
+          if (Select-String -Path $log -Pattern "Installation failed" -Quiet) {
+            Get-Content $log -Tail 40
+            throw "the installer reported a failure"
+          }
+          # Guards the regression this workflow was written for: step 7 used to
+          # abort on uv's progress message, and its own output never reached
+          # the log, which is what made that failure hard to read.
+          foreach ($m in @("polynet ok", "torch ok", "xgboost ok")) {
+            if (-not (Select-String -Path $log -Pattern $m -Quiet)) {
+              Get-Content $log -Tail 40
+              throw "the import check did not log '$m'"
+            }
+          }
+          Write-Host "  log looks right"
+
+      - name: Collect the log
+        if: always()
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts | Out-Null
+          Copy-Item (Join-Path $env:LOCALAPPDATA "PolyNet\install.log") `
+            artifacts\windows-install.log -ErrorAction SilentlyContinue
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-install-log
+          path: artifacts/
+          if-no-files-found: warn
+
+      # Deliberately the generated uninstaller, which is what the Start-menu
+      # shortcut runs, rather than the installer's -Uninstall flag: that is the
+      # path a user actually takes. Note that cmd.exe holds a batch file open
+      # while it runs, so this one is asking Windows to delete the directory it
+      # is executing from -- if that is a problem, it shows up here.
+      - name: Uninstall, the way a user does
+        shell: cmd
+        run: |
+          "%LOCALAPPDATA%\PolyNet\Uninstall-PolyNet.cmd" < NUL
+
+      - name: Nothing may be left behind
+        shell: pwsh
+        run: |
+          # Give the detached delete a moment to finish before looking.
+          Start-Sleep -Seconds 5
+          $left = @()
+          foreach ($p in @(
+            (Join-Path $env:LOCALAPPDATA "PolyNet"),
+            (Join-Path ([Environment]::GetFolderPath("Desktop")) "PolyNet.lnk"),
+            (Join-Path ([Environment]::GetFolderPath("Programs")) "PolyNet")
+          )) { if (Test-Path -LiteralPath $p) { $left += $p } }
+          if ($left) {
+            foreach ($p in $left) {
+              Get-ChildItem -LiteralPath $p -Recurse -Force -ErrorAction SilentlyContinue |
+                Select-Object -First 20 -ExpandProperty FullName | ForEach-Object { Write-Host "    $_" }
+            }
+            Write-Host "::error::uninstall left behind: $($left -join '; ')"
+            throw "the uninstaller did not remove everything. If the only leftover is Uninstall-PolyNet.cmd and its folder, the cause is cmd.exe holding the running batch file open, and the uninstaller needs to hand the final delete to a process outside that folder."
+          }
+          Write-Host "  uninstall removed everything"
+
+  # ----------------------------------------------------------------- macos ---
+  macos:
+    name: macOS (arm64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # HTTP cannot carry the executable bit, so the mode has to be right in
+      # the repository for the release zip to have anything to preserve.
+      - name: The installer must be executable, in git and on disk
+        run: |
+          mode=$(git ls-files -s installers/macos/Install-PolyNet.command | cut -d' ' -f1)
+          echo "git mode: $mode"
+          if [ "$mode" != "100755" ]; then
+            echo "::error::expected git mode 100755, got $mode. Fix with: git update-index --chmod=+x installers/macos/Install-PolyNet.command"
+            exit 1
+          fi
+          test -x installers/macos/Install-PolyNet.command
+
+      - name: Shell syntax
+        run: |
+          bash -n installers/macos/Install-PolyNet.command
+          if command -v shellcheck >/dev/null; then
+            shellcheck -S warning installers/macos/Install-PolyNet.command || true
+          fi
+
+      - name: Run the installer
+        env:
+          IN_VERSION: ${{ github.event.inputs.version }}
+          IN_CHECK: ${{ github.event.inputs.run_check }}
+        run: |
+          args=()
+          if [ -n "$IN_VERSION" ]; then args+=(--version "$IN_VERSION"); fi
+          if [ "$IN_CHECK" = "true" ]; then args+=(--check); fi
+          echo "arguments: ${args[*]-none}"
+          installers/macos/Install-PolyNet.command ${args[@]+"${args[@]}"} < /dev/null
+
+      - name: Everything the installer promised must exist
+        run: |
+          missing=0
+          for p in \
+            "$HOME/.polynet/env/bin/polynet" \
+            "$HOME/.polynet/env/bin/python" \
+            "$HOME/.polynet/bin/polynet-launch" \
+            "$HOME/.polynet/Uninstall-PolyNet.command" \
+            "$HOME/Applications/PolyNet.app" ; do
+            if [ -e "$p" ]; then echo "  ok       $p"
+            else echo "  MISSING  $p"; missing=1; fi
+          done
+          [ "$missing" = 0 ] || { echo "::error::the installer did not create everything"; exit 1; }
+          "$HOME/.polynet/env/bin/polynet" --version
+
+      # The OpenMP fix-up: XGBoost's wheel only looks for Homebrew's libomp,
+      # and a runner has no Homebrew libomp on the search path.
+      - name: The OpenMP fix-up must be in place
+        run: |
+          site=$("$HOME/.polynet/env/bin/python" -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')
+          test -f "$site/polynet_runtime/libomp.dylib" || { echo "::error::no bundled libomp"; exit 1; }
+          test -f "$site/zz_polynet_openmp.pth" || { echo "::error::no .pth preload"; exit 1; }
+          "$HOME/.polynet/env/bin/python" -c 'import xgboost, torch; print("xgboost", xgboost.__version__, "/ torch", torch.__version__)'
+
+      # Guards the icon bug: macOS prefers CFBundleIconName and the asset
+      # catalogue over CFBundleIconFile, so replacing applet.icns alone left
+      # the stock AppleScript applet icon on screen.
+      - name: The app icon must be PolyNet's, not the stock applet
+        run: |
+          app="$HOME/Applications/PolyNet.app"
+          test -f "$app/Contents/Resources/applet.icns" || { echo "::error::no applet.icns"; exit 1; }
+          if /usr/libexec/PlistBuddy -c "Print :CFBundleIconName" "$app/Contents/Info.plist" >/dev/null 2>&1; then
+            echo "::error::CFBundleIconName is still set; macOS would draw the stock applet icon"
+            exit 1
+          fi
+          if [ -e "$app/Contents/Resources/Assets.car" ]; then
+            echo "::error::Assets.car is still present; its artwork wins over applet.icns"
+            exit 1
+          fi
+          codesign --verify --strict "$app" \
+            || { echo "::error::signature invalid; editing Resources/ needs a re-sign"; exit 1; }
+          echo "  icon and signature look right"
+
+      - name: Collect the log
+        if: always()
+        run: |
+          mkdir -p artifacts
+          cp "$HOME/.polynet/install.log" artifacts/macos-install.log 2>/dev/null || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: macos-install-log
+          path: artifacts/
+          if-no-files-found: warn
+
+      # The generated uninstaller, not the installer's own flag: this is the
+      # one a user actually double-clicks.
+      - name: Uninstall
+        run: |
+          "$HOME/.polynet/Uninstall-PolyNet.command" < /dev/null
+
+      - name: Nothing may be left behind
+        run: |
+          left=0
+          for p in "$HOME/.polynet" "$HOME/Applications/PolyNet.app" "$HOME/Desktop/PolyNet.app"; do
+            if [ -e "$p" ]; then echo "  LEFT  $p"; left=1; fi
+          done
+          [ "$left" = 0 ] || { echo "::error::uninstall left files behind"; exit 1; }
+          echo "  uninstall removed everything"

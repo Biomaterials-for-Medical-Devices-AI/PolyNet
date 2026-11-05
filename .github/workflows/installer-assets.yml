@@ -1,0 +1,115 @@
+name: Attach installers to release
+
+# Publishing a release attaches the two installers to it, so the README can
+# link to a URL that downloads the file instead of displaying its source.
+#
+# The macOS installer ships inside a zip, and that is not cosmetic: HTTP has no
+# way to carry the executable bit, so a .command downloaded straight from a
+# release arrives as mode 0644 and Finder refuses to run it ("you do not have
+# appropriate access privileges"). A zip records POSIX modes and Archive
+# Utility restores them, so the expanded file is executable and double-clicks.
+#
+# A manual run attaches the installers to an existing tag, which is also how to
+# fill in a release that was published before this workflow existed.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the installers to (e.g. v1.0.5)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  attach:
+    name: Build and attach
+    runs-on: ubuntu-latest
+
+    env:
+      TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+
+      # The zip can only preserve a bit that is recorded in the repository.
+      - name: The macOS installer must be executable in git
+        run: |
+          mode=$(git ls-files -s installers/macos/Install-PolyNet.command | cut -d' ' -f1)
+          echo "git mode: $mode"
+          if [ "$mode" != "100755" ]; then
+            echo "::error::expected git mode 100755, got $mode. Fix with: git update-index --chmod=+x installers/macos/Install-PolyNet.command"
+            exit 1
+          fi
+          test -x installers/macos/Install-PolyNet.command
+
+      - name: Build the macOS zip
+        run: |
+          mkdir -p dist/PolyNet-Installer
+          cp installers/macos/Install-PolyNet.command dist/PolyNet-Installer/
+
+          cat > dist/PolyNet-Installer/READ-ME-FIRST.txt <<'TXT'
+          Installing PolyNet on a Mac
+          ===========================
+
+          1. Control-click (or right-click) Install-PolyNet.command and choose
+             Open, then click Open again when macOS asks.
+
+             Do not double-click it the first time. The installer is not
+             code-signed, so a double-click only offers to move it to the Bin.
+             Control-click and Open is the way past that.
+
+          2. Leave the Terminal window alone while it works. It downloads a few
+             gigabytes, which usually takes 5 to 15 minutes.
+
+          3. When it finishes you will have a PolyNet icon on your Desktop and
+             in your Applications folder. Click it to open PolyNet in your
+             browser.
+
+          Nothing else on the computer is changed, no administrator password is
+          needed, and everything lives in one folder that the uninstaller
+          removes completely.
+
+          To remove PolyNet later, open Uninstall-PolyNet.command inside your
+          home folder's .polynet directory (in Finder: Go > Go to Folder, then
+          type ~/.polynet).
+
+          Questions and problems:
+          https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/issues
+          TXT
+
+          cd dist
+          # -X drops the extra Finder attributes; modes are kept either way.
+          zip -r -X -q Install-PolyNet-macOS.zip PolyNet-Installer
+          unzip -l Install-PolyNet-macOS.zip
+
+      - name: The zip must hand back an executable file
+        run: |
+          rm -rf verify && mkdir verify
+          unzip -q dist/Install-PolyNet-macOS.zip -d verify
+          ls -l verify/PolyNet-Installer/
+          if [ ! -x verify/PolyNet-Installer/Install-PolyNet.command ]; then
+            echo "::error::the zip lost the executable bit; the installer would not run for anyone"
+            exit 1
+          fi
+          echo "  executable bit survives the round trip"
+
+      - name: Name the Windows installer for its platform
+        run: cp installers/windows/Install-PolyNet.bat dist/Install-PolyNet-Windows.bat
+
+      - name: Attach both to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "$TAG" \
+            dist/Install-PolyNet-macOS.zip \
+            dist/Install-PolyNet-Windows.bat \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          echo "attached to $TAG:"
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            --jq '.assets[] | "  \(.name)  \(.size) bytes"'

@@ -63,10 +63,29 @@ PolyNet also supports traditional ML workflows using molecular descriptor vector
 
 ## Installation
 
-PolyNet requires **Python 3.11**. Install it from PyPI to use it, or from source with
-[Poetry](https://python-poetry.org/) to develop it.
+Three ways in: a one-click installer for a computer with no Python on it, PyPI for an
+existing Python environment, or a source checkout with
+[Poetry](https://python-poetry.org/) for development. Options 2 and 3 require
+**Python 3.11**.
 
-### Option 1 — From PyPI (recommended)
+### Option 1 — One-click installer (no Python needed)
+
+For anyone who would rather not use a terminal. The installer downloads its own copy of
+Python, installs PolyNet into a private environment and leaves a clickable PolyNet icon
+behind. It needs no administrator password, no Homebrew and no conda, and it changes
+nothing else on the computer.
+
+- **macOS** — [`installers/macos/Install-PolyNet.command`](installers/macos/Install-PolyNet.command);
+  Control-click the downloaded file and choose **Open** (it is not code-signed).
+- **Windows** — [`installers/windows/Install-PolyNet.bat`](installers/windows/Install-PolyNet.bat);
+  double-click it, then **More info → Run anyway** if SmartScreen asks.
+- **Linux** — `bash Install-PolyNet.command`, which adds PolyNet to the applications menu.
+
+Allow 5–15 minutes and about 4 GB of disk space. Clicking the icon opens the GUI in the
+browser. [`installers/README.md`](installers/README.md) covers the details, the options
+and how to remove it again.
+
+### Option 2 — From PyPI (recommended for Python users)
 
 Create a Python 3.11 environment with conda:
 
@@ -95,7 +114,7 @@ On macOS, XGBoost also needs the OpenMP library from [Homebrew](https://brew.sh)
 This installs the `polynet` command: `polynet` opens the GUI and `polynet run --config
 experiment.yaml` runs the pipeline (see Quick Start below).
 
-### Option 2 — From source with Poetry (development)
+### Option 3 — From source with Poetry (development)
 
 #### Step 1 — Clone the repository
 
@@ -106,7 +125,7 @@ cd PolyNet
 
 #### Step 2 — Create a Python 3.11 environment
 
-As in Option 1 (conda or venv).
+As in Option 2 (conda or venv).
 
 #### Step 3 — Install Poetry
 
@@ -141,7 +160,7 @@ Kuenneth group. It is distributed by Georgia Tech Research Corporation under its
 licence, which allows **non-commercial use only**, and is not on PyPI, so it is installed
 separately from PolyNet's MIT-licensed code:
 
-- `poetry install` (Option 2) installs it; `pip install polynet` does not.
+- `poetry install` (Option 3) installs it; `pip install polynet` does not.
 - In the GUI, loading PSMILES data offers an **Install canonicalize-psmiles** button
   after you accept its licence.
 - From a terminal: `polynet install-psmiles`.
@@ -281,7 +300,25 @@ Full documentation lives in [`docs/`](https://github.com/Biomaterials-for-Medica
 
 ## Citing PolyNet
 
-If you use PolyNet, please cite the software (GitHub's "Cite this repository" button reads [`CITATION.cff`](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/CITATION.cff)):
+If PolyNet contributed to work you publish, please cite the paper:
+
+> Aguilar-Bejarano, E.; Alexander, M. R.; Winkler, D. A.; Figueredo, G. *PolyNet: A Python
+> Package for Polymer Informatics.* ChemRxiv **2026**.
+> doi:[10.26434/chemrxiv.15010453/v1](https://doi.org/10.26434/chemrxiv.15010453/v1)
+
+```bibtex
+@article{polynet2026,
+  author  = {Aguilar-Bejarano, Eduardo and Alexander, Morgan R. and Winkler, David A. and Figueredo, Grazziela},
+  title   = {PolyNet: A Python Package for Polymer Informatics},
+  journal = {ChemRxiv},
+  year    = {2026},
+  doi     = {10.26434/chemrxiv.15010453/v1}
+}
+```
+
+### Citing the software as well
+
+To point at the exact version you ran, add the archived release (GitHub's "Cite this repository" button reads [`CITATION.cff`](https://github.com/Biomaterials-for-Medical-Devices-AI/PolyNet/blob/main/CITATION.cff), which lists the paper under `preferred-citation` and this release as the software):
 
 ```bibtex
 @software{polynet,
