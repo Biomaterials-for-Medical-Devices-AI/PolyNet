@@ -33,9 +33,15 @@ jobs:
       TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
 
     steps:
+      # The default branch, deliberately, not the release tag. The installers
+      # are not versioned with the package -- they install whatever is current
+      # on PyPI -- so the asset to attach is always the current one. Checking
+      # out the tag instead attaches the installers as they were at that
+      # commit, and for any tag older than the installers there is nothing
+      # there to attach at all.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || inputs.tag }}
+          ref: ${{ github.event.repository.default_branch }}
 
       # The zip can only preserve a bit that is recorded in the repository.
       - name: The macOS installer must be executable in git
@@ -110,6 +116,6 @@ jobs:
             dist/Install-PolyNet-macOS.zip \
             dist/Install-PolyNet-Windows.bat \
             --repo "$GITHUB_REPOSITORY" --clobber
-          echo "attached to $TAG:"
+          echo "attached to $TAG, built from $(git rev-parse --short HEAD) on ${{ github.event.repository.default_branch }}:"
           gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
             --jq '.assets[] | "  \(.name)  \(.size) bytes"'
