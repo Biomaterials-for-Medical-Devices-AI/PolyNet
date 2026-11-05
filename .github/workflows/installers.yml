@@ -153,9 +153,9 @@ jobs:
 
       # Deliberately the generated uninstaller, which is what the Start-menu
       # shortcut runs, rather than the installer's -Uninstall flag: that is the
-      # path a user actually takes. Note that cmd.exe holds a batch file open
-      # while it runs, so this one is asking Windows to delete the directory it
-      # is executing from -- if that is a problem, it shows up here.
+      # path a user actually takes, and it is the one that has to delete the
+      # folder it is itself running from. A non-zero exit here fails the step,
+      # which is how the "(goto) 2>nul" idiom in that script stays honest.
       - name: Uninstall, the way a user does
         shell: cmd
         run: |
@@ -164,7 +164,8 @@ jobs:
       - name: Nothing may be left behind
         shell: pwsh
         run: |
-          # Give the detached delete a moment to finish before looking.
+          # The delete is synchronous, but give Windows a moment to release
+          # the handles the uninstaller just dropped.
           Start-Sleep -Seconds 5
           $left = @()
           foreach ($p in @(
@@ -178,7 +179,7 @@ jobs:
                 Select-Object -First 20 -ExpandProperty FullName | ForEach-Object { Write-Host "    $_" }
             }
             Write-Host "::error::uninstall left behind: $($left -join '; ')"
-            throw "the uninstaller did not remove everything. If the only leftover is Uninstall-PolyNet.cmd and its folder, the cause is cmd.exe holding the running batch file open, and the uninstaller needs to hand the final delete to a process outside that folder."
+            throw "the uninstaller did not remove everything. If the only leftover is Uninstall-PolyNet.cmd and its folder, cmd.exe is holding the running batch file open and the final delete has to be handed to a process outside that folder."
           }
           Write-Host "  uninstall removed everything"
 

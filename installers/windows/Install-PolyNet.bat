@@ -329,10 +329,20 @@ cd /d "%USERPROFILE%"
 if errorlevel 1 pause
 "@ | Set-Content -LiteralPath $Launcher -Encoding ASCII
 
+    # This script lives in the folder it deletes, which cmd.exe does not expect:
+    # it reads a batch file as it goes, so once that folder is gone it cannot
+    # read the next line, and it reports "The system cannot find the path
+    # specified." and exits 1 -- after the uninstall has in fact succeeded.
+    # "(goto) 2>nul" makes cmd abandon the script while the rest of this
+    # already-parsed line still runs, so there is nothing left to read. If the
+    # idiom ever stops working the uninstall still happens; only the stray
+    # message comes back.
     @"
 @echo off
 rem Removes PolyNet. Created by the PolyNet installer.
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath '$(Join-Path $DesktopDir 'PolyNet.lnk')','$StartMenuDir','$Root' -Recurse -Force -ErrorAction SilentlyContinue; Write-Host ''; Write-Host '  PolyNet has been removed. Your experiments and data were not touched.'; Write-Host ''; Read-Host '  Press Enter to close this window'"
+rem (goto) 2>nul lets cmd abandon this script before the folder holding it is
+rem deleted; without it cmd cannot read on and reports a false failure.
+(goto) 2>nul & powershell -NoProfile -ExecutionPolicy Bypass -Command "Remove-Item -LiteralPath '$(Join-Path $DesktopDir 'PolyNet.lnk')','$StartMenuDir','$Root' -Recurse -Force -ErrorAction SilentlyContinue; Write-Host ''; Write-Host '  PolyNet has been removed. Your experiments and data were not touched.'; Write-Host ''; if (-not [Console]::IsInputRedirected) { Read-Host '  Press Enter to close this window' }"
 "@ | Set-Content -LiteralPath $Uninstaller -Encoding ASCII
 
     # The icon comes from the logo that ships inside the installed package, so
